@@ -1,0 +1,11 @@
+name: DataKache
+main: com.jakemoore.datakache.DataKachePlugin
+version: ${version}
+authors: [Jake-Moore]
+website: https://github.com/Jake-Moore/DataKache
+description: ${description}
+api-version: 1.13
+commands:
+  datakache:
+    description: Core DataKache Command
+    permission: datakache.command
