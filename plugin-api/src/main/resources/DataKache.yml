@@ -1,0 +1,39 @@
+###################################################################
+#   ___  ___                        _   __           _            #
+#   |  \/  |                       | | / /          | |           #
+#   | .  . | ___  _ __   __ _  ___ | |/ /  __ _  ___| |__   ___   #
+#   | |\/| |/ _ \| '_ \ / _` |/ _ \|    \ / _` |/ __| '_ \ / _ \  #
+#   | |  | | (_) | | | | (_| | (_) | |\  \ (_| | (__| | | |  __/  #
+#   \_|  |_/\___/|_| |_|\__, |\___/\_| \_/\__,_|\___|_| |_|\___|  #
+#                        __/ |                                    #
+#                       |___/                                     #
+###################################################################
+#
+# ----------------------------------------------------- #
+#                     Server Details                    #
+# ----------------------------------------------------- #
+# ATTENTION - Please review this option BEFORE using DataKache on your server!
+# This prefix is placed in front of all collections created in your database by DataKache.
+# If you run multiple game-modes or servers on the same database, and you want to keep the data separated,
+#  please change this prefix to something unique for your server.
+# Default: 'global'
+database-prefix: 'global'
+
+
+
+# ----------------------------------------------------- #
+#                       CONNECTIONS                     #
+# ----------------------------------------------------- #
+storage:
+  # This is the current storage mode for DataKache. It will use the specified connection details below.
+  # Current Modes: MONGODB
+  mode: "MONGODB"
+  MONGODB:
+    uri: 'mongodb://localhost:27017'
+
+
+# ----------------------------------------------------- #
+#                          DEBUG                        #
+# ----------------------------------------------------- #
+# Additional logging for debugging & development purposes.
+debug: true

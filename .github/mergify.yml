@@ -1,0 +1,33 @@
+pull_request_rules:
+- name: automatic dependency merge for PRs
+  conditions:
+  - label=auto-merge
+  - label=dependabot
+  - label=dependencies
+  - '#approved-reviews-by>=0'
+  - check-success=build_datakache
+  - or:
+    - base=main
+    - base=master
+  actions:
+    merge:
+      method: rebase
+- name: automatic actions merge for PRs
+  conditions:
+  - label=auto-merge
+  - label=dependabot
+  - label=actions-dependencies
+  - '#approved-reviews-by>=0'
+  - or:
+    - base=main
+    - base=master
+  actions:
+    merge:
+      method: rebase
+- name: delete head branch after merge if the label "cleanup" is present
+  conditions:
+  - merged
+  - label=cleanup
+  actions:
+    delete_head_branch: {
+      }
