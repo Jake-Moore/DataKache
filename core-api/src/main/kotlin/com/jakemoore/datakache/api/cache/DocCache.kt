@@ -51,6 +51,18 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D>
 
     /**
+     * Modify a document by its key (both cache and database will be updated).
+     *
+     * @param doc The document to be updated (will be updated via its key).
+     *
+     * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
+     */
+    @Throws(DocumentNotFoundException::class)
+    suspend fun update(doc: D, updateFunction: (D) -> D): DefiniteResult<D> {
+        return update(doc.key, updateFunction)
+    }
+
+    /**
      * Modify a document by its key, allowing the operation to gracefully be rejected within the [updateFunction].
      *
      * Within the [updateFunction], you can throw a [RejectUpdateException] to cancel the update operation. The
@@ -65,6 +77,22 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     suspend fun updateRejectable(key: K, updateFunction: (D) -> D): RejectableResult<D>
 
     /**
+     * Modify a document by its key, allowing the operation to gracefully be rejected within the [updateFunction].
+     *
+     * Within the [updateFunction], you can throw a [RejectUpdateException] to cancel the update operation. The
+     * [RejectableResult] will then indicate that the update was rejected, and no modifications were made.
+     *
+     * @return The [RejectableResult] containing:
+     * - the updated document if the update was successful
+     * - an exception if the update failed
+     * - or a rejection state if the update was rejected by the [updateFunction]
+     */
+    @Throws(DocumentNotFoundException::class)
+    suspend fun updateRejectable(doc: D, updateFunction: (D) -> D): RejectableResult<D> {
+        return updateRejectable(doc.key, updateFunction)
+    }
+
+    /**
      * Deletes a document from the cache and the backing database.
      *
      * @param key The unique key of the document to be deleted.
@@ -72,6 +100,17 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
      */
     suspend fun delete(key: K): DefiniteResult<Boolean>
+
+    /**
+     * Deletes a document from the cache and the backing database.
+     *
+     * @param doc The document to be deleted (deleted via its key).
+     *
+     * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
+     */
+    suspend fun delete(doc: D): DefiniteResult<Boolean> {
+        return delete(doc.key)
+    }
 
     // ------------------------------------------------------------ //
     //                       Extra CRUD Methods                     //

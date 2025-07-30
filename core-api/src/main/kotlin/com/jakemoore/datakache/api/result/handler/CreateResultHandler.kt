@@ -6,9 +6,12 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 import com.mongodb.DuplicateKeyException
+import org.jetbrains.annotations.ApiStatus
 
-internal object CreateResultHandler {
-    internal suspend fun <K : Any, D : Doc<K, D>> wrap(
+@ApiStatus.Internal
+object CreateResultHandler {
+    @ApiStatus.Internal
+    suspend fun <K : Any, D : Doc<K, D>> wrap(
         // Work cannot return a null document.
         //   If the document has a key conflict, [DuplicateKeyException] should be thrown.
         work: suspend () -> D

@@ -137,6 +137,18 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         return cacheMap.remove(key) != null
     }
 
+    /**
+     * @return The same [doc] for chaining.
+     */
+    @ApiStatus.Internal
+    suspend fun saveDatabaseInternal(doc: D): D {
+        // Save the document to the database
+        DataKache.storageMode.databaseService.save(this, doc)
+        // Cache the document in memory
+        this.cacheInternal(doc)
+        return doc
+    }
+
     // ------------------------------------------------------------ //
     //                      Cache Logger Service                    //
     // ------------------------------------------------------------ //

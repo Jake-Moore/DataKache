@@ -17,7 +17,84 @@ import java.util.UUID
  */
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 object DataKacheFileLogger {
-    fun logToFile(msg: String, level: LoggerService.LogLevel, file: File): File? {
+    private val DEBUG = LoggerService.LogLevel.DEBUG
+    private val INFO = LoggerService.LogLevel.INFO
+    private val WARN = LoggerService.LogLevel.WARNING
+    private val SEVERE = LoggerService.LogLevel.SEVERE
+
+    // ------------------------------------------------------------ //
+    //                        Logging Methods                       //
+    // ------------------------------------------------------------ //
+
+    fun debug(msg: String): File? = logToFile(msg, DEBUG, randomFile)
+    fun debug(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, DEBUG, getFileByCache(cache))
+    fun debug(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = debug(msg, trace, getFileByCache(cache))
+    fun debug(msg: String, trace: Throwable): File? = debug(msg, trace, randomFile)
+    fun debug(msg: String, trace: Throwable, file: File): File? = logToFile(msg, DEBUG, file, trace)
+
+    fun info(msg: String): File? = logToFile(msg, INFO, randomFile)
+    fun info(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, INFO, getFileByCache(cache))
+    fun info(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = info(msg, trace, getFileByCache(cache))
+    fun info(msg: String, trace: Throwable): File? = info(msg, trace, randomFile)
+    fun info(msg: String, trace: Throwable, file: File): File? = logToFile(msg, INFO, file, trace)
+
+    fun warn(msg: String): File? = logToFile(msg, WARN, randomFile)
+    fun warn(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, WARN, getFileByCache(cache))
+    fun warn(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = warn(msg, trace, getFileByCache(cache))
+    fun warn(msg: String, trace: Throwable): File? = warn(msg, trace, randomFile)
+    fun warn(msg: String, trace: Throwable, file: File): File? = logToFile(msg, WARN, file, trace)
+
+    fun severe(msg: String): File? = logToFile(msg, SEVERE, randomFile)
+    fun severe(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, SEVERE, getFileByCache(cache))
+    fun severe(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = severe(msg, trace, getFileByCache(cache))
+    fun severe(msg: String, trace: Throwable): File? = severe(msg, trace, randomFile)
+    fun severe(msg: String, trace: Throwable, file: File): File? = logToFile(msg, SEVERE, file, trace)
+
+    // ------------------------------------------------------------ //
+    //                         Helper Methods                       //
+    // ------------------------------------------------------------ //
+
+    private fun appendToFile(throwable: Throwable, file: File): Boolean {
+        return appendToFile(file) { writer ->
+            throwable.printStackTrace(writer)
+        }
+    }
+
+    private fun appendToFile(lines: List<String>, file: File): Boolean {
+        return appendToFile(file) { writer ->
+            lines.forEach(writer::println)
+        }
+    }
+
+    private fun appendToFile(file: File, writerAction: (PrintWriter) -> Unit): Boolean {
+        // ensure parent dirs exist
+        file.parentFile
+            ?.takeIf { !it.exists() }
+            ?.mkdirs()
+
+        return try {
+            FileWriter(file, true).use { fw ->
+                PrintWriter(fw).use { pw ->
+                    writerAction(pw)
+                    true
+                }
+            }
+        } catch (e: IOException) {
+            DataKache.logger.severe("Failed to write stack trace to file (" + file.absoluteFile + "): " + e.message)
+            false
+        }
+    }
+
+    private fun createStackTrace(msg: String): Throwable {
+        try {
+            throw kotlin.Exception(msg)
+        } catch (t: Throwable) {
+            return t
+        }
+    }
+
+    // Logs a message to a file
+    private fun logToFile(msg: String, level: LoggerService.LogLevel, file: File): File? {
         if (appendToFile(createStackTrace(msg), file)) {
             DataKache.logger.logToConsole(msg + " (Logged to " + file.absolutePath + ")", level)
             return file
@@ -25,38 +102,8 @@ object DataKacheFileLogger {
         return null
     }
 
-    fun warn(docCache: DocCache<*, *>, msg: String): File? {
-        return logToFile(msg, LoggerService.LogLevel.WARNING, getFileByCache(docCache))
-    }
-
-    fun warn(docCache: DocCache<*, *>, msg: String, trace: Throwable): File? {
-        val file = logToFile(
-            msg,
-            LoggerService.LogLevel.WARNING,
-            getFileByCache(docCache)
-        ) ?: return null
-
-        // Add some empty lines for separation
-        if (!appendToFile(listOf("", "", "Extra Trace", ""), file)) {
-            return null
-        }
-
-        // Save the original trace after
-        if (!appendToFile(trace, file)) {
-            return null
-        }
-        return file
-    }
-
-    fun warn(msg: String): File? = logToFile(msg, LoggerService.LogLevel.WARNING, randomFile)
-
-    fun warn(msg: String, trace: Throwable): File? = warn(msg, trace, randomFile)
-
-    fun warn(msg: String, trace: Throwable, file: File): File? {
-        return log(msg, trace, file, LoggerService.LogLevel.WARNING)
-    }
-
-    fun log(msg: String, trace: Throwable, file: File, level: LoggerService.LogLevel): File? {
+    // Logs a message (and a stack trace) to a file
+    private fun logToFile(msg: String, level: LoggerService.LogLevel, file: File, trace: Throwable): File? {
         val outputFile = logToFile(msg, level, file) ?: return null
 
         // Add some empty lines for separation
@@ -69,54 +116,6 @@ object DataKacheFileLogger {
             return null
         }
         return outputFile
-    }
-
-    fun createStackTrace(msg: String): Throwable {
-        try {
-            throw kotlin.Exception(msg)
-        } catch (t: Throwable) {
-            return t
-        }
-    }
-
-    fun appendToFile(throwable: Throwable, file: File): Boolean {
-        val parent = file.parentFile
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs()
-        }
-
-        try {
-            FileWriter(file, true).use { fileWriter ->
-                PrintWriter(fileWriter).use { printWriter ->
-                    // Write the stack trace to the file
-                    throwable.printStackTrace(printWriter)
-                    return true
-                }
-            }
-        } catch (e: IOException) {
-            DataKache.logger.severe("Failed to write stack trace to file (" + file.absoluteFile + "): " + e.message)
-            return false
-        }
-    }
-
-    fun appendToFile(lines: List<String>, file: File): Boolean {
-        val parent = file.parentFile
-        if (parent != null && !parent.exists()) {
-            parent.mkdirs()
-        }
-
-        try {
-            FileWriter(file, true).use { fileWriter ->
-                PrintWriter(fileWriter).use { printWriter ->
-                    // Write the stack trace to the file
-                    lines.forEach { x: String? -> printWriter.println(x) }
-                    return true
-                }
-            }
-        } catch (e: IOException) {
-            DataKache.logger.severe("Failed to write stack trace to file (" + file.absoluteFile + "): " + e.message)
-            return false
-        }
     }
 
     private fun getFileByCache(docCache: DocCache<*, *>): File {
