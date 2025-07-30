@@ -2,9 +2,12 @@
 
 package com.jakemoore.datakache
 
+import com.jakemoore.datakache.DataKachePlugin.Companion.disableDataKache
+import com.jakemoore.datakache.DataKachePlugin.Companion.enableDataKache
 import com.jakemoore.datakache.api.context.DataKachePluginContext
 import com.jakemoore.datakache.plugin.command.DataKacheCommand
 import kotlinx.coroutines.runBlocking
+import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 
 /**
@@ -22,7 +25,7 @@ class DataKachePlugin : JavaPlugin() {
     }
 
     companion object {
-        private var controller: JavaPlugin? = null
+        internal var controller: JavaPlugin? = null
 
         fun enableDataKache(plugin: JavaPlugin) {
             require(controller == null) {
@@ -31,7 +34,12 @@ class DataKachePlugin : JavaPlugin() {
 
             // Enable DataKache Internals
             runBlocking {
-                DataKache.onEnable(DataKachePluginContext(plugin))
+                if (!DataKache.onEnable(DataKachePluginContext(plugin))) {
+                    plugin.logger.severe("Failed to enable DataKache! Shutting down...")
+                    plugin.server.pluginManager.disablePlugin(plugin)
+                    Bukkit.shutdown()
+                    return@runBlocking
+                }
             }
 
             // Register Additional Plugin Services
@@ -47,7 +55,9 @@ class DataKachePlugin : JavaPlugin() {
 
             // Disable DataKache Internals
             runBlocking {
-                DataKache.onDisable()
+                if (!DataKache.onDisable()) {
+                    plugin.logger.severe("Failed to disable DataKache! Some services may not have shut down properly.")
+                }
             }
 
             controller = null

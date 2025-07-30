@@ -2,6 +2,7 @@ package com.jakemoore.datakache.api.doc
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
+import org.jetbrains.annotations.ApiStatus
 
 /**
  * Represents an IMMUTABLE 'document' in the DataKache system.
@@ -74,4 +75,10 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
      * @return A new instance of the document with the updated version.
      */
     fun copyHelper(version: Long): D
+
+    // ------------------------------------------------------------ //
+    //                      Internal API Methods                    //
+    // ------------------------------------------------------------ //
+    @ApiStatus.Internal
+    fun initializeInternal(cache: DocCache<K, D>)
 }

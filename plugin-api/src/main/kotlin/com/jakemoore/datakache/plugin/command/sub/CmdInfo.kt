@@ -18,8 +18,8 @@ internal class CmdInfo : SubCommand() {
 
     override fun execute(sender: CommandSender, args: Array<String>) {
         sender.sendMessage(Color.t("&7--- &9[&bDataKache Information&9]&7 ---"))
-        sender.sendMessage(Color.t("&7Database Prefix:"))
-        sender.sendMessage(Color.t("  &8'&f${DataKache.databasePrefix}&8'"))
+        sender.sendMessage(Color.t("&7Database namespace:"))
+        sender.sendMessage(Color.t("  &8'&f${DataKache.databaseNamespace}&8'"))
         sender.sendMessage(Color.t("&7Storage Mode: &f${DataKache.storageMode.name}"))
     }
 }

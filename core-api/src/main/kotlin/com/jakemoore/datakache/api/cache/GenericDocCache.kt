@@ -3,27 +3,29 @@
 package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.api.doc.GenericDoc
+import com.jakemoore.datakache.api.logging.DefaultCacheLogger
+import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import java.util.UUID
 
 abstract class GenericDocCache<D : GenericDoc<D>>(
+    nickname: String,
     registration: DataKacheRegistration,
+    docClass: Class<D>,
+    logger: (String) -> LoggerService = { nickname -> DefaultCacheLogger(nickname) },
+
     /**
      * @param UUID the unique identifier for the document.
      * @param Long the version of the document.
      */
     val instantiator: (String, Long) -> D,
-    /**
-     * The name of this cache, but also the desired name of the collection in the database.
-     */
-    cacheName: String,
 
-) : DocCache<String, D> {
+) : DocCacheImpl<String, D>(nickname, registration, docClass, logger) {
 
-    // ----------------------------------------------------- //
-    //                     CRUD Methods                      //
-    // ----------------------------------------------------- //
+    // ------------------------------------------------------------ //
+    //                          CRUD Methods                        //
+    // ------------------------------------------------------------ //
     /**
      * Creates a new document in the cache (backed by a database object) with a random key.
      *

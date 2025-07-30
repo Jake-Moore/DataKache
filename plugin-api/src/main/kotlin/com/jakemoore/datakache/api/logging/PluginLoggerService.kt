@@ -6,7 +6,7 @@ import com.jakemoore.datakache.util.Color
 import org.bukkit.Bukkit
 import org.bukkit.plugin.java.JavaPlugin
 
-class PluginLoggerService(private val plugin: JavaPlugin, debug: Boolean = true) : LoggerService {
+open class PluginLoggerService(private val plugin: JavaPlugin, debug: Boolean = true) : LoggerService {
     override val loggerName: String
         get() = "DataKache"
     override val permitsDebugStatements: Boolean = debug
