@@ -160,7 +160,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * Form: "databaseName.cacheName@key"
      */
     fun getKeyNamespace(key: K): String {
-        return "${registration.databaseName}.${cacheName}@${keyToString(key)}"
+        return "${registration.databaseName}.$cacheName@${keyToString(key)}"
     }
 
     // ------------------------------------------------------------ //

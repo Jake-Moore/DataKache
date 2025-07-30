@@ -15,7 +15,7 @@ class DuplicateCacheException(
     newCacheClass: KClass<out DocCache<*, *>>,
 ) : Exception(
     "The database named '${database.databaseName}' (registered by ${database.parentClient.name}) " +
-        "failed to register a Cache: '${cacheName}' because it has already been registered. " +
+        "failed to register a Cache: '$cacheName' because it has already been registered. " +
         "It was previously registered by ${existingCacheClass.simpleName}, " +
         "and the following cache tried to register it again: ${newCacheClass.simpleName}. "
 )

@@ -53,23 +53,23 @@ class DataKacheRegistration internal constructor( // Internal constructor, insta
      */
     suspend fun shutdown() {
         // Iterate through all document caches and shut them down
-        docCaches.values.forEach { cache ->
+        //  Wrapped in an array to prevent concurrent modification issues (cache.shutdown() removes itself from the map)
+        ArrayList(docCaches.values).forEach { cache ->
             val success = cache.shutdown()
 
             if (!success) {
                 DataKache.logger.severe(
                     "Failed to shut down cache '${cache.cacheName}' in database '$databaseName'. " +
-                            "Please check the cache implementation for proper shutdown handling."
+                        "Please check the cache implementation for proper shutdown handling."
                 )
             }
         }
+        // Clear any dangling caches (this should not occur, but is a safety measure)
         docCaches.clear()
 
         // Remove this registration from the API records
         DataKacheAPI.registrations.remove(this)
     }
-
-
 
     // ------------------------------------------------------------ //
     //                       DocCache Methods                       //
