@@ -1,5 +1,10 @@
+@file:Suppress("unused")
+
 package com.jakemoore.datakache.api.exception
 
+import com.jakemoore.datakache.api.cache.DocCache
+
 class DocumentNotFoundException(
-    id: Any
-) : NoSuchElementException("No document found with id=$id")
+    val key: Any,
+    val docCache: DocCache<*, *>,
+) : NoSuchElementException("No document found with key=$key")

@@ -146,8 +146,8 @@ object MongoTransactions : CoroutineScope {
     ): TransactionResult<K, D> {
         val currentVersion: Long = doc.version
         val nextVersion = currentVersion + 1
-        val id: String = docCache.keyToString(doc.id)
-        val namespace = docCache.getKeyNamespace(doc.id)
+        val id: String = docCache.keyToString(doc.key)
+        val namespace = docCache.getKeyNamespace(doc.key)
 
         // Apply the Update Function
         val updatedDoc: D = updateFunction(doc).copyHelper(nextVersion)
@@ -191,7 +191,7 @@ object MongoTransactions : CoroutineScope {
             val databaseDoc: D = collection.find(session).filter(
                 Filters.eq(keyFieldName, id)
             ).firstOrNull() ?: throw RuntimeException(
-                "Doc not found for collection: ${docCache.nickname}, id: $keyFieldName -> $id"
+                "Doc not found for collection: ${docCache.cacheName}, id: $keyFieldName -> $id"
             )
 
             // Update our working copy with latest version and retry
@@ -235,8 +235,8 @@ object MongoTransactions : CoroutineScope {
             if ((currentAttempt + 1) < LOG_WRITE_CONFLICT_AFTER) return@launch
 
             val msg = "Write Conflict, attempt " + (currentAttempt + 1) +
-                " of " + MAX_TRANSACTION_ATTEMPTS + " for coll " + docCache.nickname +
-                " with id " + docCache.keyToString(doc.id)
+                " of " + MAX_TRANSACTION_ATTEMPTS + " for coll " + docCache.cacheName +
+                " with id " + docCache.keyToString(doc.key)
             if ((currentAttempt + 1) % LOG_WRITE_CONFLICT_FREQUENCY == 0) {
                 DataKacheFileLogger.log(
                     msg,

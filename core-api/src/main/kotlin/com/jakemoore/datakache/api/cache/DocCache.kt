@@ -2,20 +2,20 @@ package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
-import com.jakemoore.datakache.core.Service
 import kotlinx.serialization.KSerializer
 import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.annotations.NonBlocking
 import kotlin.reflect.KProperty
 
 @Suppress("unused")
-sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
+sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                     Kotlin Reflect Access                    //
     // ------------------------------------------------------------ //
@@ -26,15 +26,6 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
-    /**
-     * Creates a new document in the cache (backed by a database object).
-     *
-     * @param key The unique key for the document to be created.
-     * @param initializer A callback function for initializing the document with starter data.
-     *
-     * @return A [DefiniteResult] containing the document, or the exception if the document could not be created.
-     */
-    suspend fun create(key: K, initializer: (D) -> D = { it }): DefiniteResult<D>
 
     /**
      * Fetch a document from the cache by its key.
@@ -56,6 +47,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
      *
      * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
      */
+    @Throws(DocumentNotFoundException::class)
     suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D>
 
     /**
@@ -69,6 +61,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
      * - an exception if the update failed
      * - or a rejection state if the update was rejected by the [updateFunction]
      */
+    @Throws(DocumentNotFoundException::class)
     suspend fun updateRejectable(key: K, updateFunction: (D) -> D): RejectableResult<D>
 
     /**
@@ -76,7 +69,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
      *
      * @param key The unique key of the document to be deleted.
      *
-     * @return A [DefiniteResult] indicating the outcome of the deletion operation (success=true, failure=false).
+     * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
      */
     suspend fun delete(key: K): DefiniteResult<Boolean>
 
@@ -117,11 +110,11 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
     //                        DocCache Methods                      //
     // ------------------------------------------------------------ //
     /**
-     * The nickname of this cache. This name is primarily used for logging and identification purposes.
+     * The name of this cache of documents. This name will be used to create a collection in the backing database.
      *
-     * This nickname is **separate** from the database name inside your registration.
+     * This cache name is **separate** from the database name inside your registration.
      */
-    val nickname: String
+    val cacheName: String
 
     /**
      * The DataKache registration that this cache is associated with.
@@ -159,15 +152,15 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : Service, DataKacheScope {
      *
      * This operation is reversible by using [keyToString].
      */
-    fun keyFromString(key: String): K
+    fun keyFromString(string: String): K
 
     /**
-     * A helpful format of the key string along with the cache name, for quicker identification in logs or debugging.
+     * A helpful format of all names and keys necessary to identify a document in this cache.
      *
-     * Form: "key@nickname"
+     * Form: "databaseName.cacheName@key"
      */
     fun getKeyNamespace(key: K): String {
-        return "${keyToString(key)}@$nickname"
+        return "${registration.databaseName}.${cacheName}@${keyToString(key)}"
     }
 
     // ------------------------------------------------------------ //

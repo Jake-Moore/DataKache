@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Main API class for DataKache. Register data collections here.
+ * Main API class for DataKache. Register data caches here.
  */
 object DataKacheAPI {
     // Need concurrency safety, but also there should not be many writes to this list.
@@ -25,7 +25,7 @@ object DataKacheAPI {
     /**
      * Register your plugin with a unique MongoDB database name.
      *
-     * @return A reusable [DataKacheRegistration] instance to be provided to your collections.
+     * @return A reusable [DataKacheRegistration] instance to be provided to your caches.
      *
      * @throws DuplicateDatabaseException if the database name is already in use.
      */
@@ -35,8 +35,8 @@ object DataKacheAPI {
             "Database name cannot be blank."
         }
 
-        registerDatabase(client, getFullDatabaseName(databaseName))
-        return DataKacheRegistration(client, databaseName).also {
+        val databaseRegistration = registerDatabase(client, getFullDatabaseName(databaseName))
+        return DataKacheRegistration(client, databaseName, databaseRegistration).also {
             registrations.add(it)
         }
     }

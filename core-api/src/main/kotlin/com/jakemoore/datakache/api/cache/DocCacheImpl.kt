@@ -1,22 +1,31 @@
 package com.jakemoore.datakache.api.cache
 
+import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
+import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
+import com.jakemoore.datakache.api.result.RejectableResult
+import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
+import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
+import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
 import org.jetbrains.annotations.ApiStatus
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.properties.Delegates
 
 abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
-    override val nickname: String,
+    override val cacheName: String,
     override val registration: DataKacheRegistration,
     override val docClass: Class<D>,
     /**
-     * @param String - the cache nickname
+     * @param String - the cache name
      */
     private val loggerInstantiator: (String) -> LoggerService,
 ) : DocCache<K, D> {
+    internal var startedEpochMS by Delegates.notNull<Long>()
 
     override val databaseName: String
         get() = registration.databaseName
@@ -24,7 +33,40 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     //                         Service Methods                      //
     // ------------------------------------------------------------ //
-    override var running: Boolean = false
+    var running: Boolean = false
+
+    /**
+     * Internal method, which should only be called by [DataKacheRegistration]
+     *
+     * @return If this call started the service (false if already running)
+     */
+    @Suppress("RedundantSuspendModifier")
+    internal suspend fun start(): Boolean {
+        if (running) return false
+
+        // TODO: we should run all of the pre-loading logic
+        //  and also register the stream that pulls updates from the database.
+
+        startedEpochMS = System.currentTimeMillis()
+        return true
+    }
+
+    /**
+     * @return If this call shutdown the service (false if already stopped)
+     */
+    internal suspend fun shutdown(): Boolean {
+        if (!running) return false
+
+        if (!shutdownSuper()) {
+            getLoggerInternal().error("Failed to shutdown super cache: $cacheName")
+            return false
+        }
+
+        // Unregister the cache
+        registration.onDocCacheShutdown(this)
+        return true
+    }
+    protected abstract suspend fun shutdownSuper(): Boolean
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -37,7 +79,37 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    // TODO finish crud methods
+    @Throws(DocumentNotFoundException::class)
+    override suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D> {
+        return UpdateResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction)
+        }
+    }
+
+    @Throws(DocumentNotFoundException::class)
+    override suspend fun updateRejectable(key: K, updateFunction: (D) -> D): RejectableResult<D> {
+        return RejectableUpdateResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction)
+        }
+    }
+
+    @Throws(DocumentNotFoundException::class)
+    private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
+        val doc = cacheMap[key] ?: throw DocumentNotFoundException(key, this)
+        return DataKache.storageMode.databaseService.update(this, doc, updateFunction)
+    }
+
+    override suspend fun delete(key: K): DefiniteResult<Boolean> {
+        return DeleteResultHandler.wrap {
+            val found = cacheMap.remove(key) != null
+            DataKache.storageMode.databaseService.delete(this, key)
+            cacheMap.remove(key)
+
+            // This method boolean is whether the document was found in the cache
+            //   false is okay, just indicates that the document was not cached
+            return@wrap found
+        }
+    }
 
     override fun isCached(key: K): Boolean {
         return cacheMap.containsKey(key)
@@ -74,7 +146,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         if (service != null) {
             return service
         }
-        return loggerInstantiator(this.nickname).also {
+        return loggerInstantiator(this.cacheName).also {
             this._loggerService = it
         }
     }
