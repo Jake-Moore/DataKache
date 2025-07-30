@@ -74,8 +74,6 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
         return create(UUID.randomUUID().toString(), initializer)
     }
 
-
-
     // ------------------------------------------------------------ //
     //                    Key Manipulation Methods                  //
     // ------------------------------------------------------------ //

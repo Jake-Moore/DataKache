@@ -36,7 +36,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     var running: Boolean = false
 
     /**
-     * Internal method, which should only be called by [DataKacheRegistration]
+     * Internal method, which should only be called by [DataKacheRegistration.registerDocCache]
      *
      * @return If this call started the service (false if already running)
      */
@@ -52,6 +52,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     }
 
     /**
+     * Internal method, which should only be called from [DataKacheRegistration.shutdown]
+     *
      * @return If this call shutdown the service (false if already stopped)
      */
     internal suspend fun shutdown(): Boolean {
