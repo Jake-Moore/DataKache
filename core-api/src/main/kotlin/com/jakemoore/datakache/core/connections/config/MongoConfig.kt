@@ -1,4 +1,4 @@
-package com.jakemoore.datakache.core.connections.mongo
+package com.jakemoore.datakache.core.connections.config
 
 import com.jakemoore.datakache.DataKache
 
