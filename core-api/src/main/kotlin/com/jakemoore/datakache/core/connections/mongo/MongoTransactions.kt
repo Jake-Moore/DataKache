@@ -5,7 +5,6 @@ import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
-import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.TransactionResult
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.jakemoore.datakache.util.DataKacheFileLogger
@@ -19,7 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import java.util.*
+import java.util.Random
 import kotlin.coroutines.CoroutineContext
 
 @Suppress("MemberVisibilityCanBePrivate")
@@ -238,11 +237,10 @@ object MongoTransactions : CoroutineScope {
                 " of " + MAX_TRANSACTION_ATTEMPTS + " for coll " + docCache.cacheName +
                 " with id " + docCache.keyToString(doc.key)
             if ((currentAttempt + 1) % LOG_WRITE_CONFLICT_FREQUENCY == 0) {
-                DataKacheFileLogger.log(
+                DataKacheFileLogger.debug(
                     msg,
                     mE,
-                    DataKacheFileLogger.randomWriteExceptionFile,
-                    LoggerService.LogLevel.INFO
+                    DataKacheFileLogger.randomWriteExceptionFile
                 )
             } else {
                 DataKache.logger.info(msg)

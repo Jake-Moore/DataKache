@@ -2,12 +2,14 @@
 
 package com.jakemoore.datakache.api.cache
 
-import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.doc.GenericDoc
 import com.jakemoore.datakache.api.logging.DefaultCacheLogger
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.api.result.Empty
+import com.jakemoore.datakache.api.result.Failure
+import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.handler.CreateResultHandler
 import java.util.UUID
 
@@ -53,11 +55,8 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
             }
             doc.initializeInternal(this)
 
-            // Save the document to the database
-            DataKache.storageMode.databaseService.save(this, doc)
-            // Cache the document in memory
-            this.cacheInternal(doc)
-            return@wrap doc
+            // Access internal method to save and cache the document
+            return@wrap this.saveDatabaseInternal(doc)
         }
     }
 
@@ -72,6 +71,31 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      */
     suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D> {
         return create(UUID.randomUUID().toString(), initializer)
+    }
+
+    /**
+     * Fetches (or creates) a document in the cache by its key. Due to the nature of this event (creative),
+     * it may require database calls and therefore may not be instantaneous.
+     *
+     * Failures from reading will be passed through via [DefiniteResult].
+     *
+     * @param key The unique key for the document to be read or created.
+     * @param initializer A callback function for initializing the document with starter data (when it does not exist)
+     *
+     * @return A [DefiniteResult] containing the document, or the exception if the document could not be found/created.
+     */
+    suspend fun readOrCreate(key: String, initializer: (D) -> D = { it }): DefiniteResult<D> {
+        return when (val result = read(key)) {
+            is Success, is Failure -> {
+                // If we found the document, return it
+                // Likewise, if we encountered a failure exception, pass it through
+                result
+            }
+            is Empty -> {
+                // Time to create the document
+                create(key, initializer)
+            }
+        }
     }
 
     // ------------------------------------------------------------ //
