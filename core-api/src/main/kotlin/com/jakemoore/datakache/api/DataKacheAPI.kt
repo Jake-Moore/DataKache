@@ -6,7 +6,6 @@ import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.exception.DuplicateDatabaseException
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.registration.DatabaseRegistration
-import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -17,8 +16,8 @@ object DataKacheAPI {
     // Need concurrency safety, but also there should not be many writes to this list.
     internal val registrations = CopyOnWriteArrayList<DataKacheRegistration>()
 
-    private val databasePrefix: String
-        get() = DataKache.databasePrefix
+    private val databaseNamespace: String
+        get() = DataKache.databaseNamespace
 
     // ---------------------------------------- //
     //          Registration Methods            //
@@ -49,27 +48,29 @@ object DataKacheAPI {
     internal val databases = ConcurrentHashMap<String, DatabaseRegistration>()
 
     @Throws(DuplicateDatabaseException::class)
-    private fun registerDatabase(client: DataKacheClient, databaseName: String) {
+    private fun registerDatabase(client: DataKacheClient, databaseName: String): DatabaseRegistration {
         val registration = getDatabaseRegistration(databaseName)
         if (registration != null) {
             throw DuplicateDatabaseException(registration, client)
         }
-        databases[databaseName.lowercase(Locale.getDefault())] = DatabaseRegistration(databaseName, client)
+        return DatabaseRegistration(databaseName, client).also {
+            databases[databaseName.lowercase()] = it
+        }
     }
 
     private fun getDatabaseRegistration(databaseName: String): DatabaseRegistration? {
-        return databases[databaseName.lowercase(Locale.getDefault())]
+        return databases[databaseName.lowercase()]
     }
 
     /**
      * Check if a database name is already registered/taken by a [DataKacheClient] using DataKache.
      */
     fun isDatabaseNameRegistered(databaseName: String): Boolean {
-        return databases.containsKey(databaseName.lowercase(Locale.getDefault()))
+        return databases.containsKey(databaseName.lowercase())
     }
 
     /**
-     * Appends [DataKacheAPI.databasePrefix] and a '_' char to the beginning of the dbName,
+     * Appends [DataKacheAPI.databaseNamespace] and a '_' char to the beginning of the dbName,
      * to allow one MongoDB instance to be shared by multiple servers running DataKache.
      */
     fun getFullDatabaseName(dbName: String): String {
@@ -77,11 +78,11 @@ object DataKacheAPI {
             "Database name cannot be blank."
         }
 
-        // Just in case, don't add the prefix twice
-        val prefix = databasePrefix
-        if (dbName.startsWith(prefix + "_")) {
+        // Just in case, don't add the namespace twice
+        val namespace = databaseNamespace
+        if (dbName.startsWith(namespace + "_")) {
             return dbName
         }
-        return "${prefix}_$dbName"
+        return "${namespace}_$dbName"
     }
 }

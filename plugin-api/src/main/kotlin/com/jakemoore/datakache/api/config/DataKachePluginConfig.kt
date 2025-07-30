@@ -14,7 +14,7 @@ object DataKachePluginConfig {
     ): DataKacheConfig {
         val config = loadConfigFile(plugin, resourceFile)
         return DataKacheConfig(
-            databasePrefix = config.getString("database-prefix", "global"),
+            databaseNamespace = config.getString("database-namespace", "global"),
             debug = config.getBoolean("debug", true),
             storageMode = StorageMode.valueOf(config.getString("storage.mode")),
 

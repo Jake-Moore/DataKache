@@ -12,7 +12,7 @@ import kotlinx.coroutines.runBlocking
 
 object DataKache {
     private var enabled = false
-    private var context: DataKacheContext? = null
+    internal var context: DataKacheContext? = null
 
     // Internal Properties
     internal var onEnableTime: Long = 0
@@ -33,7 +33,11 @@ object DataKache {
         info("Running in '$storageMode' storage mode.")
 
         // Enable Services
-        storageMode.enableServices()
+        val storageSuccess = storageMode.enableServices()
+        if (!storageSuccess) {
+            error("Failed to enable storage services for DataKache! Shutting down...")
+            return false
+        }
 
         onEnableTime = System.currentTimeMillis()
         return true
@@ -77,7 +81,11 @@ object DataKache {
         }
 
         // Shutdown Services
-        storageMode.disableServices()
+        val storageSuccess = storageMode.disableServices()
+        if (!storageSuccess) {
+            error("Failed to disable storage services for DataKache! Shutting down...")
+            return false
+        }
 
         // Reset State
         enabled = false
@@ -97,8 +105,8 @@ object DataKache {
         get() = config.storageMode
 
     // Server Identification
-    val databasePrefix: String
-        get() = config.databasePrefix
+    val databaseNamespace: String
+        get() = config.databaseNamespace
 
     // ----------------------------- //
     //       DataKache Logging       //

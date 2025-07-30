@@ -1,3 +1,5 @@
+@file:Suppress("deprecation")
+
 plugins {
     // Java Build Plugins
     id("java")
@@ -52,6 +54,9 @@ allprojects {
         api("org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
         api("org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
         api("ch.qos.logback:logback-classic:1.5.18") // Logging for MongoDB
+
+        // Google, for some Guava utilities (like CacheBuilder)
+        api("com.google.guava:guava:33.4.8-jre") // TODO need relocation?
 
         // Detekt Extensions
         detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")

@@ -13,11 +13,11 @@
 #                     Server Details                    #
 # ----------------------------------------------------- #
 # ATTENTION - Please review this option BEFORE using DataKache on your server!
-# This prefix is placed in front of all collections created in your database by DataKache.
+# This namespace is placed in front of all collections created in your database by DataKache.
 # If you run multiple game-modes or servers on the same database, and you want to keep the data separated,
-#  please change this prefix to something unique for your server.
+#  please change this namespace to something unique for your server.
 # Default: 'global'
-database-prefix: 'global'
+database-namespace: 'global'
 
 
 

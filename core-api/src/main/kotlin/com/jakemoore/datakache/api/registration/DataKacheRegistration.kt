@@ -12,7 +12,7 @@ class DataKacheRegistration internal constructor(
 
     /**
      * The full database name as it would appear in MongoDB
-     * This includes the DataKache prefix, described in [DataKacheAPI.getFullDatabaseName] (String)}
+     * This includes the DataKache namespace, described in [DataKacheAPI.getFullDatabaseName] (String)}
      * All plugin collections will be stored in this database
      */
     val databaseName: String

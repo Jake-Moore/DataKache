@@ -6,7 +6,7 @@ import com.jakemoore.datakache.api.mode.StorageMode
  * Configuration for DataKache.
  */
 class DataKacheConfig(
-    val databasePrefix: String = "global",
+    val databaseNamespace: String = "global",
     val debug: Boolean = false,
     val storageMode: StorageMode,
 
