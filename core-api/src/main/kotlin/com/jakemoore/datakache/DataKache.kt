@@ -62,7 +62,7 @@ object DataKache {
         }
         logger.info("&aAll coroutines finished!")
 
-        // Shutdown Dangling Collections (and warn authors)
+        // Shutdown any running DocCaches
         if (DataKacheAPI.registrations.isNotEmpty()) {
             // This should be safe (although not ideal)
             //   since any plugin depending on DataKache should be disabled before this

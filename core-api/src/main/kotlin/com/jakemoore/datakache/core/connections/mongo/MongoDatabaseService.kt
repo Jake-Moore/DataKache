@@ -24,7 +24,7 @@ import org.bson.UuidRepresentation
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-class MongoDatabaseService : DatabaseService {
+internal class MongoDatabaseService : DatabaseService {
 
     // ------------------------------------------------------------ //
     //                     Mongo Service Properties                 //
@@ -299,7 +299,7 @@ class MongoDatabaseService : DatabaseService {
             "MongoClient is not initialized! Could not fetch MongoCollection!"
         }
         // Unique key that identifies the cache in this specific database
-        val cacheKey = docCache.databaseName + "." + docCache.nickname
+        val cacheKey = docCache.databaseName + "." + docCache.cacheName
 
         // Return existing cached collection if available
         collections[cacheKey]?.let {
@@ -313,7 +313,7 @@ class MongoDatabaseService : DatabaseService {
         }
 
         // Create or Get the MongoCollection for the specific DocCache
-        return database.getCollection(docCache.nickname, docCache.docClass).also {
+        return database.getCollection(docCache.cacheName, docCache.docClass).also {
             collections[cacheKey] = it
         }
     }

@@ -7,6 +7,7 @@ import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.logging.PluginCacheLogger
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.util.DataKacheFileLogger
 import com.jakemoore.datakache.util.PlayerUtil
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -17,10 +18,10 @@ import kotlin.reflect.KProperty
 abstract class PlayerDocCache<D : PlayerDoc<D>>(
     plugin: JavaPlugin,
 
-    nickname: String,
+    cacheName: String,
     registration: DataKacheRegistration,
     docClass: Class<D>,
-    logger: (String) -> LoggerService = { nickname -> PluginCacheLogger(nickname, plugin) },
+    logger: (String) -> LoggerService = { cacheName -> PluginCacheLogger(cacheName, plugin) },
 
     /**
      * @param UUID the unique identifier for the document.
@@ -38,11 +39,25 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     val defaultInitializer: (D) -> D,
 
-) : DocCacheImpl<UUID, D>(nickname, registration, docClass, logger) {
+) : DocCacheImpl<UUID, D>(cacheName, registration, docClass, logger) {
     // ------------------------------------------------------------ //
     //                     Kotlin Reflect Access                    //
     // ------------------------------------------------------------ //
     abstract fun getUsernameKProperty(): KProperty<String?>
+
+
+    // ------------------------------------------------------------ //
+    //                         Service Methods                      //
+    // ------------------------------------------------------------ //
+    override suspend fun shutdownSuper(): Boolean {
+        Bukkit.getOnlinePlayers().forEach { p: Player ->
+            // TODO need to ensure that every player is quit from the cache on shutdown
+            // PlayerDocListener.quit(p, this)
+        }
+        return true
+    }
+
+
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -56,7 +71,9 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      *
      * @return An [DefiniteResult] containing the document or an exception if the document could not be read.
      */
-    abstract fun read(player: Player): DefiniteResult<D>
+    fun read(player: Player): DefiniteResult<D> {
+        TODO() // TODO
+    }
 
     /**
      * Fetches all [PlayerDoc] objects for all online [Player]s.
@@ -67,8 +84,31 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         return Bukkit.getOnlinePlayers()
             .filter { PlayerUtil.isFullyValidPlayer(it) }
             .mapNotNull { player ->
-                // TODO send any errors to the default logger
+                val result = this.read(player)
+                val exception = result.exceptionOrNull()
+                if (exception != null) {
+                    DataKacheFileLogger.warn(
+                        "[PlayerDocCache#readAllOnline] Failed to read PlayerDoc for " +
+                                "player ${player.name} (${player.uniqueId}). " +
+                                "This should not happen, please report this issue to the DataKache team.",
+                        exception
+                    )
+                    return@mapNotNull null
+                }
+
                 this.read(player).getOrNull()
             }
+    }
+
+
+
+    // ------------------------------------------------------------ //
+    //                    Key Manipulation Methods                  //
+    // ------------------------------------------------------------ //
+    override fun keyFromString(string: String): UUID {
+        return UUID.fromString(string)
+    }
+    override fun keyToString(key: UUID): String {
+        return key.toString()
     }
 }

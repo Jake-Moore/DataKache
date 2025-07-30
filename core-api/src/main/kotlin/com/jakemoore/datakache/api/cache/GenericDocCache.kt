@@ -2,18 +2,20 @@
 
 package com.jakemoore.datakache.api.cache
 
+import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.doc.GenericDoc
 import com.jakemoore.datakache.api.logging.DefaultCacheLogger
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.api.result.handler.CreateResultHandler
 import java.util.UUID
 
 abstract class GenericDocCache<D : GenericDoc<D>>(
-    nickname: String,
+    cacheName: String,
     registration: DataKacheRegistration,
     docClass: Class<D>,
-    logger: (String) -> LoggerService = { nickname -> DefaultCacheLogger(nickname) },
+    logger: (String) -> LoggerService = { cacheName -> DefaultCacheLogger(cacheName) },
 
     /**
      * @param UUID the unique identifier for the document.
@@ -21,13 +23,46 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      */
     val instantiator: (String, Long) -> D,
 
-) : DocCacheImpl<String, D>(nickname, registration, docClass, logger) {
+) : DocCacheImpl<String, D>(cacheName, registration, docClass, logger) {
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
+
     /**
-     * Creates a new document in the cache (backed by a database object) with a random key.
+     * Creates a new document in the cache (backed by a database object).
+     *
+     * @param key The unique key for the document to be created.
+     * @param initializer A callback function for initializing the document with starter data.
+     *
+     * @return A [DefiniteResult] containing the document, or the exception if the document could not be created.
+     */
+    suspend fun create(key: String, initializer: (D) -> D = { it }): DefiniteResult<D> {
+        return CreateResultHandler.wrap {
+            // Create a new instance in modifiable state
+            val instantiated: D = instantiator(key, 0L)
+            instantiated.initializeInternal(this)
+
+            // Allow caller to initialize the document with starter data
+            val doc: D = initializer(instantiated)
+            require(doc.key == key) {
+                "The key of the Doc must not change during initialization. Expected: $key, Actual: ${doc.key}"
+            }
+            assert(doc.version == 0L) {
+                "The version of the Doc must not change during initialization. Expected: 0L, Actual: ${doc.version}"
+            }
+            doc.initializeInternal(this)
+
+            // Save the document to the database
+            DataKache.storageMode.databaseService.save(this, doc)
+            // Cache the document in memory
+            this.cacheInternal(doc)
+            return@wrap doc
+        }
+    }
+
+    /**
+     * Creates a new document in the cache (backed by a database object) with a random key (UUID string).
      *
      * See [create] for creating a document with a specific key.
      *
@@ -35,5 +70,19 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      *
      * @return A [DefiniteResult] containing the document, or the exception if the document could not be created.
      */
-    abstract suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D>
+    suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D> {
+        return create(UUID.randomUUID().toString(), initializer)
+    }
+
+
+
+    // ------------------------------------------------------------ //
+    //                    Key Manipulation Methods                  //
+    // ------------------------------------------------------------ //
+    override fun keyFromString(string: String): String {
+        return string
+    }
+    override fun keyToString(key: String): String {
+        return key
+    }
 }

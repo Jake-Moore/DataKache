@@ -124,7 +124,7 @@ object DataKacheFileLogger {
         requireNotNull(DataKache.context).logFolder
         val now = System.currentTimeMillis()
 
-        val fileName = docCache.registration.client.name + "_" + docCache.nickname + "_" + now + ".log"
+        val fileName = docCache.registration.client.name + "_" + docCache.cacheName + "_" + now + ".log"
         val logsFolder = File(requireNotNull(DataKache.context).logFolder, "logs")
         val datakacheFolder = File(logsFolder, "datakache")
         return File(datakacheFolder, fileName)

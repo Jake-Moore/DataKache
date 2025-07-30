@@ -6,7 +6,7 @@ import org.jetbrains.annotations.ApiStatus
 
 /**
  * Represents an IMMUTABLE 'document' in the DataKache system.
- * This is some piece of data bound to a given cache/collection by its key [K].
+ * This is some piece of data bound to a given cache by its key [K].
  *
  * CRUD operations are possible on this document,
  * however its state is IMMUTABLE and updates will return a new instance of the document.
