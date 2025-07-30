@@ -4,8 +4,8 @@ package com.jakemoore.datakache.api
 
 import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.exception.DuplicateDatabaseException
-import com.jakemoore.datakache.api.registration.DatabaseRegistration
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
+import com.jakemoore.datakache.api.registration.DatabaseRegistration
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList

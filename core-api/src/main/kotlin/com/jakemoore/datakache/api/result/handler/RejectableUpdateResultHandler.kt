@@ -1,0 +1,53 @@
+package com.jakemoore.datakache.api.result.handler
+
+import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.result.Failure
+import com.jakemoore.datakache.api.result.Reject
+import com.jakemoore.datakache.api.result.RejectableResult
+import com.jakemoore.datakache.api.result.Success
+import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
+
+internal object RejectableUpdateResultHandler {
+    internal suspend fun <K : Any, D : Doc<K, D>> wrap(
+        // Work cannot return a null document.
+        //   If the document is not found it should throw a [DocumentNotFoundException].
+        work: suspend () -> D
+    ): RejectableResult<D> {
+        try {
+            val value = work()
+            return Success(requireNotNull(value))
+        } catch (e: DocumentNotFoundException) {
+            // In the middle of this update we discovered that the document does not exist.
+            // (it was likely deleted by another thread or task before this operation could complete)
+            return Failure(
+                ResultExceptionWrapper(
+                    message = "Update operation failed: Document not found",
+                    exception = e,
+                )
+            )
+        } catch (t: Throwable) {
+            val rejectException = getRejectException(t)
+            return if (rejectException != null) {
+                Reject(rejectException)
+            } else {
+                Failure(ResultExceptionWrapper("Update operation failed.", t))
+            }
+        }
+    }
+
+    private fun getRejectException(exception: Throwable): RejectUpdateException? {
+        val cause = exception.cause
+        return exception as? RejectUpdateException
+            ?: (
+                cause as? RejectUpdateException
+                    ?: if (cause != null && cause.cause is RejectUpdateException) {
+                        // If its more than 2 levels deep, I feel like that's an issue with the user's code
+                        cause.cause as RejectUpdateException
+                    } else {
+                        null
+                    }
+                )
+    }
+}
