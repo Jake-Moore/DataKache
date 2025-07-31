@@ -11,11 +11,14 @@ import com.jakemoore.datakache.api.mode.StorageMode
 import kotlinx.coroutines.runBlocking
 
 object DataKache {
-    private var enabled = false
-    internal var context: DataKacheContext? = null
+    var enabled = false
+        private set
+    var context: DataKacheContext? = null
+        private set
 
     // Internal Properties
-    internal var onEnableTime: Long = 0
+    var onEnableTime: Long = 0
+        private set
 
     /**
      * This method will always successfully enable DataKache.
