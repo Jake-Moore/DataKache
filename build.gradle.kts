@@ -14,13 +14,33 @@ plugins {
     kotlin("plugin.serialization")
 }
 
-val VERSION = "0.0.1-SNAPSHOT"
+@Suppress("PropertyName")
+val VERSION = "0.0.1"
+
+ext {
+    // KotlinX
+    set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    val serializationVer = "1.9.0"
+    set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
+    set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
+    // Reflect is needed for managing specific KProperty's on Store objects
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.0")
+
+    // MongoDB Driver + Kotlin Support
+    val mongoVer = "5.5.1"
+    set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
+    set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
+    set("logback-classic", "ch.qos.logback:logback-classic:1.5.18") // Logging for MongoDB
+
+    // Google Guava (for CacheBuilder)
+    set("guava", "com.google.guava:guava:33.4.8-jre")
+}
 
 allprojects {
-    group = "com.kamikazejam"
+    group = "com.jakemoore"
     version = VERSION
-    description = "A Kotlin-first data library with multi-backend support, in-memory caching, and thread-safe updates " +
-            "for Serializable data in multiple environments."
+    description = "A Kotlin-first data library with multi-backend support, in-memory caching, " +
+            "and thread-safe updates for Serializable data in multiple environments."
 
     apply(plugin = "java")
     apply(plugin = "java-library")
@@ -32,38 +52,17 @@ allprojects {
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     }
 
-    repositories {
-        mavenCentral()
-        maven("https://repo.luxiouslabs.net/repository/maven-public/")
-    }
-
     dependencies {
-        // Kotlin Libraries
-        api(kotlin("stdlib-jdk8"))
-        api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-
-        // KotlinX Libraries
-        val serializationVer = "1.9.0"
-        api("org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
-        api("org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
-        //      Reflect is needed for managing specific KProperty's on Store objects
-        api("org.jetbrains.kotlin:kotlin-reflect:2.2.0")
-
-        // MongoDB
-        val mongoVer = "5.5.1"
-        api("org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
-        api("org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
-        api("ch.qos.logback:logback-classic:1.5.18") // Logging for MongoDB
-
-        // Google, for some Guava utilities (like CacheBuilder)
-        api("com.google.guava:guava:33.4.8-jre") // TODO need relocation?
-
-        // Detekt Extensions
         detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")
 
         // Annotations
         compileOnly("org.jetbrains:annotations:26.0.2")
         testCompileOnly("org.jetbrains:annotations:26.0.2")
+    }
+
+    repositories {
+        mavenCentral()
+        maven("https://repo.luxiouslabs.net/repository/maven-public/")
     }
 
     // We want UTF-8 for everything
@@ -80,7 +79,7 @@ allprojects {
         delete("build/libs")
         delete("build/reports/detekt")
     }
-    tasks.build.get().dependsOn("cleanBuild")
+    tasks.jar.get().dependsOn("cleanBuild")
 
     // Configure detekt
     val detektConfig = rootProject.layout.projectDirectory.file(".detekt/detekt.yml").asFile
