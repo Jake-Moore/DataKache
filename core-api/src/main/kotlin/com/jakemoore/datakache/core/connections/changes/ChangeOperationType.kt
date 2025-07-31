@@ -24,4 +24,5 @@ enum class ChangeOperationType {
     RENAME,
     DROP_DATABASE,
     INVALIDATE,
+    UNKNOWN,
 }

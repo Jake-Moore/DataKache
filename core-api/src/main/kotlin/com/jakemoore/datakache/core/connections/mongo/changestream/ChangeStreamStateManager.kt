@@ -4,6 +4,7 @@ package com.jakemoore.datakache.core.connections.mongo.changestream
 
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -97,6 +98,8 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
         try {
             changeStreamJob?.join()
             eventProcessorJob?.join()
+        } catch (e: CancellationException) {
+            // Expected when jobs are cancelled - can be safely ignored
         } catch (e: Exception) {
             context.logger.warn("Error waiting for job completion during cleanup: ${e.message}")
         }
