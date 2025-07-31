@@ -2,6 +2,10 @@ package com.jakemoore.datakache.api.doc
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
+import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.api.result.RejectableResult
 import org.jetbrains.annotations.ApiStatus
 
 /**
@@ -81,4 +85,42 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
     fun initializeInternal(cache: DocCache<K, D>)
+
+    // ------------------------------------------------------------ //
+    //                          CRUD Methods                        //
+    // ------------------------------------------------------------ //
+    /**
+     * Modify this document (both cache and database will be updated).
+     *
+     * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
+     */
+    @Throws(DocumentNotFoundException::class)
+    suspend fun update(updateFunction: (D) -> D): DefiniteResult<D> {
+        return this.getDocCache().update(this.key, updateFunction)
+    }
+
+    /**
+     * Modify this document, allowing the operation to gracefully be rejected within the [updateFunction].
+     *
+     * Within the [updateFunction], you can throw a [RejectUpdateException] to cancel the update operation. The
+     * [RejectableResult] will then indicate that the update was rejected, and no modifications were made.
+     *
+     * @return The [RejectableResult] containing:
+     * - the updated document if the update was successful
+     * - an exception if the update failed
+     * - or a rejection state if the update was rejected by the [updateFunction]
+     */
+    @Throws(DocumentNotFoundException::class)
+    suspend fun updateRejectable(updateFunction: (D) -> D): RejectableResult<D> {
+        return this.getDocCache().updateRejectable(this.key, updateFunction)
+    }
+
+    /**
+     * Deletes this document from the cache and the backing database.
+     *
+     * @return A [DefiniteResult] indicating if the document was found in db and deleted. (false = not found)
+     */
+    suspend fun delete(): DefiniteResult<Boolean> {
+        return this.getDocCache().delete(this.key)
+    }
 }
