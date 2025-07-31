@@ -334,8 +334,8 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             OperationType.DROP_DATABASE -> ChangeOperationType.DROP_DATABASE
             OperationType.INVALIDATE -> ChangeOperationType.INVALIDATE
             else -> {
-                context.logger.warn("Unknown MongoDB operation type: $mongoOperationType, mapping to UPDATE")
-                ChangeOperationType.UPDATE
+                context.logger.warn("Unknown MongoDB operation type: $mongoOperationType, mapping to UNKNOWN")
+                ChangeOperationType.UNKNOWN
             }
         }
     }
