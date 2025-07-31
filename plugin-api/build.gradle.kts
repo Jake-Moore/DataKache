@@ -1,3 +1,6 @@
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
@@ -5,19 +8,57 @@ plugins {
 
 // Unique module dependencies
 dependencies {
-    api(project(":core-api"))
+    // bring the code part of core-api, but exclude all transitive dependencies
+    //   if we did not exclude them, they would be shaded
+    //   we want them brought as transitive dependencies in the plugin-api jar too
+    api(project(":core-api")) {
+        exclude(group = "*", module = "*")
+    }
 
     // Spigot (modified TacoSpigot 1.8, removing some conflicting classes from the build)
     compileOnly("net.techcable.tacospigot:server:1.8.8-R0.2-REDUCED-KC")
+
+    // Kotlin Libraries (transitive dependencies intended for external use)
+    api(kotlin("stdlib-jdk8"))
+    api(project.property("kotlinx-coroutines-core") as String)
+    api(project.property("kotlinx-serialization-core") as String)
+    api(project.property("kotlinx-serialization-json-jvm") as String)
+    api(project.property("kotlin-reflect") as String)
+
+    // MongoDB
+    api(project.property("mongodb-driver-kotlin-coroutine") as String)
+    api(project.property("bson-kotlinx") as String)
+    api(project.property("logback-classic") as String)
+
+    // Guava
+    api(project.property("guava") as String) // brings org.jspecify annotations
+}
+
+tasks {
+    publish.get().dependsOn(build)
+
+    processResources {
+        filteringCharset = Charsets.UTF_8.name()
+        val props = mapOf(
+            "name" to rootProject.name,
+            "version" to project.version,
+            "description" to project.description,
+            "date" to DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+        )
+        inputs.properties(props)
+        filesMatching("plugin.yml") {
+            expand(props)
+        }
+    }
 }
 
 // Configure Publication
 publishing {
     // This jar is intended as an API jar, and should ONLY be shaded. It does not function as a Spigot Plugin.
     publications {
-        create<MavenPublication>("jarPublication") {
-            groupId = rootProject.group.toString()
-            artifactId = rootProject.name.lowercase()
+        create<MavenPublication>("maven") {
+            groupId = rootProject.group.toString() + ".datakache"
+            artifactId = "plugin-api"
             version = rootProject.version.toString()
             from(components["java"])
         }
