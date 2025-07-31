@@ -3,6 +3,7 @@
 package com.jakemoore.datakache.api.coroutines
 
 import com.jakemoore.datakache.DataKache
+import com.jakemoore.datakache.api.coroutines.DataKacheScope.Companion.EXCEPTION_CONSUMERS
 import com.jakemoore.datakache.api.coroutines.exception.ExceptionConsumer
 import com.jakemoore.datakache.api.logging.LoggerService
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -20,6 +21,10 @@ import kotlin.coroutines.CoroutineContext
 interface DataKacheScope : CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = GlobalDataKacheScope.coroutineContext
+
+    companion object {
+        val EXCEPTION_CONSUMERS: MutableList<ExceptionConsumer> = mutableListOf()
+    }
 }
 
 /**
@@ -27,7 +32,6 @@ interface DataKacheScope : CoroutineScope {
  */
 @Suppress("MemberVisibilityCanBePrivate")
 internal object GlobalDataKacheScope : CoroutineScope {
-    var EXCEPTION_CONSUMERS: MutableList<ExceptionConsumer> = mutableListOf()
 
     // SupervisorJob ensures that a child coroutine failure won't cancel the parent job or other child coroutines.
     private val supervisorJob = SupervisorJob()
