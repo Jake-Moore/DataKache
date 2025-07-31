@@ -206,7 +206,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    fun cacheInternal(doc: D)
+    fun cacheInternal(doc: D, log: Boolean = true)
 
     /**
      * @return If a document was removed from the cache.

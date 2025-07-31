@@ -6,6 +6,8 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.DatabaseService
+import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
+import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
@@ -17,7 +19,9 @@ import com.mongodb.kotlin.client.coroutine.MongoClient
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
 import org.bson.UuidRepresentation
@@ -287,6 +291,16 @@ internal class MongoDatabaseService : DatabaseService {
         return mongoConnected
     }
 
+    override suspend fun <K : Any, D : Doc<K, D>> readAll(docCache: DocCache<K, D>): Flow<D> {
+        return getMongoCollection(docCache).find().map { doc: D ->
+            // Ensure doc is initialized with its backing cache
+            doc.initializeInternal(docCache)
+            // We read the document again, might as well cache it for consistency
+            docCache.cacheInternal(doc)
+            doc
+        }
+    }
+
     // ------------------------------------------------------------ //
     //                   MongoCollection Management                 //
     // ------------------------------------------------------------ //
@@ -316,5 +330,37 @@ internal class MongoDatabaseService : DatabaseService {
         return database.getCollection(docCache.cacheName, docCache.docClass).also {
             collections[cacheKey] = it
         }
+    }
+
+    @Suppress("CanConvertToMultiDollarString")
+    override suspend fun getCurrentOperationTime(): Any? {
+        return try {
+            val client = requireNotNull(this.mongoClient) {
+                "MongoClient is not initialized! Could not get current operation time!"
+            }
+
+            // Get cluster time by running a simple operation
+            val adminDatabase = client.getDatabase("admin")
+            val result = adminDatabase.runCommand(org.bson.Document("hello", 1))
+
+            // Extract cluster time from the result
+            val clusterTimeDoc = result.get("\$clusterTime") as? org.bson.Document
+            clusterTimeDoc?.get("clusterTime") as? org.bson.BsonTimestamp
+        } catch (e: Exception) {
+            this.warn("Failed to get current operation time: ${e.message}")
+            null
+        }
+    }
+
+    override suspend fun <K : Any, D : Doc<K, D>> createChangeStreamManager(
+        docCache: DocCache<K, D>,
+        eventHandler: ChangeEventHandler<K, D>
+    ): ChangeStreamManager<K, D> {
+        val collection = getMongoCollection(docCache)
+        return MongoChangeStreamManager(
+            collection = collection,
+            eventHandler = eventHandler,
+            logger = this
+        )
     }
 }
