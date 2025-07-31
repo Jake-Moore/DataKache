@@ -19,8 +19,8 @@ internal object ReadResultHandler {
             } else {
                 Empty()
             }
-        } catch (t: Throwable) {
-            return Failure(ResultExceptionWrapper("Read operation failed.", t))
+        } catch (e: Exception) {
+            return Failure(ResultExceptionWrapper("Read operation failed.", e))
         }
     }
 }

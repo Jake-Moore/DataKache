@@ -25,8 +25,8 @@ internal object UpdateResultHandler {
                     exception = e,
                 )
             )
-        } catch (t: Throwable) {
-            return Failure(ResultExceptionWrapper("Update operation failed.", t))
+        } catch (e: Exception) {
+            return Failure(ResultExceptionWrapper("Update operation failed.", e))
         }
     }
 }

@@ -33,8 +33,8 @@ suspend fun DataKacheScope.runSyncBlocking(block: () -> Unit) {
             try {
                 block()
                 continuation.resume(Unit)
-            } catch (t: Throwable) {
-                continuation.resumeWithException(t)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
             }
         }
     }
@@ -52,8 +52,8 @@ suspend fun <T> DataKacheScope.runSyncFetching(block: () -> T): T {
             try {
                 val result: T = block()
                 continuation.resume(result)
-            } catch (t: Throwable) {
-                continuation.resumeWithException(t)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
             }
         }
     }

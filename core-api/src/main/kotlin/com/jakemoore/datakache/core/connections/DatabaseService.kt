@@ -5,6 +5,9 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.Service
+import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
+import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
@@ -49,4 +52,30 @@ internal interface DatabaseService : LoggerService, Service {
      * @return If the database service is finished starting up and is ready to accept requests.
      */
     fun isDatabaseReadyForWrites(): Boolean
+
+    /**
+     * Read all documents from the given [docCache] as a kotlin [Flow].
+     */
+    suspend fun <K : Any, D : Doc<K, D>> readAll(docCache: DocCache<K, D>): Flow<D>
+
+    /**
+     * Gets the current operation time from the database to prevent timing gaps
+     * in change stream initialization. The returned object is database-specific
+     * and should be passed to createChangeStreamManager if timing gap prevention is needed.
+     *
+     * @return A database-specific timestamp object, or null if not supported
+     */
+    suspend fun getCurrentOperationTime(): Any?
+
+    /**
+     * Creates a change stream manager for the given [docCache] with the specified [eventHandler].
+     *
+     * @param docCache The document cache to create a change stream for
+     * @param eventHandler The event handler to process change stream events
+     * @return A change stream manager instance
+     */
+    suspend fun <K : Any, D : Doc<K, D>> createChangeStreamManager(
+        docCache: DocCache<K, D>,
+        eventHandler: ChangeEventHandler<K, D>
+    ): ChangeStreamManager<K, D>
 }

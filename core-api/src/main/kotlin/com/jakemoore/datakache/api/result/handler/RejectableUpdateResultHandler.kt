@@ -27,12 +27,12 @@ internal object RejectableUpdateResultHandler {
                     exception = e,
                 )
             )
-        } catch (t: Throwable) {
-            val rejectException = getRejectException(t)
+        } catch (e: Exception) {
+            val rejectException = getRejectException(e)
             return if (rejectException != null) {
                 Reject(rejectException)
             } else {
-                Failure(ResultExceptionWrapper("Update operation failed.", t))
+                Failure(ResultExceptionWrapper("Update operation failed.", e))
             }
         }
     }

@@ -27,8 +27,8 @@ object CreateResultHandler {
                     exception = d,
                 )
             )
-        } catch (t: Throwable) {
-            return Failure(ResultExceptionWrapper("Create operation failed.", t))
+        } catch (e: Exception) {
+            return Failure(ResultExceptionWrapper("Create operation failed.", e))
         }
     }
 }

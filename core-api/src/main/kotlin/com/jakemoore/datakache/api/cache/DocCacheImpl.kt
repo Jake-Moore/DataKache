@@ -12,9 +12,14 @@ import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
+import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
+import com.jakemoore.datakache.core.connections.changes.ChangeOperationType
+import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.ApiStatus
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.properties.Delegates
 
 abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     override val cacheName: String,
@@ -25,7 +30,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      */
     private val loggerInstantiator: (String) -> LoggerService,
 ) : DocCache<K, D> {
-    internal var startedEpochMS by Delegates.notNull<Long>()
 
     override val databaseName: String
         get() = registration.databaseName
@@ -34,21 +38,66 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     //                         Service Methods                      //
     // ------------------------------------------------------------ //
     var running: Boolean = false
+    private var changeStreamManager: ChangeStreamManager<K, D>? = null
 
     /**
      * Internal method, which should only be called by [DataKacheRegistration.registerDocCache]
      *
      * @return If this call started the service (false if already running)
      */
-    @Suppress("RedundantSuspendModifier")
     internal suspend fun start(): Boolean {
         if (running) return false
 
-        // TODO: we should run all of the pre-loading logic
-        //  and also register the stream that pulls updates from the database.
+        try {
+            // CRITICAL FIX: Capture operation time BEFORE loading documents to prevent timing gaps
+            val operationTime = DataKache.storageMode.databaseService.getCurrentOperationTime()
+            this.getLoggerInternal().debug(
+                "Captured operation time before loading: $operationTime for cache: $cacheName"
+            )
 
-        startedEpochMS = System.currentTimeMillis()
-        return true
+            // Preload all Documents into Cache
+            loadAllIntoCache()
+            this.getLoggerInternal().info("Loaded all documents (${cacheMap.size}x) into cache: $cacheName")
+
+            // Listen for DB Updates that should be streamed down
+            // Pass the captured operation time to prevent timing gaps
+            startChangeStreamListener(operationTime)
+
+            running = true
+            this.getLoggerInternal().info("Successfully started cache: $cacheName")
+            return true
+        } catch (e: Exception) {
+            this.getLoggerInternal().error(e, "Failed to start cache: $cacheName")
+
+            // Cleanup on failure
+            try {
+                cleanupOnStartupFailure()
+            } catch (cleanupException: Exception) {
+                this.getLoggerInternal().error(
+                    cleanupException,
+                    "Error during startup failure cleanup for cache: $cacheName"
+                )
+            }
+
+            throw e
+        }
+    }
+
+    /**
+     * Cleans up resources if startup fails.
+     */
+    private suspend fun cleanupOnStartupFailure() {
+        this.getLoggerInternal().debug("Cleaning up resources after startup failure for cache: $cacheName")
+
+        // Stop any partially started change stream
+        changeStreamManager?.stop()
+        changeStreamManager = null
+
+        // Clear any loaded documents
+        cacheMap.clear()
+
+        // Reset running state
+        running = false
     }
 
     /**
@@ -59,14 +108,31 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     internal suspend fun shutdown(): Boolean {
         if (!running) return false
 
-        if (!shutdownSuper()) {
-            getLoggerInternal().error("Failed to shutdown super cache: $cacheName")
+        // Stop the change stream manager and properly await completion
+        try {
+            changeStreamManager?.stop()
+            changeStreamManager = null
+        } catch (e: Exception) {
+            getLoggerInternal().error(e, "Error during change stream shutdown: $cacheName")
+            // Continue with shutdown despite change stream errors
+        }
+
+        // Shutdown the super cache
+        val superShutdownSuccess = shutdownSuper()
+
+        // Mark as not running
+        running = false
+
+        // Unregister the cache
+        try {
+            registration.onDocCacheShutdown(this)
+        } catch (e: Exception) {
+            getLoggerInternal().error(e, "Error during cache unregistration: $cacheName")
             return false
         }
 
-        // Unregister the cache
-        registration.onDocCacheShutdown(this)
-        return true
+        getLoggerInternal().info("Cache shutdown completed: $cacheName")
+        return superShutdownSuccess
     }
     protected abstract suspend fun shutdownSuper(): Boolean
 
@@ -121,9 +187,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    override fun cacheInternal(doc: D) {
+    override fun cacheInternal(doc: D, log: Boolean) {
         cacheMap[doc.key] = doc
-        getLoggerInternal().debug("Cached document: ${doc.key}")
+        if (log) {
+            getLoggerInternal().debug("Cached document: ${doc.key}")
+        }
         doc.initializeInternal(this)
     }
 
@@ -162,6 +230,143 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
         return loggerInstantiator(this.cacheName).also {
             this._loggerService = it
+        }
+    }
+
+    // ------------------------------------------------------------ //
+    //                        MongoDB Streams                       //
+    // ------------------------------------------------------------ //
+    private suspend fun loadAllIntoCache() = withContext(Dispatchers.IO) {
+        val documents = DataKache.storageMode.databaseService.readAll(this@DocCacheImpl)
+        documents.collect { doc ->
+            cacheInternal(doc, log = false)
+        }
+    }
+
+    private suspend fun startChangeStreamListener(operationTime: Any?) {
+        // Create the change stream manager through the database service
+        DataKache.storageMode.databaseService.createChangeStreamManager(
+            this@DocCacheImpl,
+            createChangeEventHandler()
+        ).also {
+            changeStreamManager = it
+
+            // Start the change stream with pre-captured operation time to prevent timing gaps
+            it.start(operationTime)
+
+            getLoggerInternal().info(
+                "Started change stream listener for cache: $cacheName with operation time: $operationTime"
+            )
+        }
+    }
+
+    private fun createChangeEventHandler(): ChangeEventHandler<K, D> {
+        return object : ChangeEventHandler<K, D> {
+            override suspend fun onDocumentChanged(doc: D, operationType: ChangeOperationType) {
+                when (operationType) {
+                    ChangeOperationType.INSERT, ChangeOperationType.REPLACE, ChangeOperationType.UPDATE -> {
+                        cacheInternal(doc, log = false)
+                        getLoggerInternal().debug("Cached Document From ${operationType.name}: ${doc.key}")
+                    }
+
+                    ChangeOperationType.DELETE -> {
+                        val removed = uncacheInternal(doc.key)
+                        if (removed) {
+                            getLoggerInternal().debug("Uncached Document From DELETE: ${doc.key}")
+                        } else {
+                            getLoggerInternal().warn("Attempted to delete non-cached document: ${doc.key}")
+                        }
+                    }
+
+                    ChangeOperationType.DROP -> {
+                        // Collection was dropped - clear the entire cache
+                        val cachedCount = cacheMap.size
+                        cacheMap.clear()
+                        getLoggerInternal().warn(
+                            "Collection dropped - cleared cache ($cachedCount documents) for: $cacheName"
+                        )
+                    }
+
+                    ChangeOperationType.RENAME -> {
+                        // Collection was renamed - clear the cache as we're no longer tracking the correct collection
+                        val cachedCount = cacheMap.size
+                        cacheMap.clear()
+                        getLoggerInternal().warn(
+                            "Collection renamed - cleared cache ($cachedCount documents) for: $cacheName. " +
+                                "Cache may need to be reregistered with new collection name."
+                        )
+                    }
+
+                    ChangeOperationType.DROP_DATABASE -> {
+                        // Database was dropped - this is a fatal error requiring cache shutdown
+                        getLoggerInternal().error(
+                            "Database '$databaseName' was dropped - " +
+                                "initiating emergency cache shutdown for: $cacheName"
+                        )
+
+                        try {
+                            // Clear cache immediately
+                            cacheMap.clear()
+
+                            // Attempt graceful shutdown in background
+                            // Note: This is an emergency situation, so we don't wait for completion
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                try {
+                                    shutdown()
+                                } catch (e: Exception) {
+                                    getLoggerInternal().error(
+                                        e,
+                                        "Error during emergency shutdown: $cacheName"
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            getLoggerInternal().error(
+                                e,
+                                "Error during DROP_DATABASE handling: $cacheName"
+                            )
+                        }
+                    }
+
+                    ChangeOperationType.INVALIDATE -> {
+                        // Change stream was invalidated - log error and consider restarting
+                        getLoggerInternal().error(
+                            "Change stream invalidated for cache: $cacheName. " +
+                                "This may indicate a significant database event. " +
+                                "The stream will attempt to reconnect automatically."
+                        )
+
+                        // The change stream manager should handle reconnection automatically,
+                        // but we log this as a critical event for monitoring
+                        getLoggerInternal().warn(
+                            "Cache $cacheName may be in an inconsistent state due to stream invalidation. " +
+                                "Consider manual verification if issues persist."
+                        )
+                    }
+
+                    ChangeOperationType.UNKNOWN -> {
+                        getLoggerInternal().warn(
+                            "Unknown operation type received for cache: $cacheName, document: ${doc.key}. " +
+                                "This may indicate a new MongoDB operation type that needs to be handled."
+                        )
+                    }
+                }
+            }
+
+            override suspend fun onDocumentDeleted(key: K) {
+                val removed = uncacheInternal(key)
+                if (removed) {
+                    getLoggerInternal().debug("Document deleted: $key")
+                }
+            }
+
+            override suspend fun onConnected() {
+                getLoggerInternal().info("Change stream connected for cache: $cacheName")
+            }
+
+            override suspend fun onDisconnected() {
+                getLoggerInternal().warn("Change stream disconnected for cache: $cacheName")
+            }
         }
     }
 }
