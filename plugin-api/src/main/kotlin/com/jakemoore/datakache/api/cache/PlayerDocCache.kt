@@ -55,7 +55,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     // ------------------------------------------------------------ //
     abstract fun getUsernameKProperty(): KProperty<String?>
 
-
     // ------------------------------------------------------------ //
     //                         Service Methods                      //
     // ------------------------------------------------------------ //
@@ -66,8 +65,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         }
         return true
     }
-
-
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -97,7 +94,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                 // This should never happen, as DataKache ensures that a PlayerDoc is created for
                 // every online player.
                 DataKacheFileLogger.severe(
-                "[PlayerDocCache#read] PlayerDoc for player ${player.name} (${player.uniqueId})" +
+                    "[PlayerDocCache#read] PlayerDoc for player ${player.name} (${player.uniqueId})" +
                         " is not cached. This should not happen! Attempting to resolve (MAY LAG!)."
                 )
 
@@ -127,8 +124,8 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                 if (exception != null) {
                     DataKacheFileLogger.warn(
                         "[PlayerDocCache#readAllOnline] Failed to read PlayerDoc for " +
-                                "player ${player.name} (${player.uniqueId}). " +
-                                "This should not happen, please report this issue to the DataKache team.",
+                            "player ${player.name} (${player.uniqueId}). " +
+                            "This should not happen, please report this issue to the DataKache team.",
                         exception
                     )
                     return@mapNotNull null
@@ -188,8 +185,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         return this.delete(player.uniqueId)
     }
 
-
-
     // ------------------------------------------------------------ //
     //                    Key Manipulation Methods                  //
     // ------------------------------------------------------------ //
@@ -199,8 +194,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     override fun keyToString(key: UUID): String {
         return key.toString()
     }
-
-
 
     // ------------------------------------------------------------ //
     //                        Internal Methods                      //
