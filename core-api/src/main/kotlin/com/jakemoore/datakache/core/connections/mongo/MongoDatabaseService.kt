@@ -10,6 +10,7 @@ import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.mongodb.ConnectionString
+import com.mongodb.DuplicateKeyException
 import com.mongodb.MongoClientSettings
 import com.mongodb.MongoException
 import com.mongodb.MongoTimeoutException
@@ -172,7 +173,8 @@ internal class MongoDatabaseService : DatabaseService {
     // ------------------------------------------------------------ //
     //                         DatabaseService                      //
     // ------------------------------------------------------------ //
-    override suspend fun <K : Any, D : Doc<K, D>> save(
+    @Throws(DuplicateKeyException::class)
+    override suspend fun <K : Any, D : Doc<K, D>> insert(
         docCache: DocCache<K, D>,
         doc: D,
     ) = withContext(Dispatchers.IO) {
@@ -193,16 +195,25 @@ internal class MongoDatabaseService : DatabaseService {
         // Start a transaction session to ensure atomicity while we save the document
         client.startSession().use { session ->
             session.startTransaction()
-            var committed = false
+            var sessionClosed = false
             try {
                 // Insert the document into the MongoDB collection & commit the transaction
                 getMongoCollection(docCache).insertOne(session, doc)
-                session.commitTransaction()
 
-                committed = true
+                session.commitTransaction()
+                sessionClosed = true
+
                 docCache.cacheInternal(doc)
+            } catch (e: DuplicateKeyException) {
+                // TODO validate this is the proper way of catching this and it isn't nested in another exception
+                if (!sessionClosed && session.hasActiveTransaction()) {
+                    session.abortTransaction()
+                    sessionClosed = true
+                }
+                // Promote to caller (no additional logging needed)
+                throw e
             } finally {
-                if (!committed && session.hasActiveTransaction()) {
+                if (!sessionClosed && session.hasActiveTransaction()) {
                     session.abortTransaction()
                     docCache.getLoggerInternal().severe(
                         "Failed to commit transaction (save) for Doc " +

@@ -7,6 +7,7 @@ import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.Service
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import com.mongodb.DuplicateKeyException
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,11 +20,12 @@ internal interface DatabaseService : LoggerService, Service {
     val averagePingNanos: Long
 
     /**
-     * Save the given document to the database.
+     * Insert the given document to the database.
      *
-     * Always succeeds (unless an exception is thrown) and will overwrite any existing document with the same key.
+     * Will not overwrite an existing document with the same key, throwing a [DuplicateKeyException] in that case.
      */
-    suspend fun <K : Any, D : Doc<K, D>> save(docCache: DocCache<K, D>, doc: D)
+    @Throws(DuplicateKeyException::class)
+    suspend fun <K : Any, D : Doc<K, D>> insert(docCache: DocCache<K, D>, doc: D)
 
     /**
      * Update the given document in the database using the provided update function.

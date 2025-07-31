@@ -7,8 +7,11 @@ import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.api.result.Empty
+import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
+import com.jakemoore.datakache.api.result.Success
 import kotlinx.serialization.KSerializer
 import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.annotations.NonBlocking
@@ -39,6 +42,45 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      */
     @NonBlocking
     fun read(key: K): OptionalResult<D>
+
+    /**
+     * Creates a new document in the cache (backed by a database object).
+     *
+     * @param key The unique key for the document to be created.
+     * @param initializer A callback function for initializing the document with starter data.
+     *
+     * @return A [DefiniteResult] containing the document, or the exception if the document could not be created.
+     */
+    suspend fun create(key: K, initializer: (D) -> D = { it }): DefiniteResult<D>
+
+    /**
+     * Fetches (or creates) a document in the cache by its key. Due to the nature of this event (creative),
+     * it may require database calls and therefore may not be instantaneous.
+     *
+     * Failures from reading will be passed through via [DefiniteResult].
+     *
+     * @param key The unique key for the document to be read or created.
+     * @param initializer A callback function for initializing the document with starter data (when it does not exist)
+     *
+     * @return A [DefiniteResult] containing the document, or the exception if the document could not be found/created.
+     */
+    suspend fun readOrCreate(key: K, initializer: (D) -> D = { it }): DefiniteResult<D> {
+        // While DataKache intends to keep all documents in cache, we are already in a suspend context
+        //  so I believe it is acceptable to perform a **database** read here instead of a cache check.
+        // Our result will be more certain, which is necessary since a miss will try to create the document.
+        //  and this helps minimize the chance of a DuplicateKeyException.
+        return when (val result = readFromDatabase(key)) {
+            is Success, is Failure -> {
+                // If we found the document, return it
+                // Likewise, if we encountered a failure exception, pass it through
+                result
+            }
+            is Empty -> {
+                // Time to create the document
+                create(key, initializer)
+            }
+        }
+    }
 
     /**
      * Modify a document by its key (both cache and database will be updated).
@@ -115,6 +157,17 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                       Extra CRUD Methods                     //
     // ------------------------------------------------------------ //
+    /**
+     * Fetch a document from the **database** (skipping cache).
+     *
+     * This document will be automatically cached on success.
+     *
+     * @param key The unique key of the document to be fetched.
+     *
+     * @return An [OptionalResult] containing the document if it exists, or empty if it does not.
+     */
+    suspend fun readFromDatabase(key: K): OptionalResult<D>
+
     /**
      * Fetch all documents from the cache.
      *
