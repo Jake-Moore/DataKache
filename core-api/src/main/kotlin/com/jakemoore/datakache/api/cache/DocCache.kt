@@ -145,6 +145,11 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      */
     fun isCached(key: K): Boolean
 
+    /**
+     * Fetch the total size of all documents in the cache.
+     */
+    fun getCacheSize(): Int
+
     // ------------------------------------------------------------ //
     //                        DocCache Methods                      //
     // ------------------------------------------------------------ //
