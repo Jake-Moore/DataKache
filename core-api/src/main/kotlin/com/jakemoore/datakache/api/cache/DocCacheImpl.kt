@@ -9,12 +9,14 @@ import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
+import com.jakemoore.datakache.api.result.handler.ReadDbResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeOperationType
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import com.mongodb.DuplicateKeyException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -183,6 +185,17 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     //                       Extra CRUD Methods                     //
     // ------------------------------------------------------------ //
+    override suspend fun readFromDatabase(key: K): OptionalResult<D> {
+        return ReadDbResultHandler.wrap {
+            val doc = DataKache.storageMode.databaseService.read(this, key)
+            if (doc != null) {
+                // Cache the document if it was found
+                cacheInternal(doc, log = true)
+            }
+            return@wrap doc
+        }
+    }
+
     override fun readAll(): Collection<D> {
         return Collections.unmodifiableCollection(cacheMap.values)
     }
@@ -225,9 +238,10 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * @return The same [doc] for chaining.
      */
     @ApiStatus.Internal
-    suspend fun saveDatabaseInternal(doc: D): D {
-        // Save the document to the database
-        DataKache.storageMode.databaseService.save(this, doc)
+    @Throws(DuplicateKeyException::class)
+    suspend fun insertDocumentInternal(doc: D): D {
+        // Insert the document in the database
+        DataKache.storageMode.databaseService.insert(this, doc)
         // Cache the document in memory
         this.cacheInternal(doc)
         return doc

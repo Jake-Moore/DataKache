@@ -110,6 +110,27 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         }
     }
 
+    override suspend fun create(key: UUID, initializer: (D) -> D): DefiniteResult<D> {
+        return CreateResultHandler.wrap {
+            // Create a new instance in modifiable state
+            val instantiated: D = instantiator(key, 0L, null)
+            instantiated.initializeInternal(this)
+
+            // Allow caller to initialize the document with starter data
+            val doc: D = initializer(instantiated)
+            require(doc.key == key) {
+                "The key of the PlayerDoc must not change during initializer. Expected: $key, Actual: ${doc.key}"
+            }
+            assert(doc.version == 0L) {
+                "The version of the PlayerDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
+            }
+            doc.initializeInternal(this)
+
+            // Access internal method to save and cache the document
+            return@wrap this.insertDocumentInternal(doc)
+        }
+    }
+
     /**
      * Fetches all [PlayerDoc] objects for all online [Player]s.
      *
@@ -211,14 +232,14 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         // Initialize the document with default values
         val doc: D = this.defaultInitializer(instantiated)
         require(doc.key == uuid) {
-            "The key of the PlayerDoc must not change during initialization. Expected: $uuid, Actual: ${doc.key}"
+            "The key of the PlayerDoc must not change during initializer. Expected: $uuid, Actual: ${doc.key}"
         }
         assert(doc.version == 0L) {
-            "The version of the PlayerDoc must not change during initialization. Expected: 0L, Actual: ${doc.version}"
+            "The version of the PlayerDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
         }
         doc.initializeInternal(this)
 
         // Access internal method to save and cache the document
-        return this.saveDatabaseInternal(doc)
+        return this.insertDocumentInternal(doc)
     }
 }
