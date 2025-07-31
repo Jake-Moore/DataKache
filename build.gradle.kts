@@ -15,7 +15,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.0.2"
+val VERSION = "0.0.3"
 
 ext {
     // KotlinX
