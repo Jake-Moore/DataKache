@@ -7,7 +7,6 @@ import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.cache.DocCacheImpl
 import com.jakemoore.datakache.api.exception.DuplicateCacheException
 import java.util.concurrent.ConcurrentHashMap
-import kotlin.collections.set
 
 /**
  * This class represents a registration for a DataKache database.

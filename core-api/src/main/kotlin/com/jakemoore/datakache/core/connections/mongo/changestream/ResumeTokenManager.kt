@@ -69,6 +69,32 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     }
 
     /**
+     * Helper function to try configuring the change stream with a specific fallback option.
+     *
+     * @param description Human-readable description of the configuration being attempted
+     * @param configAction Lambda that performs the actual configuration
+     * @param handleResumeErrors Whether to handle resume token specific errors (default: true)
+     * @return true if configuration succeeded, false otherwise
+     */
+    private fun tryConfigureStream(
+        handleResumeErrors: Boolean = true,
+        description: String,
+        configAction: () -> Unit
+    ): Boolean {
+        return try {
+            configAction()
+            context.logger.info("$description for ${context.collection.namespace.collectionName}")
+            true
+        } catch (e: Exception) {
+            context.logger.warn("$description failed: ${e.message}")
+            if (handleResumeErrors) {
+                handleSpecificResumeTokenError(e)
+            }
+            false
+        }
+    }
+
+    /**
      * Configures the MongoDB change stream with proper settings and enhanced fallback chain.
      * Implements: resumeToken → lastResumeToken → effectiveStartTime → current time
      */
@@ -86,50 +112,29 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
             var configured = false
 
             // First try: Current resume token
-            val currentResumeToken = resumeToken
-            if (!configured && currentResumeToken != null) {
-                try {
-                    resumeAfter(currentResumeToken)
-                    context.logger.info(
-                        "Resuming change stream from current resume token " +
-                            "for ${context.collection.namespace.collectionName}"
-                    )
-                    configured = true
-                } catch (e: Exception) {
-                    context.logger.warn("Current resume token failed: ${e.message}")
-                    handleSpecificResumeTokenError(e)
+            val resumeToken = resumeToken
+            if (!configured && resumeToken != null) {
+                configured = tryConfigureStream(description = "Resuming change stream from current resume token") {
+                    resumeAfter(resumeToken)
                 }
             }
 
             // Second try: Last resume token fallback
-            val lastToken = lastResumeToken
-            if (!configured && lastToken != null) {
-                try {
-                    resumeAfter(lastToken)
-                    context.logger.info(
-                        "Resuming change stream from last resume token " +
-                            "for ${context.collection.namespace.collectionName}"
-                    )
-                    configured = true
-                } catch (e: Exception) {
-                    context.logger.warn("Last resume token failed: ${e.message}")
-                    handleSpecificResumeTokenError(e)
+            val lastResumeToken = lastResumeToken
+            if (!configured && lastResumeToken != null) {
+                configured = tryConfigureStream(description = "Resuming change stream from last resume token") {
+                    resumeAfter(lastResumeToken)
                 }
             }
 
             // Third try: Operation time fallback
-            val startTime = effectiveStartTime
-            if (!configured && startTime != null) {
-                try {
-                    startAtOperationTime(startTime)
-                    context.logger.info(
-                        "Starting change stream from operation time $startTime " +
-                            "for ${context.collection.namespace.collectionName}"
-                    )
-                    configured = true
-                } catch (e: Exception) {
-                    context.logger.warn("Operation time failed: ${e.message}")
-                }
+            val effectiveStartTime = effectiveStartTime
+            if (!configured && effectiveStartTime != null) {
+                configured = tryConfigureStream(
+                    description = "Starting change stream from operation time $effectiveStartTime",
+                    configAction = { startAtOperationTime(effectiveStartTime) },
+                    handleResumeErrors = false
+                )
             }
 
             // Last resort: Current time

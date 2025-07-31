@@ -13,8 +13,8 @@ internal object DeleteResultHandler {
         try {
             val value = work()
             return Success(requireNotNull(value))
-        } catch (t: Throwable) {
-            return Failure(ResultExceptionWrapper("Delete operation failed.", t))
+        } catch (e: Exception) {
+            return Failure(ResultExceptionWrapper("Delete operation failed.", e))
         }
     }
 }

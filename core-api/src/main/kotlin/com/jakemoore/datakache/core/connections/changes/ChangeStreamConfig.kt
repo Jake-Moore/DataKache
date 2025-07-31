@@ -93,7 +93,8 @@ data class ChangeStreamConfig private constructor(
         /** Jitter factor to prevent thundering herd - hardcoded to small optimal value */
         const val JITTER_FACTOR = 0.1
 
-        /** Maximum safe exponent for backoff calculation to prevent overflow */
+        /** Maximum safe exponent for backoff calculation to prevent overflow.
+         * Used by retry logic in ChangeStreamErrorHandler. */
         const val MAX_BACKOFF_EXPONENT = 10
     }
 }
