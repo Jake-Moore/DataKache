@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package com.jakemoore.datakache.core.connections.mongo.changestream
 
 import com.jakemoore.datakache.api.doc.Doc
@@ -98,7 +96,7 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
         try {
             changeStreamJob?.join()
             eventProcessorJob?.join()
-        } catch (e: CancellationException) {
+        } catch (_: CancellationException) {
             // Expected when jobs are cancelled - can be safely ignored
         } catch (e: Exception) {
             context.logger.warn("Error waiting for job completion during cleanup: ${e.message}")
@@ -153,6 +151,7 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
     /**
      * Attempts a validated state transition.
      */
+    @Suppress("unused")
     fun transitionToValidated(newState: ChangeStreamState): Boolean {
         val currentState = state.get()
         return if (isValidTransition(currentState, newState)) {

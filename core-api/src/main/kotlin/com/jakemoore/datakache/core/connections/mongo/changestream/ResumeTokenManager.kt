@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package com.jakemoore.datakache.core.connections.mongo.changestream
 
 import com.jakemoore.datakache.api.doc.Doc
@@ -53,6 +51,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     /**
      * Clears all tokens including effective start time.
      */
+    @Suppress("unused")
     fun clearAllTokens() {
         resumeToken = null
         lastResumeToken = null
@@ -194,20 +193,24 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     /**
      * Gets the current resume token.
      */
+    @Suppress("unused")
     fun getCurrentResumeToken(): BsonDocument? = resumeToken
 
     /**
      * Gets the last resume token.
      */
+    @Suppress("unused")
     fun getLastResumeToken(): BsonDocument? = lastResumeToken
 
     /**
      * Gets the effective start time.
      */
+    @Suppress("unused")
     fun getEffectiveStartTime(): BsonTimestamp? = effectiveStartTime
 
     /**
      * Checks if any tokens are available.
      */
+    @Suppress("unused")
     fun hasTokens(): Boolean = resumeToken != null || lastResumeToken != null || effectiveStartTime != null
 }
