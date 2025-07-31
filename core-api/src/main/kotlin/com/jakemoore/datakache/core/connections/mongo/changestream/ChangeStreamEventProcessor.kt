@@ -363,8 +363,8 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
         } catch (e: IllegalArgumentException) {
             context.logger.error(e, "Error extracting ID from document key")
             null
-        } catch (t: Throwable) {
-            context.logger.error(t, "Unknown Error extracting ID from document key")
+        } catch (e: Exception) {
+            context.logger.error(e, "Unknown Error extracting ID from document key")
             null
         }
     }

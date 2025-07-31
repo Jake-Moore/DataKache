@@ -16,6 +16,7 @@ import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeOperationType
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.ApiStatus
 import java.util.concurrent.ConcurrentHashMap
@@ -267,10 +268,86 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                         cacheInternal(doc, log = false)
                         getLoggerInternal().debug("Cached Document From ${operationType.name}: ${doc.key}")
                     }
-                    else -> {
+
+                    ChangeOperationType.DELETE -> {
+                        val removed = uncacheInternal(doc.key)
+                        if (removed) {
+                            getLoggerInternal().debug("Uncached Document From DELETE: ${doc.key}")
+                        } else {
+                            getLoggerInternal().warn("Attempted to delete non-cached document: ${doc.key}")
+                        }
+                    }
+
+                    ChangeOperationType.DROP -> {
+                        // Collection was dropped - clear the entire cache
+                        val cachedCount = cacheMap.size
+                        cacheMap.clear()
                         getLoggerInternal().warn(
-                            "Unhandled operation type: $operationType " +
-                                "for document: ${doc.key}"
+                            "Collection dropped - cleared cache ($cachedCount documents) for: $cacheName"
+                        )
+                    }
+
+                    ChangeOperationType.RENAME -> {
+                        // Collection was renamed - clear the cache as we're no longer tracking the correct collection
+                        val cachedCount = cacheMap.size
+                        cacheMap.clear()
+                        getLoggerInternal().warn(
+                            "Collection renamed - cleared cache ($cachedCount documents) for: $cacheName. " +
+                                "Cache may need to be reregistered with new collection name."
+                        )
+                    }
+
+                    ChangeOperationType.DROP_DATABASE -> {
+                        // Database was dropped - this is a fatal error requiring cache shutdown
+                        getLoggerInternal().error(
+                            "Database '$databaseName' was dropped - " +
+                                "initiating emergency cache shutdown for: $cacheName"
+                        )
+
+                        try {
+                            // Clear cache immediately
+                            cacheMap.clear()
+
+                            // Attempt graceful shutdown in background
+                            // Note: This is an emergency situation, so we don't wait for completion
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                try {
+                                    shutdown()
+                                } catch (e: Exception) {
+                                    getLoggerInternal().error(
+                                        e,
+                                        "Error during emergency shutdown: $cacheName"
+                                    )
+                                }
+                            }
+                        } catch (e: Exception) {
+                            getLoggerInternal().error(
+                                e,
+                                "Error during DROP_DATABASE handling: $cacheName"
+                            )
+                        }
+                    }
+
+                    ChangeOperationType.INVALIDATE -> {
+                        // Change stream was invalidated - log error and consider restarting
+                        getLoggerInternal().error(
+                            "Change stream invalidated for cache: $cacheName. " +
+                                "This may indicate a significant database event. " +
+                                "The stream will attempt to reconnect automatically."
+                        )
+
+                        // The change stream manager should handle reconnection automatically,
+                        // but we log this as a critical event for monitoring
+                        getLoggerInternal().warn(
+                            "Cache $cacheName may be in an inconsistent state due to stream invalidation. " +
+                                "Consider manual verification if issues persist."
+                        )
+                    }
+
+                    ChangeOperationType.UNKNOWN -> {
+                        getLoggerInternal().warn(
+                            "Unknown operation type received for cache: $cacheName, document: ${doc.key}. " +
+                                "This may indicate a new MongoDB operation type that needs to be handled."
                         )
                     }
                 }

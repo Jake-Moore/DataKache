@@ -88,8 +88,8 @@ object DataKacheFileLogger {
     private fun createStackTrace(msg: String): Throwable {
         try {
             throw kotlin.Exception(msg)
-        } catch (t: Throwable) {
-            return t
+        } catch (e: Exception) {
+            return e
         }
     }
 

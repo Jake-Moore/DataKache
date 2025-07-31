@@ -125,9 +125,9 @@ internal class MongoDatabaseService : DatabaseService {
 
             // Success!
             return true
-        } catch (t: Throwable) {
+        } catch (e: Exception) {
             // Catch any exceptions during connection
-            this.error(t, "Failed to connect to MongoDB: ${t.message}")
+            this.error(e, "Failed to connect to MongoDB: ${e.message}")
             return false
         } finally {
             this.mongoClient = client
@@ -144,8 +144,8 @@ internal class MongoDatabaseService : DatabaseService {
         } catch (timeout: MongoTimeoutException) {
             this.error(timeout, "Connection to MongoDB Timed Out!")
             return false
-        } catch (t: Throwable) {
-            this.error(t, "Failed to connect to MongoDB!")
+        } catch (e: Exception) {
+            this.error(e, "Failed to connect to MongoDB!")
             return false
         }
         return true
@@ -163,8 +163,8 @@ internal class MongoDatabaseService : DatabaseService {
             this.collections.clear()
             this.info("Disconnected from MongoDB successfully.")
             return true
-        } catch (t: Throwable) {
-            this.error(t, "Failed to disconnect from MongoDB: ${t.message}")
+        } catch (e: Exception) {
+            this.error(e, "Failed to disconnect from MongoDB: ${e.message}")
             return false
         }
     }
@@ -296,7 +296,7 @@ internal class MongoDatabaseService : DatabaseService {
             // Ensure doc is initialized with its backing cache
             doc.initializeInternal(docCache)
             // We read the document again, might as well cache it for consistency
-            docCache.cacheInternal(doc)
+            docCache.cacheInternal(doc, log = false)
             doc
         }
     }

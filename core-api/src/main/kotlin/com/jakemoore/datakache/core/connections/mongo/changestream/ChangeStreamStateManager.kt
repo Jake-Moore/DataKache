@@ -110,10 +110,14 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
      * Clears job references without cancelling (for emergency cleanup).
      */
     fun clearJobsUnsafe() {
-        changeStreamJob?.cancel()
-        eventProcessorJob?.cancel()
+        // UNSAFE: Does not wait for job completion, may leave jobs running
+        // Only use during emergency shutdown or when jobs are known to be terminated
+        val streamJob = changeStreamJob
+        val processorJob = eventProcessorJob
         changeStreamJob = null
         eventProcessorJob = null
+        streamJob?.cancel()
+        processorJob?.cancel()
     }
 
     /**

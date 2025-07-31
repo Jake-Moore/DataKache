@@ -2,8 +2,6 @@
 
 package com.jakemoore.datakache.api.result.exception
 
-import java.lang.RuntimeException
-
 class ResultExceptionWrapper(
     // Message is available through Throwable.message, but also via the reason property for convenience
     message: String,

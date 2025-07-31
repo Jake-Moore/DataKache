@@ -201,7 +201,15 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
 
         while (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN && retryCount < context.config.maxRetries) {
             try {
-                stateManager.transitionTo(null, ChangeStreamState.CONNECTING)
+                if (!stateManager.transitionTo(
+                        stateManager.getCurrentState(),
+                        ChangeStreamState.CONNECTING
+                    )
+                ) {
+                    context.logger.warn("Failed to transition to CONNECTING state")
+                    break
+                }
+
                 context.logger.info(
                     "Starting change stream for ${context.collection.namespace.collectionName} " +
                         "(attempt ${retryCount + 1})"
