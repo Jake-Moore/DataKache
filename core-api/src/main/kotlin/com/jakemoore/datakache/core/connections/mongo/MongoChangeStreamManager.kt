@@ -452,9 +452,16 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                     if (documentKey != null) {
                         val id = extractIdFromDocumentKey(documentKey)
                         if (id != null) {
-                            @Suppress("UNCHECKED_CAST")
-                            eventHandler.onDocumentDeleted(id as K)
-                            logger.warn("Recovered from lost DELETE event for document: $id")
+                            try {
+                                @Suppress("UNCHECKED_CAST")
+                                eventHandler.onDocumentDeleted(id as K)
+                                logger.warn("Recovered from lost DELETE event for document: $id")
+                            } catch (_: ClassCastException) {
+                                logger.error(
+                                    "Type mismatch in document ID during DELETE recovery: " +
+                                        "expected type K, got ${id::class.simpleName}"
+                                )
+                            }
                         }
                     }
                 }
@@ -888,11 +895,18 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         // Prevent overflow in exponentiation by capping the exponent
         val safeRetryCount = min(retryCount, ChangeStreamConfig.MAX_BACKOFF_EXPONENT)
 
-        val baseDelay = min(
-            config.initialRetryDelay.inWholeMilliseconds * ChangeStreamConfig.BACKOFF_MULTIPLIER.pow(safeRetryCount)
-                .toLong(),
+        // compute backoff multiplier as Double to avoid Long×Long overflow
+        val multiplier = ChangeStreamConfig.BACKOFF_MULTIPLIER.pow(safeRetryCount)
+        val baseDelay = if (config.initialRetryDelay.inWholeMilliseconds <= 0L ||
+            multiplier > (Long.MAX_VALUE.toDouble() / config.initialRetryDelay.inWholeMilliseconds)
+        ) {
             config.maxRetryDelay.inWholeMilliseconds
-        )
+        } else {
+            min(
+                (config.initialRetryDelay.inWholeMilliseconds * multiplier).toLong(),
+                config.maxRetryDelay.inWholeMilliseconds
+            )
+        }
 
         // Add jitter to prevent thundering herd
         val jitter = (baseDelay * ChangeStreamConfig.JITTER_FACTOR * kotlin.random.Random.nextDouble()).toLong()
@@ -957,9 +971,16 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                     if (documentKey != null) {
                         val id = extractIdFromDocumentKey(documentKey)
                         if (id != null) {
-                            @Suppress("UNCHECKED_CAST")
-                            eventHandler.onDocumentDeleted(id as K)
-                            logger.debug("Processed DELETE for document ID: $id")
+                            try {
+                                @Suppress("UNCHECKED_CAST")
+                                eventHandler.onDocumentDeleted(id as K)
+                                logger.debug("Processed DELETE for document ID: $id")
+                            } catch (_: ClassCastException) {
+                                logger.error(
+                                    "Type mismatch in document ID during DELETE processing: " +
+                                        "expected type K, got ${id::class.simpleName}"
+                                )
+                            }
                         } else {
                             logger.warn(
                                 "Could not extract ID from delete operation " +
