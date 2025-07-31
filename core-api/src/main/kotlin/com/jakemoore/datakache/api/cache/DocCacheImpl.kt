@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.ApiStatus
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
@@ -179,8 +180,23 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
+    // ------------------------------------------------------------ //
+    //                       Extra CRUD Methods                     //
+    // ------------------------------------------------------------ //
+    override fun readAll(): Collection<D> {
+        return Collections.unmodifiableCollection(cacheMap.values)
+    }
+
+    override fun getKeys(): Set<K> {
+        return Collections.unmodifiableSet(cacheMap.keys)
+    }
+
     override fun isCached(key: K): Boolean {
         return cacheMap.containsKey(key)
+    }
+
+    override fun getCacheSize(): Int {
+        return cacheMap.size
     }
 
     // ------------------------------------------------------------ //
