@@ -34,12 +34,6 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     val key: K
 
     /**
-     * Alias of [key] for convenience.
-     */
-    val id: K
-        get() = key
-
-    /**
      * The version of this [Doc]. This version is IMMUTABLE for this object's lifecycle.
      *
      * This version can be used to determine how up-to-date this document is.
