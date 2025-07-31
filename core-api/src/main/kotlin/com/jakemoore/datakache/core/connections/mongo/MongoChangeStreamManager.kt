@@ -38,11 +38,6 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     private val logger: LoggerService
 ) : ChangeStreamManager<K, D>, DataKacheScope {
 
-    init {
-        // Validate configuration to prevent cryptic failures
-        validateConfiguration()
-    }
-
     private val state = AtomicReference(ChangeStreamState.DISCONNECTED)
     private val stateMutex = Mutex() // Thread-safe state management
     private var changeStreamJob: Job? = null
@@ -61,21 +56,6 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     private var lastError: Throwable? = null
     private var totalEventsProcessed = 0L
     private var lastTokenCleanupTime = System.currentTimeMillis()
-
-    /**
-     * Validates configuration parameters to prevent runtime failures.
-     */
-    private fun validateConfiguration() {
-        require(config.maxBufferedEvents > 0) {
-            "maxBufferedEvents must be positive: ${config.maxBufferedEvents}"
-        }
-        require(config.eventProcessingTimeout.isPositive()) {
-            "eventProcessingTimeout must be positive: ${config.eventProcessingTimeout}"
-        }
-        require(config.maxRetries > 0) {
-            "maxRetries must be positive: ${config.maxRetries}"
-        }
-    }
 
     /**
      * Starts the change stream listener. If a startAtOperationTime is provided,
@@ -103,38 +83,25 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 return@withLock
             }
 
-            // CRITICAL FIX: More robust state transition with verification loop
-            var transitionSuccessful = false
-            var attempts = 0
-            val maxAttempts = 3
-
-            while (!transitionSuccessful && attempts < maxAttempts) {
-                val freshState = state.get()
-                transitionSuccessful = when (freshState) {
-                    ChangeStreamState.DISCONNECTED, ChangeStreamState.FAILED, ChangeStreamState.SHUTDOWN -> {
-                        state.compareAndSet(freshState, ChangeStreamState.CONNECTING)
-                    }
-                    ChangeStreamState.CONNECTED, ChangeStreamState.CONNECTING, ChangeStreamState.RECONNECTING -> {
-                        logger.warn(
-                            "Cannot start change stream for ${collection.namespace.collectionName} " +
-                                "- already in active state: $freshState"
-                        )
-                        return@withLock
-                    }
-                    else -> false
-                }
-                attempts++
-
-                if (!transitionSuccessful && attempts < maxAttempts) {
-                    logger.debug("State transition failed, retrying (attempt $attempts/$maxAttempts)")
-                    delay(10) // Brief delay before retry
-                }
+            // Simple state transition
+            val currentStateSnapshot = state.get()
+            val canStart = when (currentStateSnapshot) {
+                ChangeStreamState.DISCONNECTED, ChangeStreamState.FAILED, ChangeStreamState.SHUTDOWN -> true
+                else -> false
             }
 
-            if (!transitionSuccessful) {
+            if (!canStart) {
+                logger.warn(
+                    "Cannot start change stream for ${collection.namespace.collectionName} " +
+                        "- already in state: $currentStateSnapshot"
+                )
+                return@withLock
+            }
+
+            if (!state.compareAndSet(currentStateSnapshot, ChangeStreamState.CONNECTING)) {
                 logger.error(
-                    "Failed to transition to CONNECTING state after $maxAttempts attempts " +
-                        "for ${collection.namespace.collectionName} - final state: ${state.get()}"
+                    "Failed to transition to CONNECTING state for ${collection.namespace.collectionName} " +
+                        "- concurrent state change detected"
                 )
                 return@withLock
             }
@@ -546,9 +513,10 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             var configured = false
 
             // First try: Current resume token
+            val resumeToken = resumeToken
             if (!configured && resumeToken != null) {
                 try {
-                    resumeAfter(requireNotNull(resumeToken))
+                    resumeAfter(resumeToken)
                     logger.info(
                         "Resuming change stream from current resume token for ${collection.namespace.collectionName}"
                     )
@@ -560,9 +528,10 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             }
 
             // Second try: Last resume token fallback
+            val lastResumeToken = lastResumeToken
             if (!configured && lastResumeToken != null) {
                 try {
-                    resumeAfter(requireNotNull(lastResumeToken))
+                    resumeAfter(lastResumeToken)
                     logger.info(
                         "Resuming change stream from last resume token for ${collection.namespace.collectionName}"
                     )
@@ -574,9 +543,10 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             }
 
             // Third try: Operation time fallback
+            val effectiveStartTime = effectiveStartTime
             if (!configured && effectiveStartTime != null) {
                 try {
-                    startAtOperationTime(requireNotNull(effectiveStartTime))
+                    startAtOperationTime(effectiveStartTime)
                     logger.info(
                         "Starting change stream from operation time $effectiveStartTime " +
                             "for ${collection.namespace.collectionName}"

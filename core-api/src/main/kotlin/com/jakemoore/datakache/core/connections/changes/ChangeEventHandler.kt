@@ -15,7 +15,7 @@ interface ChangeEventHandler<K : Any, D : Doc<K, D>> {
 
     /**
      * Called when a document is deleted.
-     * @param key The key  of the deleted [Doc].
+     * @param key The key of the deleted [Doc].
      */
     suspend fun onDocumentDeleted(key: K)
 
