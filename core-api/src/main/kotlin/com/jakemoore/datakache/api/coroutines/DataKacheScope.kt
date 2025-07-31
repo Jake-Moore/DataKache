@@ -24,6 +24,10 @@ interface DataKacheScope : CoroutineScope {
 
     companion object {
         val EXCEPTION_CONSUMERS: MutableList<ExceptionConsumer> = mutableListOf()
+
+        fun runningCoroutinesCount(): Int {
+            return GlobalDataKacheScope.coroutineContext[Job]?.children?.count() ?: 0
+        }
     }
 }
 
