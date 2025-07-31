@@ -1,5 +1,3 @@
-@file:Suppress("unused")
-
 package com.jakemoore.datakache.core.connections.mongo.changestream
 
 import com.jakemoore.datakache.api.doc.Doc
@@ -356,8 +354,17 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     null
                 }
             }
-        } catch (e: Exception) {
+        } catch (_: NoSuchElementException) {
+            context.logger.error("Document key missing '_id' field")
+            null
+        } catch (e: ClassCastException) {
+            context.logger.error("Type conversion error extracting ID: ${e.message}")
+            null
+        } catch (e: IllegalArgumentException) {
             context.logger.error(e, "Error extracting ID from document key")
+            null
+        } catch (t: Throwable) {
+            context.logger.error(t, "Unknown Error extracting ID from document key")
             null
         }
     }
@@ -365,8 +372,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     /**
      * Closes the event channel and cleans up resources.
      */
-    @Suppress("RedundantSuspendModifier")
-    suspend fun cleanup() {
+    fun cleanup() {
         val channel = eventChannel
         if (channel != null) {
             try {
@@ -382,5 +388,6 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     /**
      * Gets the current event channel for external access.
      */
+    @Suppress("unused")
     fun getCurrentChannel(): Channel<ChangeStreamDocument<D>>? = eventChannel
 }
