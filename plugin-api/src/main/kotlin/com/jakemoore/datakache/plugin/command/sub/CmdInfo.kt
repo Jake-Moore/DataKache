@@ -21,5 +21,11 @@ internal class CmdInfo : SubCommand() {
         sender.sendMessage(Color.t("&7Database namespace:"))
         sender.sendMessage(Color.t("  &8'&f${DataKache.databaseNamespace}&8'"))
         sender.sendMessage(Color.t("&7Storage Mode: &f${DataKache.storageMode.name}"))
+        sender.sendMessage(Color.t("&7Storage Pings:"))
+        for ((address, pingNS) in DataKache.storageMode.getDatabaseServiceServerPings()) {
+            val addressTrimmed = address.split(":").first().substring(0, 7) + "..."
+            val pingMS = pingNS / 1_000_000
+            sender.sendMessage(Color.t("  &8'&f$addressTrimmed&8' &7-> &f${pingMS}ms &7(${pingNS}ns)"))
+        }
     }
 }

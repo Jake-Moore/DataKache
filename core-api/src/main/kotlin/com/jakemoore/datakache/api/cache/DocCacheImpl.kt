@@ -60,14 +60,14 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
             // Preload all Documents into Cache
             loadAllIntoCache()
-            this.getLoggerInternal().info("Loaded all documents (${cacheMap.size}x) into cache: $cacheName")
+            this.getLoggerInternal().debug("Loaded all documents (${cacheMap.size}x) into cache: $cacheName")
 
             // Listen for DB Updates that should be streamed down
             // Pass the captured operation time to prevent timing gaps
             startChangeStreamListener(operationTime)
 
             running = true
-            this.getLoggerInternal().info("Successfully started cache: $cacheName")
+            this.getLoggerInternal().debug("Successfully started cache: $cacheName")
             return true
         } catch (e: Exception) {
             this.getLoggerInternal().error(e, "Failed to start cache: $cacheName")
@@ -134,7 +134,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             return false
         }
 
-        getLoggerInternal().info("Cache shutdown completed: $cacheName")
+        getLoggerInternal().debug("Cache shutdown completed: $cacheName")
         return superShutdownSuccess
     }
     protected abstract suspend fun shutdownSuper(): Boolean
@@ -284,7 +284,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             // Start the change stream with pre-captured operation time to prevent timing gaps
             it.start(operationTime)
 
-            getLoggerInternal().info(
+            getLoggerInternal().debug(
                 "Started change stream listener for cache: $cacheName with operation time: $operationTime"
             )
         }
@@ -391,7 +391,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             }
 
             override suspend fun onConnected() {
-                getLoggerInternal().info("Change stream connected for cache: $cacheName")
+                getLoggerInternal().debug("Change stream connected for cache: $cacheName")
             }
 
             override suspend fun onDisconnected() {

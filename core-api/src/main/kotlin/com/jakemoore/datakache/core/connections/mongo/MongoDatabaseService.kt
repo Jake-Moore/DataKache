@@ -1,5 +1,7 @@
 package com.jakemoore.datakache.core.connections.mongo
 
+import com.google.common.cache.Cache
+import com.google.common.cache.CacheBuilder
 import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
@@ -28,6 +30,7 @@ import kotlinx.coroutines.withContext
 import org.bson.UuidRepresentation
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 internal class MongoDatabaseService : DatabaseService {
 
@@ -35,6 +38,11 @@ internal class MongoDatabaseService : DatabaseService {
     //                     Mongo Service Properties                 //
     // ------------------------------------------------------------ //
     override var averagePingNanos: Long = -1 // Initial value 0
+    override val serverPingMap: Cache<String, Long> = CacheBuilder
+        .newBuilder()
+        .expireAfterWrite(90, TimeUnit.SECONDS)
+        .build()
+
     internal var mongoClient: MongoClient? = null
     internal var mongoConnected: Boolean = false
     internal var mongoFirstConnect: Boolean = false
