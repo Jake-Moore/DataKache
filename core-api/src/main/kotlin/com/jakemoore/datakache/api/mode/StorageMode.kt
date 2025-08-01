@@ -44,6 +44,17 @@ enum class StorageMode {
         return success
     }
 
+    /**
+     * Returns a map of server addresses (host:port) to their last ping time in nanoseconds.
+     *
+     * This data applies to the current storage mode's database service.
+     *
+     * This method will return an empty map i the storage mode is offline or does not support server pings.
+     */
+    fun getDatabaseServiceServerPings(): Map<String, Long> {
+        return databaseService.serverPingMap.asMap()
+    }
+
     // ------------------------------------------------------------ //
     //                  DATABASE SERVICE MANAGEMENT                 //
     // ------------------------------------------------------------ //

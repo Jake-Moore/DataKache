@@ -1,5 +1,6 @@
 package com.jakemoore.datakache.core.connections
 
+import com.google.common.cache.Cache
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
@@ -10,6 +11,8 @@ import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.mongodb.DuplicateKeyException
 import kotlinx.coroutines.flow.Flow
 
+// TODO this file is part of the generic database-agnostic API but it uses the mongodb DuplicateKeyException
+//  a project-wide scan is needed to replace all generic uses with a version of our own exception
 /**
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
  */
@@ -18,6 +21,11 @@ internal interface DatabaseService : LoggerService, Service {
      * The average round-trip ping to the storage service (database) in nanoseconds.
      */
     val averagePingNanos: Long
+
+    /**
+     * A map of server addresses (host:port) to their last ping time in nanoseconds.
+     */
+    val serverPingMap: Cache<String, Long>
 
     /**
      * Insert the given document to the database.

@@ -48,13 +48,6 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * This method is thread-safe and completes all setup before returning.
      */
     override suspend fun start(startAtOperationTime: Any?) {
-        startInternal(startAtOperationTime)
-    }
-
-    /**
-     * Internal suspend implementation of start that completes setup work.
-     */
-    private suspend fun startInternal(startAtOperationTime: Any?) {
         stateManager.withStateLock {
             if (stateManager.isActive()) {
                 context.logger.warn(
@@ -111,7 +104,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 // Register jobs with state manager
                 stateManager.setJobs(streamJob, processorJob)
 
-                context.logger.info("Change stream jobs started")
+                context.logger.debug("Change stream jobs started")
             } catch (e: Exception) {
                 context.logger.error(
                     e,
@@ -129,13 +122,6 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * This method is thread-safe and completes all cleanup before returning.
      */
     override suspend fun stop() {
-        stopInternal()
-    }
-
-    /**
-     * Internal suspend implementation of stop that completes cleanup work.
-     */
-    private suspend fun stopInternal() {
         stateManager.withStateLock {
             val currentState = stateManager.getCurrentState()
             if (currentState == ChangeStreamState.SHUTDOWN) {
@@ -154,12 +140,12 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 return@withStateLock
             }
 
-            context.logger.info("Shutting down change stream")
+            context.logger.debug("Shutting down change stream")
 
             // CRITICAL FIX: Proper resource cleanup with job completion waiting
             cleanupResourcesWithJobCompletion()
 
-            context.logger.info("Change stream shutdown completed")
+            context.logger.debug("Change stream shutdown completed")
         }
     }
 
@@ -207,7 +193,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                     break
                 }
 
-                context.logger.info(
+                context.logger.debug(
                     "Starting change stream (attempt ${retryCount + 1})"
                 )
 
@@ -218,7 +204,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 context.logger.warn("Change stream ended normally")
                 break
             } catch (_: CancellationException) {
-                context.logger.info("Change stream cancelled")
+                context.logger.debug("Change stream cancelled")
                 break
             } catch (e: Exception) {
                 val decision = errorHandler.handleError(e, retryCount)
@@ -282,14 +268,14 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      */
     private suspend fun onSuccessfulConnection() {
         if (errorHandler.getConsecutiveFailures() > 0) {
-            context.logger.info(
+            context.logger.debug(
                 "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures"
             )
         }
 
         errorHandler.resetFailures()
         context.eventHandler.onConnected()
-        context.logger.info("Change stream connected")
+        context.logger.debug("Change stream connected")
     }
 
     // Public interface methods (delegating to components)
