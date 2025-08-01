@@ -26,8 +26,8 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
      */
     fun setEffectiveStartTime(startTime: BsonTimestamp?) {
         this.effectiveStartTime = startTime
-        context.logger.info(
-            "Set effective start time for ${context.collection.namespace.collectionName}: $startTime"
+        context.logger.debug(
+            "Set effective start time: $startTime"
         )
     }
 
@@ -45,7 +45,9 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     fun clearTokensOnly() {
         resumeToken = null
         lastResumeToken = null
-        context.logger.debug("Cleared resume tokens for ${context.collection.namespace.collectionName}")
+        context.logger.debug(
+            "Cleared resume tokens."
+        )
     }
 
     /**
@@ -56,7 +58,9 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
         resumeToken = null
         lastResumeToken = null
         effectiveStartTime = null
-        context.logger.debug("Cleared all tokens for ${context.collection.namespace.collectionName}")
+        context.logger.debug(
+            "Cleared all tokens."
+        )
     }
 
     /**
@@ -83,7 +87,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     ): Boolean {
         return try {
             configAction()
-            context.logger.info("$description for ${context.collection.namespace.collectionName}")
+            context.logger.debug(description)
             true
         } catch (e: Exception) {
             context.logger.warn("$description failed: ${e.message}")
@@ -140,8 +144,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
             // Last resort: Current time
             if (!configured) {
                 context.logger.warn(
-                    "All fallback options failed, starting change stream from current time " +
-                        "for ${context.collection.namespace.collectionName}"
+                    "All fallback options failed, starting change stream from current time"
                 )
             }
         }
@@ -160,7 +163,9 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
             errorMessage.contains("resume point may no longer be in the oplog") ||
                 errorMessage.contains("invalid resume point") ||
                 errorMessage.contains("resume token") && errorMessage.contains("invalid") -> {
-                context.logger.warn("Resume token invalidated due to specific error, clearing tokens: ${e.message}")
+                context.logger.warn(
+                    "Resume token invalidated due to specific error, clearing tokens: ${e.message}"
+                )
                 clearTokensOnly()
             }
 
@@ -168,17 +173,23 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
             errorMessage.contains("connection") ||
                 errorMessage.contains("timeout") ||
                 errorMessage.contains("network") -> {
-                context.logger.warn("Network error with resume token, keeping tokens for retry: ${e.message}")
+                context.logger.warn(
+                    "Network error with resume token, keeping tokens for retry: ${e.message}"
+                )
             }
 
             // Unknown resume token error - be conservative and clear
             errorMessage.contains("resume") -> {
-                context.logger.warn("Unknown resume token error, clearing tokens: ${e.message}")
+                context.logger.warn(
+                    "Unknown resume token error, clearing tokens: ${e.message}"
+                )
                 clearTokensOnly()
             }
 
             else -> {
-                context.logger.warn("General error with change stream configuration: ${e.message}")
+                context.logger.warn(
+                    "General error with change stream configuration: ${e.message}"
+                )
             }
         }
     }
@@ -191,7 +202,9 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
         // Clean up old tokens if we have successful processing
         if (eventsProcessed % 1000 == 0L && resumeToken != null) {
             lastResumeToken = null // Clear very old token
-            context.logger.debug("Performed token cleanup for ${context.collection.namespace.collectionName}")
+            context.logger.debug(
+                "Performed token cleanup"
+            )
         }
     }
 
