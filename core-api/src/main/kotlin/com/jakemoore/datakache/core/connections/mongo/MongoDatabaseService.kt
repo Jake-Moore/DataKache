@@ -140,7 +140,7 @@ internal class MongoDatabaseService : DatabaseService {
         try {
             this.info("&a&lConnecting to MongoDB via URI... (30 sec. timeout)")
             val databaseNames = client.listDatabaseNames().toList()
-            this.info("&aConnection to MongoDB Succeeded! Databases:")
+            this.info("&aConnection to MongoDB Succeeded! Current namespace Databases:")
             // Only print the databases that are within our current namespace
             //  This means any admin databases or other network databases are not shown
             val viewable = databaseNames
