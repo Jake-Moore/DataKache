@@ -44,6 +44,10 @@ internal class MongoDatabaseService : DatabaseService {
     //                         Service Methods                      //
     // ------------------------------------------------------------ //
     override var running: Boolean = false
+    // A strictly internal property representing the current state of the MongoDB connection.
+    //  Not to be used except to check if this service intends to keep the MongoDB connection alive.
+    internal var keepMongoConnected: Boolean = false
+        private set
 
     override suspend fun start(): Boolean {
         if (running) {
@@ -52,6 +56,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
 
         this.debug("Connecting to MongoDB...")
+        keepMongoConnected = true
         if (!this.connectToMongoDB()) {
             this.error("Failed to connect to MongoDB! Please check your configuration.")
             return false
@@ -69,6 +74,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
 
         this.debug("Shutting down MongoDB connection...")
+        keepMongoConnected = false
         if (!this.disconnectFromMongoDB()) {
             this.error("Failed to disconnect from MongoDB!")
             return false
@@ -162,13 +168,13 @@ internal class MongoDatabaseService : DatabaseService {
         val client = this.mongoClient ?: return true // Already disconnected or never connected
 
         try {
-            this.info("Disconnecting from MongoDB...")
+            this.debug("Disconnecting from MongoDB...")
             client.close()
             this.mongoClient = null
             this.mongoConnected = false
             this.databases.clear()
             this.collections.clear()
-            this.info("Disconnected from MongoDB successfully.")
+            this.info("&aDisconnected from MongoDB successfully.")
             return true
         } catch (e: Exception) {
             this.error(e, "Failed to disconnect from MongoDB: ${e.message}")
