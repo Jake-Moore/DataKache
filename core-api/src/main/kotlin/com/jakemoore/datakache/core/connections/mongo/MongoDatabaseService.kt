@@ -18,6 +18,7 @@ import com.mongodb.MongoException
 import com.mongodb.MongoTimeoutException
 import com.mongodb.WriteConcern
 import com.mongodb.client.model.Filters
+import com.mongodb.client.model.Projections
 import com.mongodb.kotlin.client.coroutine.MongoClient
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
@@ -25,9 +26,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
+import org.bson.Document
 import org.bson.UuidRepresentation
+import org.bson.types.ObjectId
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -250,7 +254,7 @@ internal class MongoDatabaseService : DatabaseService {
     override suspend fun <K : Any, D : Doc<K, D>> update(
         docCache: DocCache<K, D>,
         doc: D,
-        updateFunction: (D) -> D
+        updateFunction: (D) -> D,
     ): D = withContext(Dispatchers.IO) {
         val client = requireNotNull(mongoClient) {
             "MongoClient is not initialized! Could not update Doc in MongoDB!"
@@ -272,24 +276,22 @@ internal class MongoDatabaseService : DatabaseService {
     ): D? = withContext(Dispatchers.IO) {
         try {
             val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
-            val doc = getMongoCollection(docCache).find(
+            return@withContext getMongoCollection(docCache).find(
                 // Find the id field, where the content is the id string
                 Filters.eq(keyFieldName, docCache.keyToString(key))
-            ).firstOrNull() ?: return@withContext null
-
-            return@withContext doc
-        } catch (ex: MongoException) {
-            docCache.getLoggerInternal().info(
-                ex,
+            ).firstOrNull()
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().severe(
+                me,
                 "MongoException reading Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
             )
-            return@withContext null
-        } catch (expected: Exception) {
-            docCache.getLoggerInternal().info(
-                expected,
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().severe(
+                e,
                 "Exception reading Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
             )
-            return@withContext null
+            throw e
         }
     }
 
@@ -304,18 +306,18 @@ internal class MongoDatabaseService : DatabaseService {
 
             // Succeeds if mongo reports at least 1 document deleted
             return@withContext getMongoCollection(docCache).deleteMany(filter).deletedCount > 0
-        } catch (ex: MongoException) {
-            docCache.getLoggerInternal().info(
-                ex,
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().severe(
+                me,
                 "MongoException deleting Doc (${docCache.getKeyNamespace(key)}) from MongoDB."
             )
-            return@withContext false
-        } catch (expected: Exception) {
-            docCache.getLoggerInternal().info(
-                expected,
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().severe(
+                e,
                 "Exception deleting Doc (${docCache.getKeyNamespace(key)}) from MongoDB."
             )
-            return@withContext false
+            throw e
         }
     }
 
@@ -323,8 +325,10 @@ internal class MongoDatabaseService : DatabaseService {
         return mongoConnected
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> readAll(docCache: DocCache<K, D>): Flow<D> {
-        return getMongoCollection(docCache).find().map { doc: D ->
+    override suspend fun <K : Any, D : Doc<K, D>> readAll(
+        docCache: DocCache<K, D>,
+    ): Flow<D> = withContext(Dispatchers.IO) {
+        getMongoCollection(docCache).find().map { doc: D ->
             // Ensure doc is initialized with its backing cache
             doc.initializeInternal(docCache)
             // We read the document again, might as well cache it for consistency
@@ -333,11 +337,108 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
+    override suspend fun <K : Any, D : Doc<K, D>> size(
+        docCache: DocCache<K, D>,
+    ): Long = withContext(Dispatchers.IO) {
+        getMongoCollection(docCache).countDocuments()
+    }
+
+    override suspend fun <K : Any, D : Doc<K, D>> hasKey(
+        docCache: DocCache<K, D>,
+        key: K,
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+            val filter = Filters.eq(keyFieldName, docCache.keyToString(key))
+
+            // Instead of counting with our filter, just try to find 1 matching document
+            //  This is more efficient and avoids the overhead of counting/scanning every document
+            return@withContext getRawCollection(docCache)
+                .find(filter)
+                .limit(1)
+                .firstOrNull() != null
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().severe(
+                throwable = me,
+                msg = "MongoException on DocCache.hasKey (${docCache.getKeyNamespace(key)})"
+            )
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().severe(
+                throwable = e,
+                msg = "Exception on DocCache.hasKey (${docCache.getKeyNamespace(key)})"
+            )
+            throw e
+        }
+    }
+
+    override suspend fun <K : Any, D : Doc<K, D>> clear(
+        docCache: DocCache<K, D>,
+    ): Long = withContext(Dispatchers.IO) {
+        try {
+            // Delete with NO FILTER!
+            return@withContext getMongoCollection(docCache)
+                .deleteMany(Filters.empty())
+                .deletedCount
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().info(
+                throwable = me,
+                msg = "MongoException on DocCache.clear (${docCache.cacheName})"
+            )
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().info(
+                throwable = e,
+                msg = "Exception on DocCache.clear (${docCache.cacheName})"
+            )
+            throw e
+        }
+    }
+
+    override suspend fun <K : Any, D : Doc<K, D>> readKeys(
+        docCache: DocCache<K, D>,
+    ): Flow<K> = withContext(Dispatchers.IO) {
+        try {
+            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+
+            getRawCollection(docCache)
+                .find()
+                .projection(Projections.include(keyFieldName))
+                .mapNotNull {
+                    val field = it.get(keyFieldName)
+                    when (field) {
+                        is String -> docCache.keyFromString(field)
+                        is ObjectId -> docCache.keyFromString(field.toHexString())
+                        else -> {
+                            docCache.getLoggerInternal().warning(
+                                "[#readKeys] Unexpected key type for DocCache '${docCache.cacheName}': " +
+                                    "Expected String or ObjectId, got ${field?.javaClass?.simpleName ?: "null"}"
+                            )
+                            null
+                        }
+                    }
+                }
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().info(
+                throwable = me,
+                msg = "MongoException on DocCache.clear (${docCache.cacheName})"
+            )
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().info(
+                throwable = e,
+                msg = "Exception on DocCache.clear (${docCache.cacheName})"
+            )
+            throw e
+        }
+    }
+
     // ------------------------------------------------------------ //
     //                   MongoCollection Management                 //
     // ------------------------------------------------------------ //
     private val databases = ConcurrentHashMap<String, MongoDatabase>() // Map<DatabaseName, MongoDatabase>
     private val collections = ConcurrentHashMap<String, MongoCollection<*>>() // Map<Name, MongoCollection>
+    private val rawCollections = ConcurrentHashMap<String, MongoCollection<Document>>() // Map<Name, MongoCollection>
 
     @Suppress("UNCHECKED_CAST")
     private fun <K : Any, D : Doc<K, D>> getMongoCollection(docCache: DocCache<K, D>): MongoCollection<D> {
@@ -353,15 +454,36 @@ internal class MongoDatabaseService : DatabaseService {
         }
 
         // Create or Get the current Database from MongoDB
-        val database = databases.computeIfAbsent(docCache.databaseName) {
-                name: String ->
+        val database = databases.computeIfAbsent(docCache.databaseName) { name: String ->
             client.getDatabase(name)
         }
 
         // Create or Get the MongoCollection for the specific DocCache
-        return database.getCollection(docCache.cacheName, docCache.docClass).also {
-            collections[cacheKey] = it
+        return database
+            .getCollection(docCache.cacheName, docCache.docClass)
+            .also { collections[cacheKey] = it }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <K : Any, D : Doc<K, D>> getRawCollection(docCache: DocCache<K, D>): MongoCollection<Document> {
+        val client = requireNotNull(this.mongoClient) {
+            "MongoClient is not initialized! Could not fetch raw MongoCollection!"
         }
+        // Unique key that identifies the cache in this specific database
+        val rawKey = docCache.databaseName + "." + docCache.cacheName
+
+        // Return existing cached collection if available
+        rawCollections[rawKey]?.let { return it }
+
+        // Create or Get the current Database from MongoDB
+        val database = databases.computeIfAbsent(docCache.databaseName) { name: String ->
+            client.getDatabase(name)
+        }
+
+        // Create or Get the MongoCollection for the specific DocCache
+        return database
+            .getCollection<Document>(docCache.cacheName)
+            .also { rawCollections[rawKey] = it }
     }
 
     @Suppress("CanConvertToMultiDollarString")
@@ -373,10 +495,10 @@ internal class MongoDatabaseService : DatabaseService {
 
             // Get cluster time by running a simple operation
             val adminDatabase = client.getDatabase("admin")
-            val result = adminDatabase.runCommand(org.bson.Document("hello", 1))
+            val result = adminDatabase.runCommand(Document("hello", 1))
 
             // Extract cluster time from the result
-            val clusterTimeDoc = result.get("\$clusterTime") as? org.bson.Document
+            val clusterTimeDoc = result.get("\$clusterTime") as? Document
             clusterTimeDoc?.get("clusterTime") as? org.bson.BsonTimestamp
         } catch (e: Exception) {
             this.warn("Failed to get current operation time: ${e.message}")

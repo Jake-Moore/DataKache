@@ -12,6 +12,7 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.KSerializer
 import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.annotations.NonBlocking
@@ -154,20 +155,6 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
         return delete(doc.key)
     }
 
-    // ------------------------------------------------------------ //
-    //                       Extra CRUD Methods                     //
-    // ------------------------------------------------------------ //
-    /**
-     * Fetch a document from the **database** (skipping cache).
-     *
-     * This document will be automatically cached on success.
-     *
-     * @param key The unique key of the document to be fetched.
-     *
-     * @return An [OptionalResult] containing the document if it exists, or empty if it does not.
-     */
-    suspend fun readFromDatabase(key: K): OptionalResult<D>
-
     /**
      * Fetch all documents from the cache.
      *
@@ -202,6 +189,58 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * Fetch the total size of all documents in the cache.
      */
     fun getCacheSize(): Int
+
+    // ------------------------------------------------------------ //
+    //                     CRUD Database Methods                    //
+    // ------------------------------------------------------------ //
+    /**
+     * Fetch a document from the **database** (skipping cache).
+     *
+     * This document will be automatically cached on success.
+     *
+     * @param key The unique key of the document to be fetched.
+     *
+     * @return An [OptionalResult] containing the document if it exists, or empty if it does not.
+     */
+    suspend fun readFromDatabase(key: K): OptionalResult<D>
+
+    /**
+     * Fetch all documents from the **database** (skipping cache) as a [Flow].
+     *
+     * All documents will be automatically cached on success.
+     *
+     * @param key The unique key of the document to be fetched.
+     *
+     * @return An [DefiniteResult] containing a [Flow] of documents.
+     */
+    suspend fun readAllFromDatabase(key: K): DefiniteResult<Flow<D>>
+
+    /**
+     * Counts the total number of documents in the **database**.
+     *
+     * This does not check the cache, only the database.
+     *
+     * @return The total number of documents in the database.
+     */
+    suspend fun readSizeFromDatabase(): DefiniteResult<Long>
+
+    /**
+     * Checks if the **database** has a document with the given key.
+     *
+     * This does not check the cache, only the database.
+     *
+     * @param key The unique key of the document to check.
+     *
+     * @return True if the document exists in the database, false otherwise.
+     */
+    suspend fun hasKeyInDatabase(key: K): DefiniteResult<Boolean>
+
+    /**
+     * Fetch all document keys from the **database** (skipping cache) as a [Flow].
+     *
+     * @return An [DefiniteResult] containing a [Flow] of document keys.
+     */
+    suspend fun readKeysFromDatabase(): DefiniteResult<Flow<K>>
 
     // ------------------------------------------------------------ //
     //                        DocCache Methods                      //

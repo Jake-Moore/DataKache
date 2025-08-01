@@ -66,6 +66,13 @@ enum class StorageMode {
         return databaseService.averagePingNanos
     }
 
+    /**
+     * @return If the database service is finished starting up and is ready to accept requests.
+     */
+    fun isDatabaseReadyForWrites(): Boolean {
+        return databaseService.isDatabaseReadyForWrites()
+    }
+
     // ------------------------------------------------------------ //
     //                  DATABASE SERVICE MANAGEMENT                 //
     // ------------------------------------------------------------ //
