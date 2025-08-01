@@ -45,7 +45,7 @@ enum class StorageMode {
     }
 
     /**
-     * Returns a map of server addresses (host:port) to their last ping time in nanoseconds.
+     * Returns a map of server addresses (host:port) to their last ROUND-TRIP ping time in nanoseconds.
      *
      * This data applies to the current storage mode's database service.
      *
@@ -53,6 +53,17 @@ enum class StorageMode {
      */
     fun getDatabaseServiceServerPings(): Map<String, Long> {
         return databaseService.serverPingMap.asMap()
+    }
+
+    /**
+     * Returns the average ROUND-TRIP ping time in nanoseconds from the database service.
+     *
+     * This data applies to the current storage mode's database service.
+     *
+     * This method is the average across all servers the database service is connected to (the full 'cluster').
+     */
+    fun getDatabaseServiceAveragePing(): Long {
+        return databaseService.averagePingNanos
     }
 
     // ------------------------------------------------------------ //

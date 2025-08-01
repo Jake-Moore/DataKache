@@ -18,12 +18,12 @@ import kotlinx.coroutines.flow.Flow
  */
 internal interface DatabaseService : LoggerService, Service {
     /**
-     * The average round-trip ping to the storage service (database) in nanoseconds.
+     * The average ROUND-TRIP ping to the storage service (database) in nanoseconds.
      */
     val averagePingNanos: Long
 
     /**
-     * A map of server addresses (host:port) to their last ping time in nanoseconds.
+     * A map of server addresses (host:port) to their last ROUND-TRIP ping time in nanoseconds.
      */
     val serverPingMap: Cache<String, Long>
 
