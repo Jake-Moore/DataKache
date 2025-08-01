@@ -145,7 +145,7 @@ internal class MongoDatabaseService : DatabaseService {
             //  This means any admin databases or other network databases are not shown
             val viewable = databaseNames
                 .filter {
-                    it.lowercase().startsWith(DataKache.databaseNamespace)
+                    it.lowercase().startsWith(DataKache.databaseNamespace.lowercase())
                 }
             this.info(viewable.joinToString(", ", prefix = "[", postfix = "]"))
         } catch (timeout: MongoTimeoutException) {
