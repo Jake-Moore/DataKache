@@ -28,7 +28,7 @@ internal data class ChangeStreamContext<K : Any, D : Doc<K, D>>(
         ) {
             // Add the collection name prefix to our log messages
             val collName = collection.namespace.collectionName
-            loggerService.logToConsole("[${collName}] $msg", level)
+            loggerService.logToConsole("[$collName] $msg", level)
         }
     }
 }
