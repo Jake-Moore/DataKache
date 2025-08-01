@@ -141,7 +141,13 @@ internal class MongoDatabaseService : DatabaseService {
             this.info("&a&lConnecting to MongoDB via URI... (30 sec. timeout)")
             val databaseNames = client.listDatabaseNames().toList()
             this.info("&aConnection to MongoDB Succeeded! Databases:")
-            this.info(databaseNames.joinToString(", ", prefix = "[", postfix = "]"))
+            // Only print the databases that are within our current namespace
+            //  This means any admin databases or other network databases are not shown
+            val viewable = databaseNames
+                .filter {
+                    it.lowercase().startsWith(DataKache.databaseNamespace)
+                }
+            this.info(viewable.joinToString(", ", prefix = "[", postfix = "]"))
         } catch (timeout: MongoTimeoutException) {
             this.error(timeout, "Connection to MongoDB Timed Out!")
             return false
