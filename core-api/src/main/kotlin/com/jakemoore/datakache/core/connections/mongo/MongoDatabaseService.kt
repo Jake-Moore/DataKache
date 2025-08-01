@@ -44,6 +44,7 @@ internal class MongoDatabaseService : DatabaseService {
     //                         Service Methods                      //
     // ------------------------------------------------------------ //
     override var running: Boolean = false
+
     // A strictly internal property representing the current state of the MongoDB connection.
     //  Not to be used except to check if this service intends to keep the MongoDB connection alive.
     internal var keepMongoConnected: Boolean = false
