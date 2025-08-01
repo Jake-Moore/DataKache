@@ -6,20 +6,25 @@ import com.jakemoore.datakache.plugin.command.SubCommand
 import com.jakemoore.datakache.util.Color
 import org.bukkit.command.CommandSender
 
-internal class CmdInfo : SubCommand() {
+internal class CmdStatus : SubCommand() {
     override val name: String
-        get() = "info"
+        get() = "status"
 
     override val permission: String
-        get() = "${DataKacheCommand.Companion.COMMAND_NAME}.command.info"
+        get() = "${DataKacheCommand.Companion.COMMAND_NAME}.command.status"
 
     override val argsDescription: String
         get() = ""
 
     override fun execute(sender: CommandSender, args: Array<String>) {
-        sender.sendMessage(Color.t("&7--- &9[&bDataKache Information&9]&7 ---"))
+        sender.sendMessage(Color.t("&7--- &9[&bDataKache Status&9]&7 ---"))
         sender.sendMessage(Color.t("&7Database namespace: &8'&f${DataKache.databaseNamespace}&8'"))
-        sender.sendMessage(Color.t("&7Storage Mode: &f${DataKache.storageMode.name}"))
+        val storageStatus = if (DataKache.storageMode.isDatabaseReadyForWrites()) {
+            "&aReady"
+        } else {
+            "&cNot Ready"
+        }
+        sender.sendMessage(Color.t("&7Storage Mode: &f${DataKache.storageMode.name} &7($storageStatus&7)"))
 
         sender.sendMessage(
             Color.t(

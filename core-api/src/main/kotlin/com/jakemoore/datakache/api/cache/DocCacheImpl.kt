@@ -9,15 +9,20 @@ import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
-import com.jakemoore.datakache.api.result.handler.ReadDbResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbHasKeyResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbReadAllResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbReadKeysResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbReadResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbSizeResultHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeOperationType
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.mongodb.DuplicateKeyException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.ApiStatus
@@ -182,20 +187,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    // ------------------------------------------------------------ //
-    //                       Extra CRUD Methods                     //
-    // ------------------------------------------------------------ //
-    override suspend fun readFromDatabase(key: K): OptionalResult<D> {
-        return ReadDbResultHandler.wrap {
-            val doc = DataKache.storageMode.databaseService.read(this, key)
-            if (doc != null) {
-                // Cache the document if it was found
-                cacheInternal(doc, log = true)
-            }
-            return@wrap doc
-        }
-    }
-
     override fun readAll(): Collection<D> {
         return Collections.unmodifiableCollection(cacheMap.values)
     }
@@ -210,6 +201,44 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     override fun getCacheSize(): Int {
         return cacheMap.size
+    }
+
+    // ------------------------------------------------------------ //
+    //                       Extra CRUD Methods                     //
+    // ------------------------------------------------------------ //
+    override suspend fun readFromDatabase(key: K): OptionalResult<D> {
+        return DbReadResultHandler.wrap {
+            val doc = DataKache.storageMode.databaseService.read(this, key)
+            if (doc != null) {
+                // Cache the document if it was found
+                cacheInternal(doc, log = true)
+            }
+            return@wrap doc
+        }
+    }
+
+    override suspend fun readAllFromDatabase(key: K): DefiniteResult<Flow<D>> {
+        return DbReadAllResultHandler.wrap {
+            DataKache.storageMode.databaseService.readAll(this)
+        }
+    }
+
+    override suspend fun readSizeFromDatabase(): DefiniteResult<Long> {
+        return DbSizeResultHandler.wrap {
+            DataKache.storageMode.databaseService.size(this)
+        }
+    }
+
+    override suspend fun hasKeyInDatabase(key: K): DefiniteResult<Boolean> {
+        return DbHasKeyResultHandler.wrap {
+            DataKache.storageMode.databaseService.hasKey(this, key)
+        }
+    }
+
+    override suspend fun readKeysFromDatabase(): DefiniteResult<Flow<K>> {
+        return DbReadKeysResultHandler.wrap {
+            DataKache.storageMode.databaseService.readKeys(this)
+        }
     }
 
     // ------------------------------------------------------------ //

@@ -69,6 +69,30 @@ internal interface DatabaseService : LoggerService, Service {
     suspend fun <K : Any, D : Doc<K, D>> readAll(docCache: DocCache<K, D>): Flow<D>
 
     /**
+     * Fetches the size (total count of all documents) of the given [docCache].
+     */
+    suspend fun <K : Any, D : Doc<K, D>> size(docCache: DocCache<K, D>): Long
+
+    /**
+     * Checks if a document with the given [key] exists in the [docCache].
+     *
+     * @return True if the document exists, false otherwise.
+     */
+    suspend fun <K : Any, D : Doc<K, D>> hasKey(docCache: DocCache<K, D>, key: K): Boolean
+
+    /**
+     * Clears the entire [docCache] from the database.
+     *
+     * @return The number of documents removed from the database.
+     */
+    suspend fun <K : Any, D : Doc<K, D>> clear(docCache: DocCache<K, D>): Long
+
+    /**
+     * Read all keys from the given [docCache] as a kotlin [Flow].
+     */
+    suspend fun <K : Any, D : Doc<K, D>> readKeys(docCache: DocCache<K, D>): Flow<K>
+
+    /**
      * Gets the current operation time from the database to prevent timing gaps
      * in change stream initialization. The returned object is database-specific
      * and should be passed to createChangeStreamManager if timing gap prevention is needed.

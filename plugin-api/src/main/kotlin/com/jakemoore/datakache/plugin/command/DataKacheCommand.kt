@@ -1,6 +1,6 @@
 package com.jakemoore.datakache.plugin.command
 
-import com.jakemoore.datakache.plugin.command.sub.CmdInfo
+import com.jakemoore.datakache.plugin.command.sub.CmdStatus
 import com.jakemoore.datakache.util.Color
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
@@ -10,7 +10,7 @@ internal class DataKacheCommand : TabExecutor {
     private val subCommands: MutableList<SubCommand> = kotlin.collections.ArrayList()
 
     init {
-        subCommands.add(CmdInfo())
+        subCommands.add(CmdStatus())
     }
 
     // Basic command processor to find subcommands and execute them
