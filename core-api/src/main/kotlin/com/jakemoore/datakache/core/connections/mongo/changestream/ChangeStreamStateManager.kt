@@ -162,8 +162,7 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
             state.compareAndSet(currentState, newState)
         } else {
             context.logger.warn(
-                "Invalid state transition attempted from $currentState to $newState " +
-                    "for ${context.collection.namespace.collectionName}"
+                "Invalid state transition attempted from $currentState to $newState"
             )
             false
         }

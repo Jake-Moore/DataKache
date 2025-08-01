@@ -225,8 +225,7 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
         val delayMs = baseDelay + jitter
 
         context.logger.info(
-            "Retrying change stream for ${context.collection.namespace.collectionName} " +
-                "in ${delayMs}ms (attempt ${retryCount + 1}/${context.config.maxRetries}, " +
+            "Retrying change stream in ${delayMs}ms (attempt ${retryCount + 1}/${context.config.maxRetries}, " +
                 "consecutive failures: $consecutiveFailures)"
         )
 
@@ -234,7 +233,7 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
             delay(delayMs)
             false // Continue retrying
         } catch (_: CancellationException) {
-            context.logger.info("Retry cancelled for ${context.collection.namespace.collectionName}")
+            context.logger.info("Retry cancelled")
             true // Break the retry loop
         }
     }
@@ -249,14 +248,13 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
         recordFailure(e)
 
         context.logger.warn(
-            "Change stream error for ${context.collection.namespace.collectionName} " +
-                "(failure #$consecutiveFailures): ${e.message}"
+            "Change stream error (failure #$consecutiveFailures): ${e.message}"
         )
 
         // Check for fatal errors first
         if (isFatalError(e)) {
             context.logger.error(
-                "Fatal error detected, stopping change stream for ${context.collection.namespace.collectionName}"
+                "Fatal error detected, stopping change stream"
             )
             return RetryDecision.StopWithError(e)
         }
@@ -264,8 +262,7 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
         // Check if we've exceeded retry limit
         if (retryCount >= context.config.maxRetries) {
             context.logger.error(
-                "Change stream failed permanently for ${context.collection.namespace.collectionName} " +
-                    "after $retryCount attempts"
+                "Change stream failed permanently after $retryCount attempts"
             )
             return RetryDecision.Stop
         }

@@ -14,5 +14,21 @@ internal data class ChangeStreamContext<K : Any, D : Doc<K, D>>(
     val collection: MongoCollection<D>,
     val eventHandler: ChangeEventHandler<K, D>,
     val config: ChangeStreamConfig,
-    val logger: LoggerService
-)
+    private val loggerService: LoggerService
+) {
+    val logger: LoggerService = object : LoggerService {
+        override val loggerName: String
+            get() = loggerService.loggerName
+        override val permitsDebugStatements: Boolean
+            get() = loggerService.permitsDebugStatements
+
+        override fun logToConsole(
+            msg: String,
+            level: LoggerService.LogLevel
+        ) {
+            // Add the collection name prefix to our log messages
+            val collName = collection.namespace.collectionName
+            loggerService.logToConsole("[${collName}] $msg", level)
+        }
+    }
+}

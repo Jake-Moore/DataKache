@@ -58,24 +58,21 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         stateManager.withStateLock {
             if (stateManager.isActive()) {
                 context.logger.warn(
-                    "Cannot start change stream for ${context.collection.namespace.collectionName} " +
-                        "- already in state: ${stateManager.getCurrentState()}"
+                    "Cannot start change stream - already in state: ${stateManager.getCurrentState()}"
                 )
                 return@withStateLock
             }
 
             if (!stateManager.canStart()) {
                 context.logger.warn(
-                    "Cannot start change stream for ${context.collection.namespace.collectionName} " +
-                        "- already in state: ${stateManager.getCurrentState()}"
+                    "Cannot start change stream - already in state: ${stateManager.getCurrentState()}"
                 )
                 return@withStateLock
             }
 
             if (!stateManager.transitionTo(null, ChangeStreamState.CONNECTING)) {
                 context.logger.error(
-                    "Failed to transition to CONNECTING state for ${context.collection.namespace.collectionName} " +
-                        "- concurrent state change detected"
+                    "Failed to transition to CONNECTING state - concurrent state change detected"
                 )
                 return@withStateLock
             }
@@ -103,7 +100,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                     } catch (e: Exception) {
                         context.logger.error(
                             e,
-                            "Fatal error in change stream for ${context.collection.namespace.collectionName}"
+                            "Fatal error in change stream"
                         )
                         stateManager.transitionTo(null, ChangeStreamState.FAILED)
                         stateManager.clearJobsUnsafe()
@@ -114,11 +111,11 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 // Register jobs with state manager
                 stateManager.setJobs(streamJob, processorJob)
 
-                context.logger.info("Change stream jobs started for ${context.collection.namespace.collectionName}")
+                context.logger.info("Change stream jobs started")
             } catch (e: Exception) {
                 context.logger.error(
                     e,
-                    "Failed to start change stream for ${context.collection.namespace.collectionName}"
+                    "Failed to start change stream"
                 )
                 stateManager.transitionTo(null, ChangeStreamState.FAILED)
                 stateManager.clearJobsUnsafe()
@@ -143,7 +140,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             val currentState = stateManager.getCurrentState()
             if (currentState == ChangeStreamState.SHUTDOWN) {
                 context.logger.debug(
-                    "Change stream already shutdown for ${context.collection.namespace.collectionName}"
+                    "Change stream already shutdown"
                 )
                 return@withStateLock // Already shutdown
             }
@@ -151,18 +148,18 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             // Transition to shut down state
             if (!stateManager.transitionTo(currentState, ChangeStreamState.SHUTDOWN)) {
                 context.logger.warn(
-                    "Failed to transition to SHUTDOWN state for ${context.collection.namespace.collectionName} " +
+                    "Failed to transition to SHUTDOWN state " +
                         "- attempted from: $currentState, current state: ${stateManager.getCurrentState()}"
                 )
                 return@withStateLock
             }
 
-            context.logger.info("Shutting down change stream for ${context.collection.namespace.collectionName}")
+            context.logger.info("Shutting down change stream")
 
             // CRITICAL FIX: Proper resource cleanup with job completion waiting
             cleanupResourcesWithJobCompletion()
 
-            context.logger.info("Change stream shutdown completed for ${context.collection.namespace.collectionName}")
+            context.logger.info("Change stream shutdown completed")
         }
     }
 
@@ -171,7 +168,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * This method should only be called while holding the state lock.
      */
     private suspend fun cleanupResourcesWithJobCompletion() {
-        context.logger.debug("Starting resource cleanup for ${context.collection.namespace.collectionName}")
+        context.logger.debug("Starting resource cleanup")
 
         try {
             // Cancel jobs and wait for completion
@@ -190,7 +187,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             }
         }
 
-        context.logger.debug("Resource cleanup completed for ${context.collection.namespace.collectionName}")
+        context.logger.debug("Resource cleanup completed")
     }
 
     /**
@@ -211,18 +208,17 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 }
 
                 context.logger.info(
-                    "Starting change stream for ${context.collection.namespace.collectionName} " +
-                        "(attempt ${retryCount + 1})"
+                    "Starting change stream (attempt ${retryCount + 1})"
                 )
 
                 val watchFlow = resumeTokenManager.configureChangeStream()
                 processChangeStreamEvents(watchFlow)
 
                 // If we reach here, the stream ended normally (which shouldn't happen)
-                context.logger.warn("Change stream ended normally for ${context.collection.namespace.collectionName}")
+                context.logger.warn("Change stream ended normally")
                 break
             } catch (_: CancellationException) {
-                context.logger.info("Change stream cancelled for ${context.collection.namespace.collectionName}")
+                context.logger.info("Change stream cancelled")
                 break
             } catch (e: Exception) {
                 val decision = errorHandler.handleError(e, retryCount)
@@ -253,8 +249,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         if (retryCount >= context.config.maxRetries) {
             stateManager.transitionTo(null, ChangeStreamState.FAILED)
             context.logger.error(
-                "Change stream failed permanently for ${context.collection.namespace.collectionName} " +
-                    "after $retryCount attempts"
+                "Change stream failed permanently after $retryCount attempts"
             )
         } else if (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN) {
             stateManager.transitionTo(null, ChangeStreamState.DISCONNECTED)
@@ -288,14 +283,13 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     private suspend fun onSuccessfulConnection() {
         if (errorHandler.getConsecutiveFailures() > 0) {
             context.logger.info(
-                "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures " +
-                    "for ${context.collection.namespace.collectionName}"
+                "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures"
             )
         }
 
         errorHandler.resetFailures()
         context.eventHandler.onConnected()
-        context.logger.info("Change stream connected for ${context.collection.namespace.collectionName}")
+        context.logger.info("Change stream connected")
     }
 
     // Public interface methods (delegating to components)

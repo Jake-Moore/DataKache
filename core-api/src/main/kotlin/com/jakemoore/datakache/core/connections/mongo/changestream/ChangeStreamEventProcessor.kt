@@ -62,7 +62,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
     fun startEventProcessing(scope: kotlinx.coroutines.CoroutineScope): Job {
         return scope.launch {
-            context.logger.debug("Event processor started for ${context.collection.namespace.collectionName}")
+            context.logger.debug("Event processor started")
 
             try {
                 while (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN) {
@@ -101,11 +101,11 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         }
                     } catch (_: TimeoutCancellationException) {
                         context.logger.debug(
-                            "Event processing timeout for ${context.collection.namespace.collectionName}"
+                            "Event processing timeout"
                         )
                     } catch (_: CancellationException) {
                         context.logger.debug(
-                            "Event processor cancelled for ${context.collection.namespace.collectionName}"
+                            "Event processor cancelled"
                         )
                         break
                     } catch (e: Exception) {
@@ -113,21 +113,19 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         if (errorHandler.shouldEventProcessorStop(e)) {
                             context.logger.error(
                                 e,
-                                "Fatal error in event processor, " +
-                                    "stopping: ${context.collection.namespace.collectionName}"
+                                "Fatal error in event processor, stopping."
                             )
                             break
                         } else {
                             context.logger.error(
                                 e,
-                                "Recoverable error in event processor " +
-                                    "for ${context.collection.namespace.collectionName}"
+                                "Recoverable error in event processor"
                             )
                         }
                     }
                 }
             } finally {
-                context.logger.debug("Event processor stopped for ${context.collection.namespace.collectionName}")
+                context.logger.debug("Event processor stopped")
             }
         }
     }
@@ -159,7 +157,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     // Channel is full - implement enhanced backpressure with fallback
                     context.logger.warn(
                         "Event channel full (${context.config.maxBufferedEvents} events), " +
-                            "implementing backpressure strategy for ${context.collection.namespace.collectionName}"
+                            "implementing backpressure strategy"
                     )
 
                     // Strategy: Try a few times with short delays, then implement fallback
@@ -205,8 +203,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      */
     private suspend fun handleEventLossScenario(change: ChangeStreamDocument<D>) {
         context.logger.error(
-            "Event lost due to backpressure for ${context.collection.namespace.collectionName}, " +
-                "operation: ${change.operationType}, implementing fallback strategy"
+            "Event lost due to backpressure, operation: ${change.operationType}, implementing fallback strategy"
         )
 
         // CRITICAL FIX: Implement fallback strategies instead of just logging
@@ -277,8 +274,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         context.logger.debug("Processed ${change.operationType} for document: ${fullDoc.key}")
                     } else {
                         context.logger.warn(
-                            "No fullDocument for ${change.operationType} operation " +
-                                "in ${context.collection.namespace.collectionName}"
+                            "No fullDocument for ${change.operationType} operation"
                         )
                     }
                 }
@@ -299,21 +295,19 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                             }
                         } else {
                             context.logger.warn(
-                                "Could not extract ID from delete operation " +
-                                    "in ${context.collection.namespace.collectionName}"
+                                "Could not extract ID from delete operation"
                             )
                         }
                     }
                 }
                 else -> {
                     context.logger.debug(
-                        "Ignored change stream operation: ${change.operationType} " +
-                            "for ${context.collection.namespace.collectionName}"
+                        "Ignored change stream operation: ${change.operationType}"
                     )
                 }
             }
         } catch (e: Exception) {
-            context.logger.error(e, "Error processing change event for ${context.collection.namespace.collectionName}")
+            context.logger.error(e, "Error processing change event")
             // Don't rethrow - we want to continue processing other events
         }
     }
