@@ -72,7 +72,13 @@ internal class MongoListener(private val service: MongoDatabaseService) : Cluste
         service.mongoConnected = false
 
         // Inform console about the cluster closure
-        service.warn("&cMongoDB cluster closed.")
+        if (service.keepMongoConnected) {
+            // ISSUE! Mongo is supposed to be connected, but cluster was closed!
+            service.warn("&cMongoDB cluster closed.")
+        } else {
+            // NORMAL - Mongo does not need to be connected, cluster was closed intentionally
+            service.info("&aMongoDB cluster closed.")
+        }
     }
 
     /**
