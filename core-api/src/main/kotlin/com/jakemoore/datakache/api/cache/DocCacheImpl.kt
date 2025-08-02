@@ -8,7 +8,6 @@ import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
-import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
@@ -147,7 +146,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
-    private val cacheMap: MutableMap<K, D> = ConcurrentHashMap()
+    protected val cacheMap: MutableMap<K, D> = ConcurrentHashMap()
 
     override fun read(key: K): OptionalResult<D> {
         return ReadResultHandler.wrap {
@@ -173,18 +172,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
         val doc = cacheMap[key] ?: throw DocumentNotFoundException(key, this)
         return DataKache.storageMode.databaseService.update(this, doc, updateFunction)
-    }
-
-    override suspend fun delete(key: K): DefiniteResult<Boolean> {
-        return DeleteResultHandler.wrap {
-            val found = cacheMap.remove(key) != null
-            DataKache.storageMode.databaseService.delete(this, key)
-            cacheMap.remove(key)
-
-            // This method boolean is whether the document was found in the cache
-            //   false is okay, just indicates that the document was not cached
-            return@wrap found
-        }
     }
 
     override fun readAll(): Collection<D> {
@@ -274,6 +261,19 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         // Cache the document in memory
         this.cacheInternal(doc)
         return doc
+    }
+
+    /**
+     * @return The same [update] document for chaining.
+     */
+    @ApiStatus.Internal
+    @Throws(NoSuchElementException::class)
+    suspend fun replaceDocumentInternal(key: K, update: D): D {
+        // Insert the document in the database
+        DataKache.storageMode.databaseService.replace(this, key, update)
+        // Cache the document in memory
+        this.cacheInternal(update)
+        return update
     }
 
     // ------------------------------------------------------------ //

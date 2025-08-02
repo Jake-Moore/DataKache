@@ -110,9 +110,7 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     }
 
     /**
-     * Deletes this document from the cache and the backing database.
-     *
-     * @return A [DefiniteResult] indicating if the document was found in db and deleted. (false = not found)
+     * See [DocCache.delete] for details.
      */
     suspend fun delete(): DefiniteResult<Boolean> {
         return this.getDocCache().delete(this.key)

@@ -136,20 +136,15 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     }
 
     /**
-     * Deletes a document from the cache and the backing database.
-     *
-     * @param key The unique key of the document to be deleted.
-     *
-     * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
+     * See parent implementations for details on the behavior of this method:
+     * - [com.jakemoore.datakache.api.doc.GenericDoc.delete]
      */
     suspend fun delete(key: K): DefiniteResult<Boolean>
 
     /**
-     * Deletes a document from the cache and the backing database.
+     * Alias of [DocCache.delete], passing the document's key.
      *
-     * @param doc The document to be deleted (deleted via its key).
-     *
-     * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
+     * See [DocCache.delete] for more information.
      */
     suspend fun delete(doc: D): DefiniteResult<Boolean> {
         return delete(doc.key)
