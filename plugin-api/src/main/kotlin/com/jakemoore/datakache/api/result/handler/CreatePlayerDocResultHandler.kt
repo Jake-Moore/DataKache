@@ -9,7 +9,7 @@ import com.mongodb.DuplicateKeyException
 import org.jetbrains.annotations.ApiStatus
 
 @ApiStatus.Internal
-object CreateResultHandler {
+internal object CreatePlayerDocResultHandler {
     @ApiStatus.Internal
     suspend fun <K : Any, D : Doc<K, D>> wrap(
         // Work cannot return a null document.
@@ -28,7 +28,12 @@ object CreateResultHandler {
                 )
             )
         } catch (e: Exception) {
-            return Failure(ResultExceptionWrapper("Create operation failed.", e))
+            return Failure(
+                ResultExceptionWrapper(
+                    "Create PlayerDoc operation failed.",
+                    e
+                )
+            )
         }
     }
 }

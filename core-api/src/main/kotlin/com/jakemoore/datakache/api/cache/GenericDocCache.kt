@@ -2,12 +2,14 @@
 
 package com.jakemoore.datakache.api.cache
 
+import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.doc.GenericDoc
 import com.jakemoore.datakache.api.logging.DefaultCacheLogger
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
-import com.jakemoore.datakache.api.result.handler.CreateResultHandler
+import com.jakemoore.datakache.api.result.handler.CreateGenericDocResultHandler
+import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
 import java.util.UUID
 
 abstract class GenericDocCache<D : GenericDoc<D>>(
@@ -37,7 +39,7 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
     // ------------------------------------------------------------ //
 
     override suspend fun create(key: String, initializer: (D) -> D): DefiniteResult<D> {
-        return CreateResultHandler.wrap {
+        return CreateGenericDocResultHandler.wrap {
             // Create a new instance in modifiable state
             val instantiated: D = instantiator(key, 0L)
             instantiated.initializeInternal(this)
@@ -68,6 +70,25 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      */
     suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D> {
         return create(UUID.randomUUID().toString(), initializer)
+    }
+
+    /**
+     * Deletes a document from the cache and the backing database.
+     *
+     * @param key The unique key of the document to be deleted.
+     *
+     * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
+     */
+    override suspend fun delete(key: String): DefiniteResult<Boolean> {
+        return DeleteResultHandler.wrap {
+            val found = cacheMap.remove(key) != null
+            DataKache.storageMode.databaseService.delete(this, key)
+            cacheMap.remove(key)
+
+            // This method boolean is whether the document was found in the cache
+            //   false is okay, just indicates that the document was not cached
+            return@wrap found
+        }
     }
 
     // ------------------------------------------------------------ //

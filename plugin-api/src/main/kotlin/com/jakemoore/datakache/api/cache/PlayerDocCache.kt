@@ -13,7 +13,8 @@ import com.jakemoore.datakache.api.result.Empty
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
-import com.jakemoore.datakache.api.result.handler.CreateResultHandler
+import com.jakemoore.datakache.api.result.handler.ClearPlayerDocResultHandler
+import com.jakemoore.datakache.api.result.handler.CreatePlayerDocResultHandler
 import com.jakemoore.datakache.util.DataKacheFileLogger
 import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.coroutines.runBlocking
@@ -101,9 +102,9 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                 // Best solution - create a new PlayerDoc using basic initialization, and any future updates
                 //  will handle any broken optimistic versioning or caching behavior.
                 return runBlocking {
-                    CreateResultHandler.wrap {
+                    CreatePlayerDocResultHandler.wrap {
                         // method will also save the document to database and cache
-                        createNewPlayerDocInternal(player.uniqueId, player.name, null)
+                        createNewPlayerDoc(player.uniqueId, player.name, null)
                     }
                 }
             }
@@ -111,7 +112,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     }
 
     override suspend fun create(key: UUID, initializer: (D) -> D): DefiniteResult<D> {
-        return CreateResultHandler.wrap {
+        return CreatePlayerDocResultHandler.wrap {
             // Create a new instance in modifiable state
             val instantiated: D = instantiator(key, 0L, null)
             instantiated.initializeInternal(this)
@@ -193,6 +194,33 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     }
 
     /**
+     * **Clears** all document data for the [PlayerDoc] from the cache and the backing database.
+     *
+     * This is NOT a traditional deletion, as we must ensure that all [Player]s have a [PlayerDoc] present,
+     * so this method will reset the document to its default state from [defaultInitializer].
+     *
+     * @param key The unique key of the document to be cleared.
+     *
+     * @return A [DefiniteResult] indicating if the document was found and cleared. (false = not found)
+     */
+    override suspend fun delete(key: UUID): DefiniteResult<Boolean> {
+        return ClearPlayerDocResultHandler.wrap {
+            val username: String? = this@PlayerDocCache.read(key).getOrNull()?.username
+            val defaultDoc = constructNewPlayerDoc(key, username)
+
+            // Replace the current document with the new one.
+            // If a NoSuchElementException is thrown, it means the document was not found.
+            //  which in our case is acceptable, it just means the caller didn't realize the document was not present.
+            try {
+                this.replaceDocumentInternal(key, defaultDoc)
+                return@wrap true
+            } catch (_: NoSuchElementException) {
+                return@wrap false
+            }
+        }
+    }
+
+    /**
      * Deletes a document from the cache and the backing database.
      *
      * @param player The **online** player who owns the document to be deleted (uses Player UUID).
@@ -220,11 +248,18 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     //                        Internal Methods                      //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    suspend fun createNewPlayerDocInternal(
+    private suspend fun createNewPlayerDoc(
         uuid: UUID,
         username: String? = null,
         loginEvent: AsyncPlayerPreLoginEvent? = null,
     ): D {
+        val doc: D = constructNewPlayerDoc(uuid, username)
+
+        // Access internal method to save and cache the document
+        return this.insertDocumentInternal(doc)
+    }
+
+    private fun constructNewPlayerDoc(uuid: UUID, username: String?): D {
         // Create from instantiator
         val instantiated: D = this.instantiator(uuid, 0L, username)
         instantiated.initializeInternal(this)
@@ -238,8 +273,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
             "The version of the PlayerDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
         }
         doc.initializeInternal(this)
-
-        // Access internal method to save and cache the document
-        return this.insertDocumentInternal(doc)
+        return doc
     }
 }

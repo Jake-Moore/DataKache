@@ -93,6 +93,17 @@ internal interface DatabaseService : LoggerService, Service {
     suspend fun <K : Any, D : Doc<K, D>> readKeys(docCache: DocCache<K, D>): Flow<K>
 
     /**
+     * Fully overwrite and replace the document with the given [key] using the provided [update] document.
+     *
+     * This will replace the entire document, not just update specific fields.
+     * - This function will NOT insert the document if the key does not already exist.
+     *
+     * @throws NoSuchElementException if the document with the given key does not exist.
+     */
+    @Throws(NoSuchElementException::class)
+    suspend fun <K : Any, D : Doc<K, D>> replace(docCache: DocCache<K, D>, key: K, update: D)
+
+    /**
      * Gets the current operation time from the database to prevent timing gaps
      * in change stream initialization. The returned object is database-specific
      * and should be passed to createChangeStreamManager if timing gap prevention is needed.

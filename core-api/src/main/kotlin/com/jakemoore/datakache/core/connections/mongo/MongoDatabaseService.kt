@@ -19,6 +19,7 @@ import com.mongodb.MongoTimeoutException
 import com.mongodb.WriteConcern
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Projections
+import com.mongodb.client.model.ReplaceOptions
 import com.mongodb.kotlin.client.coroutine.MongoClient
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import com.mongodb.kotlin.client.coroutine.MongoDatabase
@@ -428,6 +429,49 @@ internal class MongoDatabaseService : DatabaseService {
             docCache.getLoggerInternal().info(
                 throwable = e,
                 msg = "Exception on DocCache.clear (${docCache.cacheName})"
+            )
+            throw e
+        }
+    }
+
+    override suspend fun <K : Any, D : Doc<K, D>> replace(
+        docCache: DocCache<K, D>,
+        key: K,
+        update: D,
+    ) = withContext(Dispatchers.IO) {
+        val k1 = docCache.keyToString(key)
+        val k2 = docCache.keyToString(update.key)
+        require(k1 == k2) {
+            "Key mismatch! Cannot replace document with key '$k1' using document with key '$k2'. " +
+                "Ensure the keys match before replacing."
+        }
+
+        try {
+            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+            val filter = Filters.eq(keyFieldName, k1)
+
+            // upsert=false means it will not insert a new document if the key does not exist
+            val options = ReplaceOptions().upsert(false)
+            val result = getMongoCollection(docCache)
+                .replaceOne(filter, update, options)
+
+            // Fail State - No Document Replaced
+            if (result.matchedCount == 0L) {
+                throw NoSuchElementException(
+                    "No document found with key '$k1' in DocCache '${docCache.cacheName}'. " +
+                        "Ensure the document exists before replacing."
+                )
+            }
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().info(
+                throwable = me,
+                msg = "MongoException on DocCache.replace (${docCache.cacheName})"
+            )
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().info(
+                throwable = e,
+                msg = "Exception on DocCache.replace (${docCache.cacheName})"
             )
             throw e
         }
