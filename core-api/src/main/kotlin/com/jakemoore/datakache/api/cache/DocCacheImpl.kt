@@ -1,6 +1,7 @@
 package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.DataKache
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.logging.LoggerService
@@ -20,8 +21,10 @@ import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeOperationType
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.mongodb.DuplicateKeyException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.ApiStatus
@@ -36,6 +39,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * @param String - the cache name
      */
     private val loggerInstantiator: (String) -> LoggerService,
+
+    override val config: DocCacheConfig<K, D> = DocCacheConfig.default(),
 ) : DocCache<K, D> {
 
     override val databaseName: String
@@ -206,7 +211,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     override suspend fun readAllFromDatabase(key: K): DefiniteResult<Flow<D>> {
         return DbReadAllResultHandler.wrap {
-            DataKache.storageMode.databaseService.readAll(this)
+            DataKache.storageMode.databaseService.readAll(this).map {
+                // Cache each document as it is read from the database
+                cacheInternal(it, log = true)
+                it
+            }
         }
     }
 
@@ -233,11 +242,19 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
     override fun cacheInternal(doc: D, log: Boolean) {
+        doc.initializeInternal(this)
+
+        // Optimization - if the document is in cache under the same version, assume the data is the same
+        //  and therefore we can skip re-caching it.
+        if (config.optimisticCaching) {
+            val cached: D? = cacheMap[doc.key]
+            if (cached != null && cached.version == doc.version) return
+        }
+
         cacheMap[doc.key] = doc
         if (log) {
             getLoggerInternal().debug("Cached document: ${doc.key}")
         }
-        doc.initializeInternal(this)
     }
 
     @ApiStatus.Internal
@@ -369,7 +386,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
                             // Attempt graceful shutdown in background
                             // Note: This is an emergency situation, so we don't wait for completion
-                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            CoroutineScope(Dispatchers.IO).launch {
                                 try {
                                     shutdown()
                                 } catch (e: Exception) {

@@ -50,6 +50,9 @@ internal class MongoDatabaseService : DatabaseService {
 
     internal var mongoClient: MongoClient? = null
     internal var mongoConnected: Boolean = false
+
+    // flag representing if mongo has established a successful connection
+    //  This is used to determine if players can join the server
     internal var mongoFirstConnect: Boolean = false
     internal var activeListener: UUID = UUID.randomUUID()
 
@@ -323,7 +326,9 @@ internal class MongoDatabaseService : DatabaseService {
     }
 
     override fun isDatabaseReadyForWrites(): Boolean {
-        return mongoConnected
+        // Must have a successful first connection from the Listener
+        //  AND must be currently connected to MongoDB
+        return mongoFirstConnect && mongoConnected
     }
 
     override suspend fun <K : Any, D : Doc<K, D>> readAll(

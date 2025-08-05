@@ -6,6 +6,8 @@ import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.exception.DuplicateDatabaseException
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.registration.DatabaseRegistration
+import org.jetbrains.annotations.ApiStatus
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -35,8 +37,9 @@ object DataKacheAPI {
             "Database name cannot be blank."
         }
 
-        val databaseRegistration = registerDatabase(client, getFullDatabaseName(databaseName))
-        return DataKacheRegistration(client, databaseName, databaseRegistration).also {
+        val fullDatabaseName = getFullDatabaseName(databaseName)
+        val databaseRegistration = registerDatabase(client, fullDatabaseName)
+        return DataKacheRegistration(client, fullDatabaseName, databaseRegistration).also {
             registrations.add(it)
         }
     }
@@ -45,7 +48,7 @@ object DataKacheAPI {
     //            Database Methods              //
     // ---------------------------------------- //
     // Key is databaseName stored lowercase for uniqueness
-    internal val databases = ConcurrentHashMap<String, DatabaseRegistration>()
+    private val databases = ConcurrentHashMap<String, DatabaseRegistration>()
 
     @Throws(DuplicateDatabaseException::class)
     private fun registerDatabase(client: DataKacheClient, databaseName: String): DatabaseRegistration {
@@ -58,7 +61,8 @@ object DataKacheAPI {
         }
     }
 
-    private fun getDatabaseRegistration(databaseName: String): DatabaseRegistration? {
+    @ApiStatus.Internal
+    fun getDatabaseRegistration(databaseName: String): DatabaseRegistration? {
         return databases[databaseName.lowercase()]
     }
 
@@ -84,5 +88,19 @@ object DataKacheAPI {
             return dbName
         }
         return "${namespace}_$dbName"
+    }
+
+    /**
+     * Returns a collection of all registered databases in DataKache.
+     */
+    fun listDatabases(): Collection<DatabaseRegistration> {
+        return Collections.unmodifiableCollection(databases.values)
+    }
+
+    /**
+     * Returns a collection of all registrations in DataKache.
+     */
+    fun listRegistrations(): Collection<DataKacheRegistration> {
+        return Collections.unmodifiableCollection(registrations)
     }
 }

@@ -6,6 +6,7 @@ import com.jakemoore.datakache.api.DataKacheClient
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.cache.DocCacheImpl
 import com.jakemoore.datakache.api.exception.DuplicateCacheException
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -21,29 +22,17 @@ class DataKacheRegistration internal constructor( // Internal constructor, insta
      * Your DataKache client instance
      */
     val client: DataKacheClient,
-    dbNameShort: String,
-    /**
-     * The [DatabaseRegistration] for this registration.
-     */
-    val databaseRegistration: DatabaseRegistration,
-) {
-
     /**
      * The full database name as it would appear in MongoDB
      * This includes the DataKache namespace, described in [DataKacheAPI.getFullDatabaseName] (String)}
      * All collections will be stored in this database
      */
-    val databaseName: String
-    private val dbNameShort: String
-
-    init {
-        require(dbNameShort.isNotBlank()) {
-            "Database name cannot be blank."
-        }
-
-        this.dbNameShort = dbNameShort
-        this.databaseName = DataKacheAPI.getFullDatabaseName(dbNameShort)
-    }
+    val databaseName: String,
+    /**
+     * The [DatabaseRegistration] for this registration.
+     */
+    val databaseRegistration: DatabaseRegistration,
+) {
 
     /**
      * API Method to safely shut down this registration and all associated caches.
@@ -115,5 +104,12 @@ class DataKacheRegistration internal constructor( // Internal constructor, insta
         return cacheName.lowercase()
             .replace(" ", "_") // replace spaces with underscores
             .replace("\\p{Zs}+".toRegex(), "") // replace any other whitespace
+    }
+
+    /**
+     * Gets a read only collection of all registered document caches for this database.
+     */
+    fun getDocCaches(): Collection<DocCache<*, *>> {
+        return Collections.unmodifiableCollection(docCaches.values)
     }
 }

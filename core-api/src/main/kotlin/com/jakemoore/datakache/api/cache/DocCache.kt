@@ -1,5 +1,6 @@
 package com.jakemoore.datakache.api.cache
 
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
@@ -263,6 +264,13 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * The class of the document type [D] that this cache holds.
      */
     val docClass: Class<D>
+
+    /**
+     * Configuration options for this cache.
+     *
+     * See the cache constructor in order to provide your own configuration object.
+     */
+    val config: DocCacheConfig<K, D>
 
     // ------------------------------------------------------------ //
     //                    Key Manipulation Methods                  //

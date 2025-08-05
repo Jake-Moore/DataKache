@@ -1,8 +1,8 @@
 package com.jakemoore.datakache.core.connections.mongo
 
-import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.core.connections.DatabaseScope
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamConfig
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
@@ -31,7 +31,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     eventHandler: ChangeEventHandler<K, D>,
     config: ChangeStreamConfig = ChangeStreamConfig.forMongoDB(),
     logger: LoggerService
-) : ChangeStreamManager<K, D>, DataKacheScope {
+) : ChangeStreamManager<K, D>, DatabaseScope {
 
     // Shared context for all components
     private val context = ChangeStreamContext(collection, eventHandler, config, logger)
