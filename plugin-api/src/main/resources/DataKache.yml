@@ -32,6 +32,30 @@ storage:
     uri: 'mongodb://localhost:27017'
 
 
+
+# ----------------------------------------------------- #
+#                LANGUAGE CONFIGURATION                 #
+# ----------------------------------------------------- #
+language:
+  joinDenied:
+    databaseNotReady: "&cServer is starting up! Please try again in a few seconds."
+    playerDocTimeout: "&cOops! Profile failed to load in time. Please try again in a few seconds."
+    playerDocException: "&cOops! Something unexpected went wrong. Please try again in a few seconds."
+    earlyJoin: "&cOops! You joined too fast! Please try again in a few seconds."
+
+
+
+# ----------------------------------------------------- #
+#                LANGUAGE CONFIGURATION                 #
+# ----------------------------------------------------- #
+joinOptions:
+  # This is the default timeout that DataKache will use
+  #  when waiting for all PlayerDocs to be loaded for a joining player.
+  # If console indicates that players cannot connect due to DataKache timeouts,
+  #  increasing this value may help.
+  preloadPlayerDocTimeoutMS: 5000
+
+
 # ----------------------------------------------------- #
 #                          DEBUG                        #
 # ----------------------------------------------------- #

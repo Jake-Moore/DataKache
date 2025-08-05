@@ -55,7 +55,7 @@ object DataKache {
         }
 
         // Wait for Coroutines
-        logger.info("&aWaiting for all coroutines to finish...")
+        logger.info("&aWaiting for DataKacheScope coroutines to finish...")
         runBlocking {
             if (!GlobalDataKacheScope.awaitAllChildrenCompletion(logger)) {
                 logger.severe("&cFailed to wait for all coroutines to finish!")
@@ -63,7 +63,7 @@ object DataKache {
             }
             GlobalDataKacheScope.cancelAll()
         }
-        logger.info("&aAll coroutines finished!")
+        logger.info("&aAll DataKacheScope coroutines finished!")
 
         // Shutdown any running DocCaches
         if (DataKacheAPI.registrations.isNotEmpty()) {

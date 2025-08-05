@@ -8,11 +8,9 @@ import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 
 object DataKachePluginConfig {
-    fun loadFromPluginResources(
-        plugin: JavaPlugin,
-        resourceFile: String = "DataKache.yml",
+    fun loadFromFileConfiguration(
+        config: FileConfiguration
     ): DataKacheConfig {
-        val config = loadConfigFile(plugin, resourceFile)
         return DataKacheConfig(
             databaseNamespace = config.getString("database-namespace", "global"),
             debug = config.getBoolean("debug", true),
@@ -23,7 +21,7 @@ object DataKachePluginConfig {
         )
     }
 
-    private fun loadConfigFile(
+    fun loadFileConfiguration(
         plugin: JavaPlugin,
         resourceFile: String,
     ): FileConfiguration {

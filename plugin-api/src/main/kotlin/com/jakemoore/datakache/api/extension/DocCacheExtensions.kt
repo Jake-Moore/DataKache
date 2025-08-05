@@ -16,7 +16,7 @@ fun DocCache<*, *>.runAsync(runnable: Runnable) {
     val plugin = if (client is PluginKacheClient) {
         client.plugin
     } else {
-        requireNotNull(DataKachePlugin.controller) {
+        requireNotNull(DataKachePlugin.getController()) {
             "Unable to schedule async task: DataKachePlugin is not initialized or controller is null."
         }
     }
@@ -32,7 +32,7 @@ fun DocCache<*, *>.runSync(runnable: Runnable) {
     val plugin = if (client is PluginKacheClient) {
         client.plugin
     } else {
-        requireNotNull(DataKachePlugin.controller) {
+        requireNotNull(DataKachePlugin.getController()) {
             "Unable to schedule sync task: DataKachePlugin is not initialized or controller is null."
         }
     }

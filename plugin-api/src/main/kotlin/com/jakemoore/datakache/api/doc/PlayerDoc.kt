@@ -7,7 +7,6 @@ import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.serialization.Serializable
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import org.jetbrains.annotations.ApiStatus.Internal
 import java.util.Objects
 import java.util.UUID
 
@@ -62,25 +61,6 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
             tempPlayer
         }
         return this._player
-    }
-
-    /**
-     * INTERNAL METHOD: Stores the [Player] object when they join, so it's cached for easy access.
-     */
-    @Internal
-    fun initializePlayerInternal(player: Player) {
-        require(PlayerUtil.isFullyValidPlayer(player)) {
-            "Player cannot be null or invalid for initializePlayerInternal"
-        }
-        this._player = player
-    }
-
-    /**
-     * INTERNAL METHOD: Nullifies the [Player] object when they leave, so it can be re-fetched later.
-     */
-    @Internal
-    fun uninitializePlayerInternal() {
-        this._player = null
     }
 
     /**
