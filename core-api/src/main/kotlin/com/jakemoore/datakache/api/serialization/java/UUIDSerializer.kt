@@ -1,4 +1,4 @@
-package com.jakemoore.datakache.core.serialization.java
+package com.jakemoore.datakache.api.serialization.java
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -7,8 +7,14 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import java.util.UUID
 
+/**
+ * Basic [KSerializer] for [UUID]s.
+ */
 object UUIDSerializer : KSerializer<UUID> {
-    override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
+    override val descriptor = PrimitiveSerialDescriptor(
+        serialName = "java.util.UUID",
+        kind = PrimitiveKind.STRING,
+    )
 
     override fun deserialize(decoder: Decoder): UUID {
         return UUID.fromString(decoder.decodeString())

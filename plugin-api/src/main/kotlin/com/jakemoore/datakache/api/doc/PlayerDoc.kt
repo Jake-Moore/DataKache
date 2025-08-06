@@ -2,7 +2,7 @@ package com.jakemoore.datakache.api.doc
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.cache.PlayerDocCache
-import com.jakemoore.datakache.core.serialization.java.UUIDSerializer
+import com.jakemoore.datakache.api.serialization.java.UUIDSerializer
 import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.serialization.Serializable
 import org.bukkit.Bukkit
