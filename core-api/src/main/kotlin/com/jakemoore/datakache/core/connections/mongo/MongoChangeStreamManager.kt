@@ -77,7 +77,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 // Reset error tracking for restart
                 errorHandler.resetFailures()
 
-                // CRITICAL FIX: Recreate the event channel since closed channels cannot be reused
+                // Recreate the event channel since closed channels cannot be reused
                 eventProcessor.createNewEventChannel()
 
                 // Reset counters and state for restart
@@ -142,7 +142,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
 
             context.logger.debug("Shutting down change stream")
 
-            // CRITICAL FIX: Proper resource cleanup with job completion waiting
+            // Proper resource cleanup with job completion waiting
             cleanupResourcesWithJobCompletion()
 
             context.logger.debug("Change stream shutdown completed")

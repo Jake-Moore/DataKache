@@ -1,4 +1,4 @@
-package com.jakemoore.datakache.core.connections.changes
+package com.jakemoore.datakache.api.changes
 
 /**
  * Database-agnostic operation types for change streams.

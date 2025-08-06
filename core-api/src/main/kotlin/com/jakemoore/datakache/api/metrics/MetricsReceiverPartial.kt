@@ -91,4 +91,22 @@ open class MetricsReceiverPartial : MetricsReceiver {
     override fun onPlayerDocClearFail() {}
 
     override fun onPlayerDocCreateFail() {}
+
+    override fun onChangeStreamInsert(cacheName: String, docKeyString: String) {}
+
+    override fun onChangeStreamReplace(cacheName: String, docKeyString: String) {}
+
+    override fun onChangeStreamUpdate(cacheName: String, docKeyString: String) {}
+
+    override fun onChangeStreamDelete(cacheName: String, docKeyString: String) {}
+
+    override fun onChangeStreamDrop(cacheName: String) {}
+
+    override fun onChangeStreamRename(cacheName: String) {}
+
+    override fun onChangeStreamDropDatabase(cacheName: String) {}
+
+    override fun onChangeStreamInvalidate(cacheName: String) {}
+
+    override fun onChangeStreamUnknown(cacheName: String) {}
 }

@@ -1,7 +1,8 @@
 package com.jakemoore.datakache.core.connections.mongo.changestream
 
+import com.jakemoore.datakache.api.changes.ChangeDocumentType
+import com.jakemoore.datakache.api.changes.ChangeOperationType
 import com.jakemoore.datakache.api.doc.Doc
-import com.jakemoore.datakache.core.connections.changes.ChangeOperationType
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamState
 import com.mongodb.client.model.changestream.ChangeStreamDocument
 import com.mongodb.client.model.changestream.OperationType
@@ -67,11 +68,10 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             try {
                 while (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN) {
                     try {
-                        // CRITICAL FIX: Prevent excessive CPU usage with very small timeouts
+                        // Prevent excessive CPU usage with very small timeouts
                         val baseInterval = context.config.eventProcessingTimeout.inWholeMilliseconds / 10
                         val checkInterval = minOf(maxOf(baseInterval, 100), 5000) // Min 100ms, max 5s
 
-                        // CRITICAL FIX: Use local variable for null safety
                         val currentChannel = eventChannel
                         val event = select {
                             if (currentChannel != null && !currentChannel.isClosedForReceive) {
@@ -84,10 +84,9 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                             withTimeout(context.config.eventProcessingTimeout) {
                                 processChangeEventSafely(event)
 
-                                // CRITICAL FIX: Update resume tokens after successful processing
+                                // Update resume tokens after successful processing
                                 resumeTokenManager.updateTokens(event.resumeToken)
 
-                                // CRITICAL FIX: Better overflow protection using >= instead of ==
                                 totalEventsProcessed = if (totalEventsProcessed >= Long.MAX_VALUE - 1) {
                                     context.logger.debug("Events counter approaching max value, resetting to 0")
                                     0L
@@ -137,7 +136,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      */
     @OptIn(DelicateCoroutinesApi::class)
     suspend fun handleIncomingEvent(change: ChangeStreamDocument<D>): Boolean {
-        // CRITICAL FIX: Enhanced backpressure strategy with event loss prevention
+        // Enhanced backpressure strategy with event loss prevention
         val channel = eventChannel
         if (channel != null && !channel.isClosedForSend) {
             val sendResult = channel.trySend(change)
@@ -160,14 +159,16 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                             "implementing backpressure strategy"
                     )
 
-                    // Strategy: Try a few times with short delays, then implement fallback
+                    // Try a few times with short delays, then implement fallback
                     return handleBackpressure(change, channel)
                 }
             }
         } else {
-            context.logger.debug("Event channel unavailable, skipping event")
+            context.logger.error(
+                "Event lost from invalid channel, operation: ${change.operationType}, attempting fallback"
+            )
             // Also handle this as a potential event loss scenario
-            handleEventLossScenario(change)
+            handleEventLoss(change)
             return false
         }
         return false
@@ -193,58 +194,142 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             retryCount++
         }
 
-        // CRITICAL FIX: Implement fallback strategy instead of losing events
-        handleEventLossScenario(change)
+        // Implement fallback strategy
+        context.logger.error(
+            "Event lost due to backpressure, operation: ${change.operationType}, attempting fallback"
+        )
+        handleEventLoss(change)
         return false
+    }
+
+    /**
+     * Core event processing logic shared between normal processing and event loss recovery.
+     * @param change The change stream document to process
+     * @param isRecoveryMode Whether this is being called from event loss recovery
+     * @return true if processing succeeded, false if it failed
+     */
+    private suspend fun processEventCore(change: ChangeStreamDocument<D>, isRecoveryMode: Boolean = false): Boolean {
+        val operationType = mapOperationType(
+            requireNotNull(change.operationType) {
+                $$"ChangeStreamDocument operationType cannot be null! Are you using $changeStreamSplitLargeEvent ?"
+            }
+        )
+
+        when (operationType) {
+            ChangeOperationType.INSERT, ChangeOperationType.REPLACE, ChangeOperationType.UPDATE -> {
+                val fullDoc = change.fullDocument
+                if (fullDoc != null) {
+                    val changeType = ChangeDocumentType.fromOperationType(operationType)
+                    context.eventHandler.onDocumentChanged(fullDoc, changeType)
+                    if (isRecoveryMode) {
+                        context.logger.warn("Recovered from lost $operationType event for document: ${fullDoc.key}")
+                    } else {
+                        context.logger.debug("Processed $operationType for document: ${fullDoc.key}")
+                    }
+                    return true
+                } else {
+                    val message = if (isRecoveryMode) {
+                        "Cannot recover from lost event - no fullDocument available"
+                    } else {
+                        "No fullDocument for $operationType operation"
+                    }
+                    context.logger.error(message)
+                    return false
+                }
+            }
+            ChangeOperationType.DELETE -> {
+                val documentKey = change.documentKey
+                if (documentKey != null) {
+                    val id = extractIdFromDocumentKey(documentKey)
+                    if (id != null) {
+                        try {
+                            @Suppress("UNCHECKED_CAST")
+                            context.eventHandler.onDocumentDeleted(id as K)
+                            if (isRecoveryMode) {
+                                context.logger.warn("Recovered from lost DELETE event for document: $id")
+                            } else {
+                                context.logger.debug("Processed DELETE for document: $id")
+                            }
+                            return true
+                        } catch (_: ClassCastException) {
+                            context.logger.error(
+                                "Type mismatch in document ID during DELETE " +
+                                    "${if (isRecoveryMode) "recovery" else "processing"}: " +
+                                    "expected type K, got ${id::class.simpleName}"
+                            )
+                            return false
+                        }
+                    } else {
+                        val message = if (isRecoveryMode) {
+                            "Could not extract ID from delete operation during recovery"
+                        } else {
+                            "Could not extract ID from delete operation"
+                        }
+                        context.logger.warn(message)
+                        return false
+                    }
+                }
+                return false
+            }
+            ChangeOperationType.DROP -> {
+                context.eventHandler.onCollectionDropped()
+                if (isRecoveryMode) {
+                    context.logger.warn("Recovered from lost DROP event")
+                } else {
+                    context.logger.debug("Processed DROP operation")
+                }
+                return true
+            }
+            ChangeOperationType.RENAME -> {
+                context.eventHandler.onCollectionRenamed()
+                if (isRecoveryMode) {
+                    context.logger.warn("Recovered from lost RENAME event")
+                } else {
+                    context.logger.debug("Processed RENAME operation")
+                }
+                return true
+            }
+            ChangeOperationType.DROP_DATABASE -> {
+                context.eventHandler.onDatabaseDropped()
+                if (isRecoveryMode) {
+                    context.logger.warn("Recovered from lost DROP_DATABASE event")
+                } else {
+                    context.logger.debug("Processed DROP_DATABASE operation")
+                }
+                return true
+            }
+            ChangeOperationType.INVALIDATE -> {
+                context.eventHandler.onChangeStreamInvalidated()
+                if (isRecoveryMode) {
+                    context.logger.warn("Recovered from lost INVALIDATE event")
+                } else {
+                    context.logger.debug("Processed INVALIDATE operation")
+                }
+                return true
+            }
+            ChangeOperationType.UNKNOWN -> {
+                context.eventHandler.onUnknownOperation()
+                if (isRecoveryMode) {
+                    context.logger.warn("Recovered from lost UNKNOWN event")
+                } else {
+                    context.logger.debug("Processed UNKNOWN operation")
+                }
+                return true
+            }
+        }
     }
 
     /**
      * Handles event loss scenarios with fallback strategies.
      */
-    private suspend fun handleEventLossScenario(change: ChangeStreamDocument<D>) {
-        context.logger.error(
-            "Event lost due to backpressure, operation: ${change.operationType}, implementing fallback strategy"
-        )
-
-        // CRITICAL FIX: Implement fallback strategies instead of just logging
+    private suspend fun handleEventLoss(change: ChangeStreamDocument<D>) {
         try {
-            when (change.operationType) {
-                OperationType.INSERT, OperationType.UPDATE, OperationType.REPLACE -> {
-                    // For data changes, we could trigger a selective cache refresh
-                    val doc = change.fullDocument
-                    if (doc != null) {
-                        context.logger.warn("Triggering direct cache update for lost event: ${doc.key}")
-                        // Process the event directly to maintain consistency
-                        processChangeEventSafely(change)
-                    } else {
-                        context.logger.error("Cannot recover from lost event - no fullDocument available")
-                    }
-                }
-                OperationType.DELETE -> {
-                    // For deletions, we can extract the key and handle directly
-                    val documentKey = change.documentKey
-                    if (documentKey != null) {
-                        val id = extractIdFromDocumentKey(documentKey)
-                        if (id != null) {
-                            try {
-                                @Suppress("UNCHECKED_CAST")
-                                context.eventHandler.onDocumentDeleted(id as K)
-                                context.logger.warn("Recovered from lost DELETE event for document: $id")
-                            } catch (_: ClassCastException) {
-                                context.logger.error(
-                                    "Type mismatch in document ID during DELETE recovery: " +
-                                        "expected type K, got ${id::class.simpleName}"
-                                )
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    context.logger.error("Cannot recover from lost event of type: ${change.operationType}")
-                }
-            }
+            processEventCore(change, isRecoveryMode = true)
         } catch (e: Exception) {
-            context.logger.error(e, "Failed to recover from lost event - cache consistency may be compromised")
+            context.logger.error(
+                e,
+                "Failed to recover from lost event - cache consistency may be compromised"
+            )
         }
     }
 
@@ -266,46 +351,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      */
     private suspend fun processChangeEventSafely(change: ChangeStreamDocument<D>) {
         try {
-            when (change.operationType) {
-                OperationType.INSERT, OperationType.REPLACE, OperationType.UPDATE -> {
-                    val fullDoc = change.fullDocument
-                    if (fullDoc != null) {
-                        context.eventHandler.onDocumentChanged(fullDoc, mapOperationType(change.operationType!!))
-                        context.logger.debug("Processed ${change.operationType} for document: ${fullDoc.key}")
-                    } else {
-                        context.logger.warn(
-                            "No fullDocument for ${change.operationType} operation"
-                        )
-                    }
-                }
-                OperationType.DELETE -> {
-                    val documentKey = change.documentKey
-                    if (documentKey != null) {
-                        val id = extractIdFromDocumentKey(documentKey)
-                        if (id != null) {
-                            try {
-                                @Suppress("UNCHECKED_CAST")
-                                context.eventHandler.onDocumentDeleted(id as K)
-                                context.logger.debug("Processed DELETE for document ID: $id")
-                            } catch (_: ClassCastException) {
-                                context.logger.error(
-                                    "Type mismatch in document ID during DELETE processing: " +
-                                        "expected type K, got ${id::class.simpleName}"
-                                )
-                            }
-                        } else {
-                            context.logger.warn(
-                                "Could not extract ID from delete operation"
-                            )
-                        }
-                    }
-                }
-                else -> {
-                    context.logger.debug(
-                        "Ignored change stream operation: ${change.operationType}"
-                    )
-                }
-            }
+            processEventCore(change, isRecoveryMode = false)
         } catch (e: Exception) {
             context.logger.error(e, "Error processing change event")
             // Don't rethrow - we want to continue processing other events
@@ -325,7 +371,9 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             OperationType.RENAME -> ChangeOperationType.RENAME
             OperationType.DROP_DATABASE -> ChangeOperationType.DROP_DATABASE
             OperationType.INVALIDATE -> ChangeOperationType.INVALIDATE
-            else -> {
+            OperationType.OTHER -> {
+                // OTHER is used for mongodb operations that this driver does not recognize
+                //   Must be resolved by upgrading the driver to a newer version
                 context.logger.warn("Unknown MongoDB operation type: $mongoOperationType, mapping to UNKNOWN")
                 ChangeOperationType.UNKNOWN
             }

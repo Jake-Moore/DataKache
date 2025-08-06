@@ -104,6 +104,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
      */
     @Suppress("KotlinConstantConditions")
     fun configureChangeStream(): Flow<ChangeStreamDocument<D>> {
+        // NEVER USE $changeStreamSplitLargeEvent IN THE PIPELINE CONFIGURATION!
         val watchBuilder = context.collection.watch(pipeline = emptyList<BsonDocument>()).apply {
             try {
                 // Always enable full document retrieval for UPDATE operations (improves cache accuracy)

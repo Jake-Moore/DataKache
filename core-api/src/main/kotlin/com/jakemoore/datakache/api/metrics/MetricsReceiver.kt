@@ -1,5 +1,6 @@
 package com.jakemoore.datakache.api.metrics
 
+import com.jakemoore.datakache.api.metrics.receiver.ChangeStreamReceiver
 import com.jakemoore.datakache.api.metrics.receiver.DatabaseReceiver
 import com.jakemoore.datakache.api.metrics.receiver.DocCacheReceiver
 import com.jakemoore.datakache.api.metrics.receiver.PlayerDocCacheReceiver
@@ -9,4 +10,4 @@ import com.jakemoore.datakache.api.metrics.receiver.PlayerDocCacheReceiver
  *
  * If we wish for a more robust and flexible metrics class, see [MetricsReceiverPartial].
  */
-interface MetricsReceiver : DatabaseReceiver, DocCacheReceiver, PlayerDocCacheReceiver
+interface MetricsReceiver : DatabaseReceiver, DocCacheReceiver, PlayerDocCacheReceiver, ChangeStreamReceiver
