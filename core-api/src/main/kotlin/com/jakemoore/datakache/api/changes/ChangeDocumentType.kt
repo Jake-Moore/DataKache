@@ -1,7 +1,5 @@
 package com.jakemoore.datakache.api.changes
 
-import kotlin.jvm.Throws
-
 /**
  * Database-agnostic operation types for change streams.
  *

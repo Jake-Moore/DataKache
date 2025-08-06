@@ -3,8 +3,10 @@ package com.jakemoore.datakache.api.cache
 import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.doc.Doc.Status
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
@@ -27,6 +29,29 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     fun getKSerializer(): KSerializer<D>
     fun getKeyKProperty(): KProperty<K>
     fun getVersionKProperty(): KProperty<Long>
+
+    // ------------------------------------------------------------ //
+    //                          API Methods                         //
+    // ------------------------------------------------------------ //
+    /**
+     * Returns the status of a document based on its version and the current state of the cache.
+     * Possible Status Values:
+     * - [Status.FRESH]: Cache contains the exact same document and version. Data is up-to-date.
+     * - [Status.STALE]: Cache contains a different version of the document. Data is outdated.
+     * - [Status.DELETED]: Cache does not contain the document at all. Data is considered deleted.
+     */
+    fun getStatus(key: K, version: Long): Status
+
+    /**
+     * Returns the status of a document based on its version and the current state of the cache.
+     * Possible Status Values:
+     * - [Status.FRESH]: Cache contains the exact same document and version. Data is up-to-date.
+     * - [Status.STALE]: Cache contains a different version of the document. Data is outdated.
+     * - [Status.DELETED]: Cache does not contain the document at all. Data is considered deleted.
+     */
+    fun getStatus(doc: D): Status {
+        return getStatus(doc.key, doc.version)
+    }
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -70,7 +95,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
         // While DataKache intends to keep all documents in cache, we are already in a suspend context
         //  so I believe it is acceptable to perform a **database** read here instead of a cache check.
         // Our result will be more certain, which is necessary since a miss will try to create the document.
-        //  and this helps minimize the chance of a DuplicateKeyException.
+        //  and this helps minimize the chance of a DuplicateDocumentKeyException.
         return when (val result = readFromDatabase(key)) {
             is Success, is Failure -> {
                 // If we found the document, return it
@@ -301,6 +326,48 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     fun getKeyNamespace(key: K): String {
         return "${registration.databaseName}.$cacheName@${keyToString(key)}"
     }
+
+    // ------------------------------------------------------------ //
+    //                         Unique Indexes                       //
+    // ------------------------------------------------------------ //
+    /**
+     * Register a custom index for this cache.
+     *
+     * This index uses one of your custom data properties as the backing field.
+     *
+     * This index will have uniqueness constraints enforced, similar to a superkey.
+     *
+     * @return A [DefiniteResult] indicating success or failure of the registration.
+     */
+    suspend fun <T> registerUniqueIndex(
+        index: DocUniqueIndex<K, D, T>,
+    ): DefiniteResult<Unit>
+
+    /**
+     * Attempts to read a document from the cache by a unique index. (ONLY checks cache)
+     *
+     * @param index The unique index previously registered on this cache.
+     * @param value The value in the index to search for.
+     *
+     * @return The [OptionalResult] containing the document if found, or empty if it does not.
+     */
+    fun <T> readByUniqueIndex(
+        index: DocUniqueIndex<K, D, T>,
+        value: T,
+    ): OptionalResult<D>
+
+    /**
+     * Attempts to read a document from the **database** by a unique index. (ONLY checks database)
+     *
+     * @param index The unique index previously registered on this cache.
+     * @param value The value in the index to search for.
+     *
+     * @return The [OptionalResult] containing the document if found, or empty if it does not.
+     */
+    suspend fun <T> readByUniqueIndexFromDatabase(
+        index: DocUniqueIndex<K, D, T>,
+        value: T,
+    ): OptionalResult<D>
 
     // ------------------------------------------------------------ //
     //                     Internal Cache Methods                   //

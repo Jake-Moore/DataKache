@@ -6,18 +6,22 @@ import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
+import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.DatabaseService
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.mongodb.ConnectionString
-import com.mongodb.DuplicateKeyException
 import com.mongodb.MongoClientSettings
 import com.mongodb.MongoException
 import com.mongodb.MongoTimeoutException
+import com.mongodb.MongoWriteException
 import com.mongodb.WriteConcern
 import com.mongodb.client.model.Filters
+import com.mongodb.client.model.IndexOptions
 import com.mongodb.client.model.Projections
 import com.mongodb.client.model.ReplaceOptions
 import com.mongodb.kotlin.client.coroutine.MongoClient
@@ -200,9 +204,9 @@ internal class MongoDatabaseService : DatabaseService() {
     }
 
     // ------------------------------------------------------------ //
-    //                         DatabaseService                      //
+    //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
-    @Throws(DuplicateKeyException::class)
+    @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
     override suspend fun <K : Any, D : Doc<K, D>> insertInternal(
         docCache: DocCache<K, D>,
         doc: D,
@@ -233,13 +237,36 @@ internal class MongoDatabaseService : DatabaseService() {
                 sessionClosed = true
 
                 docCache.cacheInternal(doc)
-            } catch (e: DuplicateKeyException) {
-                // TODO validate this is the proper way of catching this and it isn't nested in another exception
+            } catch (e: MongoWriteException) {
                 if (!sessionClosed && session.hasActiveTransaction()) {
                     session.abortTransaction()
                     sessionClosed = true
                 }
-                // Promote to caller (no additional logging needed)
+
+                // Transform certain MongoWrite exceptions into standard DataKache exceptions
+                if (e.error.code == DUPLICATE_KEY_VIOLATION_CODE) {
+                    val errorMessage = e.message ?: ""
+                    when {
+                        errorMessage.contains("index: _id") -> {
+                            // Primary key violation (duplicate _id)
+                            throw DuplicateDocumentKeyException(
+                                docCache = docCache,
+                                fullMessage = errorMessage,
+                                operation = "insert",
+                            )
+                        }
+                        errorMessage.contains("index:") -> {
+                            // Unique index violation (duplicate value in a unique index)
+                            throw DuplicateUniqueIndexException(
+                                docCache = docCache,
+                                fullMessage = errorMessage,
+                                operation = "insert",
+                            )
+                        }
+                    }
+                }
+
+                // Any Other WriteException -> Promote to caller (no additional logging needed)
                 throw e
             } finally {
                 if (!sessionClosed && session.hasActiveTransaction()) {
@@ -404,20 +431,7 @@ internal class MongoDatabaseService : DatabaseService() {
             getRawCollection(docCache)
                 .find()
                 .projection(Projections.include(keyFieldName))
-                .mapNotNull {
-                    val field = it.get(keyFieldName)
-                    when (field) {
-                        is String -> docCache.keyFromString(field)
-                        is ObjectId -> docCache.keyFromString(field.toHexString())
-                        else -> {
-                            docCache.getLoggerInternal().warning(
-                                "[#readKeys] Unexpected key type for DocCache '${docCache.cacheName}': " +
-                                    "Expected String or ObjectId, got ${field?.javaClass?.simpleName ?: "null"}"
-                            )
-                            null
-                        }
-                    }
-                }
+                .mapNotNull { getKeyByRawDocument(it, keyFieldName, docCache) }
         } catch (me: MongoException) {
             docCache.getLoggerInternal().info(
                 throwable = me,
@@ -433,6 +447,7 @@ internal class MongoDatabaseService : DatabaseService() {
         }
     }
 
+    @Throws(DocumentNotFoundException::class)
     override suspend fun <K : Any, D : Doc<K, D>> replaceInternal(
         docCache: DocCache<K, D>,
         key: K,
@@ -456,9 +471,10 @@ internal class MongoDatabaseService : DatabaseService() {
 
             // Fail State - No Document Replaced
             if (result.matchedCount == 0L) {
-                throw NoSuchElementException(
-                    "No document found with key '$k1' in DocCache '${docCache.cacheName}'. " +
-                        "Ensure the document exists before replacing."
+                throw DocumentNotFoundException(
+                    key = key,
+                    docCache = docCache,
+                    operation = "replace",
                 )
             }
         } catch (me: MongoException) {
@@ -476,6 +492,74 @@ internal class MongoDatabaseService : DatabaseService() {
         }
     }
 
+    // ------------------------------------------------------------ //
+    //                         Unique Indexes                       //
+    // ------------------------------------------------------------ //
+    override suspend fun <K : Any, D : Doc<K, D>, T> registerUniqueIndexInternal(
+        docCache: DocCache<K, D>,
+        index: DocUniqueIndex<K, D, T>
+    ) = withContext(Dispatchers.IO) {
+        try {
+            // Create the new index (as unique)
+            getMongoCollection(docCache).createIndex(
+                Document(index.fieldName, 1),
+                IndexOptions().unique(true)
+            )
+            return@withContext
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().info(
+                throwable = me,
+                msg = "MongoException on registerUniqueIndex (${docCache.cacheName})"
+            )
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().info(
+                throwable = e,
+                msg = "Exception on registerUniqueIndex (${docCache.cacheName})"
+            )
+            throw e
+        }
+    }
+
+    override suspend fun <K : Any, D : Doc<K, D>, T> readByUniqueIndexInternal(
+        docCache: DocCache<K, D>,
+        index: DocUniqueIndex<K, D, T>,
+        value: T
+    ): D? = withContext(Dispatchers.IO) {
+        try {
+            val indexFilter = Filters.eq(index.fieldName, value)
+            val doc: D = getMongoCollection(docCache)
+                .find(indexFilter)
+                .firstOrNull() ?: return@withContext null
+
+            val v2 = index.extractValue(doc)
+            if (!index.equals(value, v2)) {
+                warn(
+                    "Index mismatch! " +
+                        "The value '$value' does not match the index value '$v2' " +
+                        "for document with key '${doc.key}' in DocCache '${docCache.cacheName}'."
+                )
+                return@withContext null
+            }
+            return@withContext doc
+        } catch (me: MongoException) {
+            docCache.getLoggerInternal().info(
+                throwable = me,
+                msg = "MongoException on readByUniqueIndex (${docCache.cacheName})"
+            )
+            throw me
+        } catch (e: Exception) {
+            docCache.getLoggerInternal().info(
+                throwable = e,
+                msg = "Exception on readByUniqueIndex (${docCache.cacheName})"
+            )
+            throw e
+        }
+    }
+
+    // ------------------------------------------------------------ //
+    //                            MISC API                          //
+    // ------------------------------------------------------------ //
     override fun isDatabaseReadyForWrites(): Boolean {
         // Must have a successful first connection from the Listener
         //  AND must be currently connected to MongoDB
@@ -565,5 +649,31 @@ internal class MongoDatabaseService : DatabaseService() {
             eventHandler = eventHandler,
             logger = this
         )
+    }
+
+    // ------------------------------------------------------------ //
+    //                         Helper Methods                       //
+    // ------------------------------------------------------------ //
+    private fun <D : Doc<K, D>, K : Any> getKeyByRawDocument(
+        document: Document,
+        keyFieldName: String,
+        docCache: DocCache<K, D>
+    ): K? {
+        val field = document.get(keyFieldName)
+        return when (field) {
+            is String -> docCache.keyFromString(field)
+            is ObjectId -> docCache.keyFromString(field.toHexString())
+            else -> {
+                docCache.getLoggerInternal().warning(
+                    "[#readKeys] Unexpected key type for DocCache '${docCache.cacheName}': " +
+                        "Expected String or ObjectId, got ${field?.javaClass?.simpleName ?: "null"}"
+                )
+                null
+            }
+        }
+    }
+
+    companion object {
+        private const val DUPLICATE_KEY_VIOLATION_CODE = 11000
     }
 }

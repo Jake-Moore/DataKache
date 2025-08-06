@@ -1,6 +1,8 @@
 package com.jakemoore.datakache.api.metrics
 
 import com.jakemoore.datakache.api.DataKacheClient
+import com.jakemoore.datakache.api.metrics.DataKacheMetrics.registerReceiver
+import com.jakemoore.datakache.api.metrics.DataKacheMetrics.registerReceiverByID
 import org.jetbrains.annotations.ApiStatus
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap

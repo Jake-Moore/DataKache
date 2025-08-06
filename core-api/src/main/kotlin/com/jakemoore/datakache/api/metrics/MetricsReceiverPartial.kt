@@ -72,6 +72,8 @@ open class MetricsReceiverPartial : MetricsReceiver {
 
     override fun onGenericDocCreateDuplicateFail() {}
 
+    override fun onGenericDocCreateDuplicateFailIndex() {}
+
     override fun onDocReadFail() {}
 
     override fun onDocDeleteFail() {}
@@ -89,6 +91,10 @@ open class MetricsReceiverPartial : MetricsReceiver {
     override fun onPlayerDocCreate() {}
 
     override fun onPlayerDocClearFail() {}
+
+    override fun onPlayerDocCreateDuplicateFail() {}
+
+    override fun onPlayerDocCreateDuplicateFailIndex() {}
 
     override fun onPlayerDocCreateFail() {}
 
@@ -109,4 +115,16 @@ open class MetricsReceiverPartial : MetricsReceiver {
     override fun onChangeStreamInvalidate(cacheName: String) {}
 
     override fun onChangeStreamUnknown(cacheName: String) {}
+
+    override fun onDatabaseReadDocByUniqueIndex() {}
+
+    override fun onCacheReadDocByUniqueIndex() {}
+
+    override fun onRegisterUniqueIndex() {}
+
+    override fun onDatabaseReadDocByUniqueIndexFail() {}
+
+    override fun onCacheReadDocByUniqueIndexFail() {}
+
+    override fun onRegisterUniqueIndexFail() {}
 }

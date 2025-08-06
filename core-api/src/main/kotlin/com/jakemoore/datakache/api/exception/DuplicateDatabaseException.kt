@@ -8,7 +8,7 @@ import com.jakemoore.datakache.api.registration.DatabaseRegistration
  * @param client The new client attempting to register the same database.
  */
 @Suppress("unused")
-class DuplicateDatabaseException(registration: DatabaseRegistration, client: DataKacheClient) : Exception(
+class DuplicateDatabaseException(registration: DatabaseRegistration, client: DataKacheClient) : DataKacheException(
     "The database named '${registration.databaseName}' could not be registered by plugin " +
         "'${client.name}' because it has already been registered by plugin " +
         "'${registration.parentClient.name}'."

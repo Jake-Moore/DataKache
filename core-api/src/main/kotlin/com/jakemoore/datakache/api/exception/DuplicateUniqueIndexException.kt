@@ -4,10 +4,8 @@ package com.jakemoore.datakache.api.exception
 
 import com.jakemoore.datakache.api.cache.DocCache
 
-class DocumentNotFoundException(
-    val key: Any,
+class DuplicateUniqueIndexException(
     val docCache: DocCache<*, *>,
+    val fullMessage: String,
     val operation: String? = null,
-) : DataKacheException(
-    "No document found with key '$key' in DocCache '${docCache.cacheName}'."
-)
+) : DataKacheException("Duplicate Unique Index Exception: Operation Failed.")

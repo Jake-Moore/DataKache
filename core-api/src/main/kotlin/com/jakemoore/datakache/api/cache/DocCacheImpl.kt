@@ -5,6 +5,9 @@ import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
+import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.metrics.MetricsReceiver
@@ -13,16 +16,18 @@ import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
+import com.jakemoore.datakache.api.result.handler.ReadUniqueIndexResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbHasKeyResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadAllResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadKeysResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbReadUniqueIndexResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbRegisterUniqueIndexResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbSizeResultHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
-import com.mongodb.DuplicateKeyException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -150,6 +155,20 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     protected abstract suspend fun shutdownSuper(): Boolean
 
     // ------------------------------------------------------------ //
+    //                          API Methods                         //
+    // ------------------------------------------------------------ //
+    override fun getStatus(key: K, version: Long): Doc.Status {
+        val cachedDoc: D? = cacheMap[key]
+        return if (cachedDoc == null) {
+            Doc.Status.DELETED
+        } else if (cachedDoc.version == version) {
+            Doc.Status.FRESH
+        } else {
+            Doc.Status.STALE
+        }
+    }
+
+    // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
     protected val cacheMap: MutableMap<K, D> = ConcurrentHashMap()
@@ -244,6 +263,34 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     }
 
     // ------------------------------------------------------------ //
+    //                         Unique Indexes                       //
+    // ------------------------------------------------------------ //
+    override suspend fun <T> registerUniqueIndex(
+        index: DocUniqueIndex<K, D, T>,
+    ): DefiniteResult<Unit> {
+        getLoggerInternal().debug("Registering unique index: ${index.fieldName} for cache: $cacheName")
+        return DbRegisterUniqueIndexResultHandler.wrap {
+            DataKache.storageMode.databaseService.registerUniqueIndex(this, index)
+        }
+    }
+    override fun <T> readByUniqueIndex(index: DocUniqueIndex<K, D, T>, value: T): OptionalResult<D> {
+        return ReadUniqueIndexResultHandler.wrap {
+            // Read from cache trying to find the first document that matches the unique index value
+            return@wrap cacheMap.values.firstOrNull { doc ->
+                index.equals(index.extractValue(doc), value)
+            }
+        }
+    }
+    override suspend fun <T> readByUniqueIndexFromDatabase(
+        index: DocUniqueIndex<K, D, T>,
+        value: T
+    ): OptionalResult<D> {
+        return DbReadUniqueIndexResultHandler.wrap {
+            DataKache.storageMode.databaseService.readByUniqueIndex(this, index, value)
+        }
+    }
+
+    // ------------------------------------------------------------ //
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
@@ -277,7 +324,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * @return The same [doc] for chaining.
      */
     @ApiStatus.Internal
-    @Throws(DuplicateKeyException::class)
+    @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
     suspend fun insertDocumentInternal(doc: D): D {
         // Insert the document in the database
         DataKache.storageMode.databaseService.insert(this, doc)
@@ -290,7 +337,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * @return The same [update] document for chaining.
      */
     @ApiStatus.Internal
-    @Throws(NoSuchElementException::class)
+    @Throws(DocumentNotFoundException::class)
     suspend fun replaceDocumentInternal(key: K, update: D): D {
         // Insert the document in the database
         DataKache.storageMode.databaseService.replace(this, key, update)

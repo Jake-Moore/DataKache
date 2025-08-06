@@ -23,6 +23,12 @@ import org.jetbrains.annotations.ApiStatus
  */
 @Suppress("unused")
 interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
+    enum class Status {
+        FRESH, // The document version matches the cache version. (assumed to be up-to-date)
+        STALE, // The document version does not match the cache version.
+        DELETED, // The document is not present in the cache. (assumed to be deleted)
+    }
+
     // ------------------------------------------------------------ //
     //                         Properties                           //
     // ------------------------------------------------------------ //
@@ -45,11 +51,6 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
      */
     val version: Long
 
-    // TODO - add a status field that checks the cache and returns varying statuses like:
-    // - STALE: The document version does not match the cache version.
-    // - FRESH: The document version matches the cache version.
-    // - DELETED: The document has been deleted from the cache.
-
     // ------------------------------------------------------------ //
     //                          API Methods                         //
     // ------------------------------------------------------------ //
@@ -57,6 +58,17 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
      * @return The [DocCache] associated with this [Doc]. (This doc can be found in this cache, unless deleted)
      */
     fun getDocCache(): DocCache<K, D>
+
+    /**
+     * Returns the status of this document based on its version and the current state of the cache.
+     * Possible Status Values:
+     * - [Status.FRESH]: Cache contains the exact same document and version. Data is up-to-date.
+     * - [Status.STALE]: Cache contains a different version of the document. Data is outdated.
+     * - [Status.DELETED]: Cache does not contain the document at all. Data is considered deleted.
+     */
+    fun getStatus(): Status {
+        return this.getDocCache().getStatus(this.key, this.version)
+    }
 
     // ------------------------------------------------------------ //
     //                       Data Class Helpers                     //

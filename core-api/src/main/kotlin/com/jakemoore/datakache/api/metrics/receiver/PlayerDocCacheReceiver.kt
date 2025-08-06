@@ -13,5 +13,7 @@ interface PlayerDocCacheReceiver {
 
     // Fail States
     fun onPlayerDocClearFail()
+    fun onPlayerDocCreateDuplicateFail()
+    fun onPlayerDocCreateDuplicateFailIndex()
     fun onPlayerDocCreateFail()
 }

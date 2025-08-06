@@ -4,6 +4,8 @@ package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.api.doc.PlayerDoc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
+import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.logging.PluginCacheLogger
@@ -60,10 +62,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     //                         Service Methods                      //
     // ------------------------------------------------------------ //
     override suspend fun shutdownSuper(): Boolean {
-        Bukkit.getOnlinePlayers().forEach { p: Player ->
-            // TODO need to ensure that every player is quit from the cache on shutdown
-            // PlayerDocListener.quit(p, this)
-        }
+        // Nothing to do here, no special shutdown logic for GenericDocCache
         return true
     }
 
@@ -209,12 +208,12 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
             val defaultDoc = constructNewPlayerDoc(key, username)
 
             // Replace the current document with the new one.
-            // If a NoSuchElementException is thrown, it means the document was not found.
+            // If a DocumentNotFoundException is thrown, it means the document was not found.
             //  which in our case is acceptable, it just means the caller didn't realize the document was not present.
             try {
                 this.replaceDocumentInternal(key, defaultDoc)
                 return@wrap true
-            } catch (_: NoSuchElementException) {
+            } catch (_: DocumentNotFoundException) {
                 return@wrap false
             }
         }
@@ -248,6 +247,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     //                        Internal Methods                      //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
+    @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
     private suspend fun createNewPlayerDoc(
         uuid: UUID,
         username: String? = null,

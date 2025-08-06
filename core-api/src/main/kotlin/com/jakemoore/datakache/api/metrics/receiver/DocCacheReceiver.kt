@@ -14,6 +14,7 @@ interface DocCacheReceiver {
     // Fail States
     fun onGenericDocCreateFail()
     fun onGenericDocCreateDuplicateFail()
+    fun onGenericDocCreateDuplicateFailIndex()
     fun onDocReadFail()
     fun onDocDeleteFail()
     fun onDocUpdateFail()
