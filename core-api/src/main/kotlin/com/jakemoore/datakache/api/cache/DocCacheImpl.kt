@@ -5,6 +5,8 @@ import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.metrics.DataKacheMetrics
+import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
@@ -175,7 +177,12 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     @Throws(DocumentNotFoundException::class)
     private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
-        val doc = cacheMap[key] ?: throw DocumentNotFoundException(key, this)
+        val doc: D = cacheMap[key] ?: run {
+            // METRICS
+            DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateDocNotFoundFail)
+
+            throw DocumentNotFoundException(key, this)
+        }
         return DataKache.storageMode.databaseService.update(this, doc, updateFunction)
     }
 

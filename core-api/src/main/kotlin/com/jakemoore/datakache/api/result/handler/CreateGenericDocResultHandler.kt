@@ -1,6 +1,8 @@
 package com.jakemoore.datakache.api.result.handler
 
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.metrics.DataKacheMetrics
+import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
@@ -17,9 +19,15 @@ internal object CreateGenericDocResultHandler {
         work: suspend () -> D
     ): DefiniteResult<D> {
         try {
+            // METRICS
+            DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onGenericDocCreate)
+
             val value = work()
             return Success(requireNotNull(value))
         } catch (d: DuplicateKeyException) {
+            // METRICS
+            DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onGenericDocCreateDuplicateFail)
+
             // We tried to create a document, but a document with this key already exists.
             return Failure(
                 ResultExceptionWrapper(
@@ -28,6 +36,9 @@ internal object CreateGenericDocResultHandler {
                 )
             )
         } catch (e: Exception) {
+            // METRICS
+            DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onGenericDocCreateFail)
+
             return Failure(
                 ResultExceptionWrapper(
                     "Create GenericDoc operation failed.",

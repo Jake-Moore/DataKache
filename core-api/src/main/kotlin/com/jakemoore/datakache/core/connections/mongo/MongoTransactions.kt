@@ -5,6 +5,8 @@ import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.metrics.DataKacheMetrics
+import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.core.connections.TransactionResult
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.jakemoore.datakache.util.DataKacheFileLogger
@@ -46,6 +48,8 @@ object MongoTransactions : CoroutineScope {
         doc: D,
         updateFunction: (D) -> D
     ): D {
+        val startMS = System.currentTimeMillis()
+
         // retryExecutionHelper may throw an exception, which is handled by the caller
         val updatedDoc: D = recursiveRetryUpdate(
             client,
@@ -55,6 +59,10 @@ object MongoTransactions : CoroutineScope {
             updateFunction,
             0
         )
+
+        val elapsedMS = System.currentTimeMillis() - startMS
+        // METRICS
+        DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionSuccess(elapsedMS) }
 
         // Update cache
         docCache.cacheInternal(updatedDoc)
@@ -73,6 +81,9 @@ object MongoTransactions : CoroutineScope {
     ): D {
         // Check max attempts (recursive base case)
         if (attemptNum >= MAX_TRANSACTION_ATTEMPTS) {
+            // METRICS
+            DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateTransactionLimitReached)
+
             throw TransactionRetriesExceededException(
                 "Failed to execute update after $MAX_TRANSACTION_ATTEMPTS attempts."
             )
@@ -83,8 +94,13 @@ object MongoTransactions : CoroutineScope {
             delay(calculateBackoffMS(attemptNum))
         }
 
+        // METRICS
+        val startMS = System.currentTimeMillis()
+        DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateTransactionAttemptStart)
+
         // Use a transaction for the update operation to ensure atomicity and consistency
         client.startSession().use { session ->
+
             session.startTransaction()
             var sessionResolved = false
             try {
@@ -95,6 +111,9 @@ object MongoTransactions : CoroutineScope {
                 if (result.databaseDoc != null) {
                     sessionResolved = true
                     session.abortTransaction()
+
+                    // METRICS
+                    logAttemptTimeMetric(startMS)
 
                     // Retry with the doc from database (hopefully optimistic versioning works this time)
                     return recursiveRetryUpdate(
@@ -109,6 +128,12 @@ object MongoTransactions : CoroutineScope {
 
                 session.commitTransaction()
                 sessionResolved = true
+
+                // METRICS
+                logAttemptTimeMetric(startMS)
+                DataKacheMetrics.receivers.forEach {
+                    it.onDatabaseUpdateTransactionAttemptsRequired(attemptNum + 1)
+                }
 
                 return requireNotNull(result.doc)
             } catch (mE: MongoCommandException) {
@@ -246,5 +271,10 @@ object MongoTransactions : CoroutineScope {
                 DataKache.logger.info(msg)
             }
         }
+    }
+
+    private fun logAttemptTimeMetric(startMS: Long) {
+        val elapsedMS = System.currentTimeMillis() - startMS
+        DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionAttemptTime(elapsedMS) }
     }
 }

@@ -37,7 +37,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-internal class MongoDatabaseService : DatabaseService {
+internal class MongoDatabaseService : DatabaseService() {
 
     // ------------------------------------------------------------ //
     //                     Mongo Service Properties                 //
@@ -203,7 +203,7 @@ internal class MongoDatabaseService : DatabaseService {
     //                         DatabaseService                      //
     // ------------------------------------------------------------ //
     @Throws(DuplicateKeyException::class)
-    override suspend fun <K : Any, D : Doc<K, D>> insert(
+    override suspend fun <K : Any, D : Doc<K, D>> insertInternal(
         docCache: DocCache<K, D>,
         doc: D,
     ) = withContext(Dispatchers.IO) {
@@ -255,7 +255,7 @@ internal class MongoDatabaseService : DatabaseService {
     }
 
     @Throws(DocumentNotFoundException::class)
-    override suspend fun <K : Any, D : Doc<K, D>> update(
+    override suspend fun <K : Any, D : Doc<K, D>> updateInternal(
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
@@ -274,7 +274,7 @@ internal class MongoDatabaseService : DatabaseService {
         )
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> read(
+    override suspend fun <K : Any, D : Doc<K, D>> readInternal(
         docCache: DocCache<K, D>,
         key: K,
     ): D? = withContext(Dispatchers.IO) {
@@ -299,7 +299,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> delete(
+    override suspend fun <K : Any, D : Doc<K, D>> deleteInternal(
         docCache: DocCache<K, D>,
         key: K,
     ): Boolean = withContext(Dispatchers.IO) {
@@ -325,13 +325,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
-    override fun isDatabaseReadyForWrites(): Boolean {
-        // Must have a successful first connection from the Listener
-        //  AND must be currently connected to MongoDB
-        return mongoFirstConnect && mongoConnected
-    }
-
-    override suspend fun <K : Any, D : Doc<K, D>> readAll(
+    override suspend fun <K : Any, D : Doc<K, D>> readAllInternal(
         docCache: DocCache<K, D>,
     ): Flow<D> = withContext(Dispatchers.IO) {
         getMongoCollection(docCache).find().map { doc: D ->
@@ -343,13 +337,13 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> size(
+    override suspend fun <K : Any, D : Doc<K, D>> sizeInternal(
         docCache: DocCache<K, D>,
     ): Long = withContext(Dispatchers.IO) {
         getMongoCollection(docCache).countDocuments()
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> hasKey(
+    override suspend fun <K : Any, D : Doc<K, D>> hasKeyInternal(
         docCache: DocCache<K, D>,
         key: K,
     ): Boolean = withContext(Dispatchers.IO) {
@@ -378,7 +372,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> clear(
+    override suspend fun <K : Any, D : Doc<K, D>> clearInternal(
         docCache: DocCache<K, D>,
     ): Long = withContext(Dispatchers.IO) {
         try {
@@ -401,7 +395,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> readKeys(
+    override suspend fun <K : Any, D : Doc<K, D>> readKeysInternal(
         docCache: DocCache<K, D>,
     ): Flow<K> = withContext(Dispatchers.IO) {
         try {
@@ -439,7 +433,7 @@ internal class MongoDatabaseService : DatabaseService {
         }
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> replace(
+    override suspend fun <K : Any, D : Doc<K, D>> replaceInternal(
         docCache: DocCache<K, D>,
         key: K,
         update: D,
@@ -480,6 +474,12 @@ internal class MongoDatabaseService : DatabaseService {
             )
             throw e
         }
+    }
+
+    override fun isDatabaseReadyForWrites(): Boolean {
+        // Must have a successful first connection from the Listener
+        //  AND must be currently connected to MongoDB
+        return mongoFirstConnect && mongoConnected
     }
 
     // ------------------------------------------------------------ //
