@@ -219,6 +219,18 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      */
     fun getCacheSize(): Int
 
+    /**
+     * Clears ALL documents from the cache AND **database**.
+     *
+     * DATA IS NOT RECOVERABLE AFTER THIS OPERATION.
+     *
+     * This method is intended for use in testing or when you want to completely reset the cache and database.
+     *
+     * @return A [DefiniteResult] indicating success or failure of the operation.
+     * (long value indicates number of documents deleted)
+     */
+    suspend fun clearAllPermanently(): DefiniteResult<Long>
+
     // ------------------------------------------------------------ //
     //                     CRUD Database Methods                    //
     // ------------------------------------------------------------ //

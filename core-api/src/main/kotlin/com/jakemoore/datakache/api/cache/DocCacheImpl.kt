@@ -26,6 +26,7 @@ import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadUniqueIndexResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbClearResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbHasKeyResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadAllResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadKeysResultHandler
@@ -236,6 +237,21 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     override fun getCacheSize(): Int {
         return cacheMap.size
+    }
+
+    override suspend fun clearAllPermanently(): DefiniteResult<Long> {
+        return DbClearResultHandler.wrap {
+            // Clear the database collection
+            val cleared = DataKache.storageMode.databaseService.clear(this)
+
+            // Clear the in-memory cache
+            cacheMap.clear()
+
+            getLoggerInternal().info(
+                "Cleared all documents from cache: $cacheName ($cleared documents)"
+            )
+            return@wrap cleared
+        }
     }
 
     // ------------------------------------------------------------ //

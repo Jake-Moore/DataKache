@@ -1,17 +1,21 @@
 package com.jakemoore.datakache.util.doc
 
-import com.jakemoore.datakache.api.doc.GenericDoc
+import com.jakemoore.datakache.api.doc.PlayerDoc
+import com.jakemoore.datakache.api.serialization.java.UUIDSerializer
 import com.jakemoore.datakache.util.doc.data.MyData
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 @Suppress("PROVIDED_RUNTIME_TOO_LOW", "MemberVisibilityCanBePrivate")
 @Serializable
-data class TestGenericDoc(
+data class TestPlayerDoc(
     // Parent Properties
-    @SerialName("_id") override val key: String,
+    @Serializable(with = UUIDSerializer::class)
+    @SerialName("_id") override val key: UUID,
     override val version: Long,
-    // TestGenericDoc Properties
+    override val username: String?,
+    // TestPlayerDoc Properties
     val name: String? = null,
     val balance: Double = 0.0,
     @SerialName("myList")
@@ -19,9 +23,13 @@ data class TestGenericDoc(
     val customList: List<MyData> = emptyList(),
     val customSet: Set<MyData> = emptySet(),
     val customMap: Map<String, MyData> = emptyMap(),
-) : GenericDoc<TestGenericDoc>() {
+) : PlayerDoc<TestPlayerDoc>() {
 
-    override fun copyHelper(version: Long): TestGenericDoc {
+    override fun copyHelper(version: Long): TestPlayerDoc {
         return this.copy(version = version)
+    }
+
+    override fun copyHelper(username: String?): TestPlayerDoc {
+        return this.copy(username = username)
     }
 }

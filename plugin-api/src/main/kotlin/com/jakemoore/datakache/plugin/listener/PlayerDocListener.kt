@@ -49,7 +49,7 @@ object PlayerDocListener : Listener {
 
     @EventHandler(priority = EventPriority.LOW)
     fun onPreLogin(event: AsyncPlayerPreLoginEvent) {
-        val config = DataKachePlugin.context.fileConfiguration
+        val lang = DataKachePlugin.context.lang
         val username = event.name
         val uuid = event.uniqueId
 
@@ -58,13 +58,9 @@ object PlayerDocListener : Listener {
             DataKachePlugin.context.logger.warn(
                 "DatabaseService is not ready to write PlayerDocs, denying join for $username ($uuid)."
             )
-            val message = config.getString(
-                "language.joinDenied.databaseNotReady",
-                "&cConnection failed."
-            )
             event.disallow(
                 AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                Color.t(message)
+                Color.t(lang.joinDeniedDatabaseNotReady)
             )
             return
         }
@@ -72,7 +68,7 @@ object PlayerDocListener : Listener {
         val msStart = System.currentTimeMillis()
 
         // Suspend player join while PlayerDoc's are loaded or created
-        val timeoutMS = config.getInt("joinOptions.preloadPlayerDocTimeoutMS", 5_000)
+        val timeoutMS = lang.preloadPlayerDocTimeoutMS
         val success = runBlocking {
             try {
                 withTimeout(timeoutMS.milliseconds) {
@@ -81,20 +77,14 @@ object PlayerDocListener : Listener {
                 }
                 return@runBlocking true
             } catch (_: TimeoutCancellationException) {
-                val message = config.getString(
-                    "language.joinDenied.playerDocTimeout",
-                    "&cConnection failed."
-                )
+                val message = lang.joinDeniedPlayerDocTimeout
                 DataKachePlugin.context.logger.warn(
                     "PlayerDoc loading timed out for $username ($uuid) after ${timeoutMS}ms."
                 )
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, Color.t(message))
                 return@runBlocking false
             } catch (e: Exception) {
-                val message = config.getString(
-                    "language.joinDenied.playerDocException",
-                    "&cConnection failed."
-                )
+                val message = lang.joinDeniedPlayerDocException
                 DataKacheFileLogger.severe(
                     "An error occurred while loading PlayerDoc for $username ($uuid): ${e.message}",
                     e
@@ -127,10 +117,7 @@ object PlayerDocListener : Listener {
             DataKachePlugin.context.logger.warn(
                 "Player $username ($uuid) connected too early, denying join!"
             )
-            val message = DataKachePlugin.context.fileConfiguration.getString(
-                "language.joinDenied.earlyJoin",
-                "&cConnection failed."
-            )
+            val message = DataKachePlugin.context.lang.joinDeniedEarlyJoin
             event.disallow(PlayerLoginEvent.Result.KICK_OTHER, Color.t(message))
         }
 

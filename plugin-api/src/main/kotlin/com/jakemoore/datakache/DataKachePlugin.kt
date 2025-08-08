@@ -29,21 +29,26 @@ class DataKachePlugin : JavaPlugin() {
         private var controller: JavaPlugin? = null
         internal lateinit var context: DataKachePluginContext
 
-        fun enableDataKache(plugin: JavaPlugin) {
+        /**
+         * @return true if DataKache was successfully enabled, false otherwise.
+         */
+        fun enableDataKache(plugin: JavaPlugin, ctx: DataKachePluginContext? = null): Boolean {
             require(controller == null) {
                 "DataKache is already enabled! Please call disableDataKache() before enabling again."
             }
+            context = ctx ?: DataKachePluginContext(plugin)
 
             // Enable DataKache Internals
-            runBlocking {
-                context = DataKachePluginContext(plugin)
+            val success = runBlocking {
                 if (!DataKache.onEnable(context)) {
                     plugin.logger.severe("Failed to enable DataKache! Shutting down...")
                     plugin.server.pluginManager.disablePlugin(plugin)
                     Bukkit.shutdown()
-                    return@runBlocking
+                    return@runBlocking false
                 }
+                return@runBlocking true
             }
+            if (!success) return false
 
             // Register Additional Plugin Services
             plugin.getCommand("datakache").executor = DataKacheCommand()
@@ -52,21 +57,29 @@ class DataKachePlugin : JavaPlugin() {
             Bukkit.getPluginManager().registerEvents(PlayerDocListener, plugin)
 
             controller = plugin
+            return true
         }
 
-        fun disableDataKache(plugin: JavaPlugin) {
+        /**
+         * @return true if DataKache was successfully disabled, false otherwise.
+         */
+        fun disableDataKache(plugin: JavaPlugin): Boolean {
             require(controller != null) {
                 "DataKache is not enabled! Please call enableDataKache() before disabling."
             }
 
             // Disable DataKache Internals
-            runBlocking {
+            val success = runBlocking {
                 if (!DataKache.onDisable()) {
                     plugin.logger.severe("Failed to disable DataKache! Some services may not have shut down properly.")
+                    return@runBlocking false
+                } else {
+                    return@runBlocking true
                 }
             }
 
             controller = null
+            return success
         }
 
         fun getController(): JavaPlugin? {

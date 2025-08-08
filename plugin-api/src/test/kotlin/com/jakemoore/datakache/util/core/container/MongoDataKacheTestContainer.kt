@@ -1,15 +1,19 @@
 package com.jakemoore.datakache.util.core.container
 
-import com.jakemoore.datakache.DataKache
+import com.jakemoore.datakache.DataKachePlugin
 import com.jakemoore.datakache.api.DataKacheConfig
-import com.jakemoore.datakache.api.DataKacheContext
+import com.jakemoore.datakache.api.config.DataKachePluginLang
+import com.jakemoore.datakache.api.context.DataKachePluginContext
 import com.jakemoore.datakache.api.mode.StorageMode
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
+import com.jakemoore.datakache.util.TestPlugin
 import com.jakemoore.datakache.util.TestUtil
-import com.jakemoore.datakache.util.core.TestDataKacheContext
-import com.jakemoore.datakache.util.doc.TestGenericDocCache
+import com.jakemoore.datakache.util.doc.TestPlayerDocCache
+import org.mockbukkit.mockbukkit.MockBukkit
+import org.mockbukkit.mockbukkit.ServerMock
 import org.testcontainers.containers.MongoDBContainer
 import org.testcontainers.utility.DockerImageName
+import java.io.File
 
 /**
  * MongoDB-specific implementation of DataKacheTestContainer.
@@ -21,12 +25,22 @@ class MongoDataKacheTestContainer(
     private val databaseName: String = "TestDatabase"
 ) : DataKacheTestContainer {
 
+    private lateinit var mockServer: ServerMock
+    private lateinit var mockPlugin: TestPlugin
     private lateinit var config: DataKacheConfig
-    private lateinit var context: DataKacheContext
+    private lateinit var context: DataKachePluginContext
     private var registration: DataKacheRegistration? = null
-    private var cache: TestGenericDocCache? = null
+    private var cache: TestPlayerDocCache? = null
 
     override suspend fun beforeSpec() {
+        // Load the sample plugin.yml in order to register the datakache command properly
+        val resource = requireNotNull(this::class.java.classLoader.getResource("plugin.yml"))
+        val pluginYml = File(resource.toURI())
+
+        // Start the MockBukkit server
+        mockServer = MockBukkit.getOrCreateMock()
+        mockPlugin = MockBukkit.loadWith(TestPlugin::class.java, pluginYml)
+
         // Start the MongoDB container
         container.start()
 
@@ -43,10 +57,14 @@ class MongoDataKacheTestContainer(
             storageMode = StorageMode.MONGODB,
             mongoURI = container.connectionString
         )
-        context = TestDataKacheContext(this)
+        context = DataKachePluginContext(
+            plugin = mockPlugin,
+            config = config,
+            lang = DataKachePluginLang(),
+        )
 
         // Initialize DataKache
-        require(DataKache.onEnable(context)) {
+        require(DataKachePlugin.enableDataKache(mockPlugin, context)) {
             "Failed to enable DataKache with MongoDB storage mode"
         }
     }
@@ -55,7 +73,7 @@ class MongoDataKacheTestContainer(
         // Create registration and cache
         TestUtil.createRegistration(databaseName = databaseName).also {
             registration = it
-            cache = TestUtil.createTestGenericDocCache(it)
+            cache = TestUtil.createTestPlayerDocCache(mockPlugin, it)
         }
     }
 
@@ -82,16 +100,23 @@ class MongoDataKacheTestContainer(
 
     override suspend fun afterSpec() {
         // Stop DataKache
-        val disabled = DataKache.onDisable()
+        val disabled = DataKachePlugin.disableDataKache(mockPlugin)
         if (!disabled) {
             System.err.println("Warning: DataKache was already disabled or failed to disable properly")
         }
 
         // Stop container
         container.stop()
+
+        // Stop MockBukkit
+        MockBukkit.unmock()
     }
 
-    override fun getCache(): TestGenericDocCache = requireNotNull(cache)
+    override fun getCache(): TestPlayerDocCache = requireNotNull(cache)
+
+    override fun getServer(): ServerMock = mockServer
+
+    override fun getPlugin(): TestPlugin = mockPlugin
 
     override fun getRegistration(): DataKacheRegistration = requireNotNull(registration)
 

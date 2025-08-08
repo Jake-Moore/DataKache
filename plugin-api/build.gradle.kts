@@ -1,9 +1,14 @@
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
+}
+
+repositories {
+    maven("https://repo.papermc.io/repository/maven-public/")
 }
 
 // Unique module dependencies
@@ -32,6 +37,22 @@ dependencies {
 
     // Guava
     api(project.property("guava") as String) // brings org.jspecify annotations
+
+    // Testing Dependencies
+    testImplementation(project.property("kotest-runner-junit5") as String)
+    testImplementation(project.property("kotest-assertions-core") as String)
+    testImplementation(project.property("kotest-property") as String)
+    testImplementation(project.property("kotest-framework-datatest") as String)
+
+    testImplementation(project.property("testcontainers-junit-jupiter") as String)
+    testImplementation(project.property("testcontainers-mongodb") as String)
+    testImplementation(project.property("testcontainers-core") as String)
+
+    testImplementation(project.property("logback-test") as String)
+    testImplementation(project.property("kotlinx-coroutines-core") as String)
+
+    // MockBukkit
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.6")
 }
 
 tasks {
@@ -49,6 +70,19 @@ tasks {
         filesMatching("plugin.yml") {
             expand(props)
         }
+    }
+}
+
+// Configure Kotest to run with JUnit Platform
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+
+    testLogging {
+        showExceptions = true
+        showStackTraces = true
+
+        // log all event types
+        events("passed", "skipped", "failed", TestLogEvent.STANDARD_ERROR)
     }
 }
 

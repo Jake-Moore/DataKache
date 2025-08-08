@@ -18,7 +18,7 @@ class TestGenericDocCache internal constructor(
     registration: DataKacheRegistration,
 ) : GenericDocCache<TestGenericDoc>(
     registration = registration,
-    cacheName = "RandomGenericDocs",
+    cacheName = "TestGenericDocs",
     docClass = TestGenericDoc::class.java,
     instantiator = ::TestGenericDoc,
 ),
