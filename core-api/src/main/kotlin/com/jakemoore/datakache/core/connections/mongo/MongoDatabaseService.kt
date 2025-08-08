@@ -268,7 +268,7 @@ internal class MongoDatabaseService : DatabaseService() {
                                 docCache = docCache,
                                 docCache.keyToString(doc.key),
                                 fullMessage = errorMessage,
-                                operation = "insert",
+                                operation = "create",
                             )
                         }
                         errorMessage.contains("index:") -> {
@@ -276,7 +276,7 @@ internal class MongoDatabaseService : DatabaseService() {
                             throw DuplicateUniqueIndexException(
                                 docCache = docCache,
                                 fullMessage = errorMessage,
-                                operation = "insert",
+                                operation = "create",
                             )
                         }
                     }

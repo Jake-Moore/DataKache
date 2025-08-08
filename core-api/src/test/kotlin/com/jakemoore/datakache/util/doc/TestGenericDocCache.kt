@@ -23,8 +23,8 @@ class TestGenericDocCache internal constructor(
     instantiator = ::TestGenericDoc,
 ),
     DataKacheScope {
-    private val nameField: DocUniqueIndex<String, TestGenericDoc, String>
-    private val balanceField: DocUniqueIndex<String, TestGenericDoc, Double>
+    internal val nameField: DocUniqueIndex<String, TestGenericDoc, String>
+    internal val balanceField: DocUniqueIndex<String, TestGenericDoc, Double>
 
     init {
         instance = this
