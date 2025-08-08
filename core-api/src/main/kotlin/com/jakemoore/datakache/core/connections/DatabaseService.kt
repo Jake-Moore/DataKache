@@ -6,7 +6,13 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -15,7 +21,9 @@ import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.core.Service
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import com.jakemoore.datakache.core.connections.queues.UpdateQueueManager
 import kotlinx.coroutines.flow.Flow
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
@@ -31,6 +39,11 @@ internal abstract class DatabaseService : LoggerService, Service {
      * A map of server addresses (host:port) to their last ROUND-TRIP ping time in nanoseconds.
      */
     abstract val serverPingMap: Cache<String, Long>
+
+    /**
+     * Manager for per-document update queues to eliminate database-level conflicts.
+     */
+    private val updateQueueManager by lazy { UpdateQueueManager(this) }
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -69,13 +82,27 @@ internal abstract class DatabaseService : LoggerService, Service {
     /**
      * Update the given document in the database using the provided update function.
      *
-     * Requires that the document exists in the database, otherwise the following exception will be thrown:
-     * - [DocumentNotFoundException]
+     * This method now uses a per-document queue system to eliminate database-level conflicts
+     * and improve FIFO ordering of updates to the same document.
      *
-     * Additionally, if using Unique Indexes, the following exception may be thrown for violations:
-     * - [DuplicateUniqueIndexException]
+     * The following exceptions may be thrown during the update:
+     * - [DocumentNotFoundException]: if the document does not exist in the database.
+     * - [DuplicateUniqueIndexException]: if the update violates a unique index constraint.
+     * - [TransactionRetriesExceededException]: if the update exceeds the maximum number of retries.
+     * - [DocumentUpdateException]: if the update function breaks a convention or fails.
+     * - [InvalidDocCopyHelperException]: if the document copy helper is invalid.
+     * - [UpdateFunctionReturnedSameInstanceException]: if the update function does not change the document
+     * - [IllegalDocumentKeyModificationException]: if the update function modifies the document key.
+     * - [IllegalDocumentVersionModificationException]: if the update function modifies the document version.
+     * - [RejectUpdateException]: if the update is rejected by the update function.
      */
-    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     suspend fun <K : Any, D : Doc<K, D>> update(
         docCache: DocCache<K, D>,
         doc: D,
@@ -85,14 +112,32 @@ internal abstract class DatabaseService : LoggerService, Service {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdate)
 
-            return updateInternal(docCache, doc, updateFunction)
+            // Use the queue system to serialize updates to the same document
+            // This eliminates database-level conflicts and improves FIFO ordering
+            val deferred = updateQueueManager.enqueueUpdate(
+                docCache = docCache,
+                doc = doc,
+                updateFunction = updateFunction,
+                updateExecutor = ::updateInternal,
+            )
+
+            return deferred.await()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateFail)
             throw e
         }
     }
-    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
+
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     protected abstract suspend fun <K : Any, D : Doc<K, D>> updateInternal(
         docCache: DocCache<K, D>,
         doc: D,
@@ -379,4 +424,23 @@ internal abstract class DatabaseService : LoggerService, Service {
         docCache: DocCache<K, D>,
         eventHandler: ChangeEventHandler<K, D>
     ): ChangeStreamManager<K, D>
+
+    /**
+     * Override shutdown to clean up the update queue manager.
+     * Subclasses should call super.shutdown() in their implementation.
+     */
+    override suspend fun shutdown(): Boolean {
+        try {
+            updateQueueManager.shutdown()
+            return true
+        } catch (e: Exception) {
+            error(e, "Failed to shutdown UpdateQueueManager")
+            return false
+        }
+    }
+
+    /**
+     * Returns the number of active update queues for monitoring purposes.
+     */
+    fun getActiveUpdateQueuesCount(): Int = updateQueueManager.getActiveQueuesCount()
 }

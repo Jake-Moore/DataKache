@@ -46,9 +46,8 @@ class MongoDataKacheTestContainer(
         context = TestDataKacheContext(this)
 
         // Initialize DataKache
-        val enabled = DataKache.onEnable(context)
-        if (!enabled) {
-            throw IllegalStateException("Failed to enable DataKache for test container")
+        require(DataKache.onEnable(context)) {
+            "Failed to enable DataKache with MongoDB storage mode"
         }
     }
 

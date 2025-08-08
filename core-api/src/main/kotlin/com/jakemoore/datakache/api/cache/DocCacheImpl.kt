@@ -7,7 +7,13 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -193,7 +199,13 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
         // Read from the database because having a false negative cache hit is worse than waiting for the database read.
         val doc: D = this.readFromDatabase(key).getOrNull() ?: run {

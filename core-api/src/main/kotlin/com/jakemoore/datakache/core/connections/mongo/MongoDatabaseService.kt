@@ -8,7 +8,13 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.DatabaseService
@@ -96,6 +102,14 @@ internal class MongoDatabaseService : DatabaseService() {
         }
 
         this.debug("Shutting down MongoDB connection...")
+
+        // First shutdown the parent (which handles UpdateQueueManager)
+        val parentShutdownSuccess = super.shutdown()
+        if (!parentShutdownSuccess) {
+            this.error("Failed to shutdown parent DatabaseService components!")
+        }
+
+        // Then shutdown MongoDB-specific components
         keepMongoConnected = false
         if (!this.disconnectFromMongoDB()) {
             this.error("Failed to disconnect from MongoDB!")
@@ -103,7 +117,7 @@ internal class MongoDatabaseService : DatabaseService() {
         }
 
         this.running = false
-        return true
+        return parentShutdownSuccess
     }
 
     // ------------------------------------------------------------ //
@@ -283,7 +297,13 @@ internal class MongoDatabaseService : DatabaseService() {
         }
     }
 
-    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     override suspend fun <K : Any, D : Doc<K, D>> updateInternal(
         docCache: DocCache<K, D>,
         doc: D,
@@ -634,7 +654,7 @@ internal class MongoDatabaseService : DatabaseService() {
             val result = adminDatabase.runCommand(Document("hello", 1))
 
             // Extract cluster time from the result
-            val clusterTimeDoc = result.get("\$clusterTime") as? Document
+            val clusterTimeDoc = result["\$clusterTime"] as? Document
             clusterTimeDoc?.get("clusterTime") as? org.bson.BsonTimestamp
         } catch (e: Exception) {
             this.warn("Failed to get current operation time: ${e.message}")

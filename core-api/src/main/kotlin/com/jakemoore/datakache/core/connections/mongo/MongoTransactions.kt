@@ -10,6 +10,7 @@ import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
 import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.util.Random
 import kotlin.coroutines.CoroutineContext
+import kotlin.math.pow
 
 @Suppress("MemberVisibilityCanBePrivate")
 object MongoTransactions : CoroutineScope {
@@ -41,15 +43,23 @@ object MongoTransactions : CoroutineScope {
     private const val WRITE_CONFLICT_ERROR_CODE = 112 // MongoDB error code for write conflicts
 
     // Backoff values
-    private const val MIN_BACKOFF_MS: Long = 50
-    private const val MAX_BACKOFF_MS: Long = 2000
-    private const val PING_MULTIPLIER: Double = 2.0 // Base multiplier for ping time
-    private const val ATTEMPT_MULTIPLIER: Double = 1.5 // How much to increase per attempt
+    private const val MIN_BACKOFF_MS: Long = 5
+    private const val MAX_BACKOFF_MS: Long = 5000
 
     /**
      * Execute a MongoDB document update with retries and version filter (CAS logic).
+     *
+     * NOTE: This method is now primarily called through the UpdateQueue system,
+     * which eliminates most version conflicts by serializing updates to the same document.
+     * Retries here are mainly for handling network issues or MongoDB internal conflicts.
      */
-    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     suspend fun <K : Any, D : Doc<K, D>> update(
         client: MongoClient,
         collection: MongoCollection<D>,
@@ -79,7 +89,13 @@ object MongoTransactions : CoroutineScope {
     }
 
     // If no error is thrown, this method succeeded
-    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     private suspend fun <K : Any, D : Doc<K, D>> recursiveRetryUpdate(
         client: MongoClient,
         collection: MongoCollection<D>,
@@ -187,15 +203,6 @@ object MongoTransactions : CoroutineScope {
                     }
                 }
                 throw e
-            } catch (e: DocumentNotFoundException) {
-                // promote exception to caller
-                throw e
-            } catch (e: DocumentUpdateException) {
-                // promote exception to caller
-                throw e
-            } catch (e: InvalidDocCopyHelperException) {
-                // promote exception to caller
-                throw e
             } finally {
                 if (!sessionResolved && session.hasActiveTransaction()) {
                     session.abortTransaction()
@@ -205,7 +212,15 @@ object MongoTransactions : CoroutineScope {
         }
     }
 
-    @Throws(DocumentNotFoundException::class, DocumentUpdateException::class, InvalidDocCopyHelperException::class)
+    @Throws(
+        DocumentNotFoundException::class,
+        DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class,
+        UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class,
+        IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     private suspend fun <K : Any, D : Doc<K, D>> getTransactionResult(
         session: ClientSession,
         collection: MongoCollection<D>,
@@ -286,24 +301,30 @@ object MongoTransactions : CoroutineScope {
         return TransactionResult(updatedDoc, null)
     }
 
-    // Applies linear backoff (with jitter) based on the attempt number and average ping time of the database.
+    // Applies optimized backoff for the queue-based system where conflicts should be rare
     private val random = Random()
     private fun calculateBackoffMS(attempt: Int): Long {
-        // Convert round time into one-way ping time
+        // Since we're using per-document queues, conflicts should be extremely rare
+        // Most retries will be due to network issues or MongoDB internal conflicts
+        // Use much shorter delays since version conflicts are eliminated by queuing
+        if (attempt <= 2) {
+            // For the first few attempts, use minimal backoff (likely network hiccups)
+            val jitter = random.nextLong(10, 31) // 10-30ms jitter
+            return MIN_BACKOFF_MS + jitter
+        }
+
+        // For subsequent attempts, use a more conservative approach
+        // but still much less aggressive than the original algorithm
         val pingNanos = DataKache.storageMode.databaseService.averagePingNanos / 2
-        val basePingMs = (pingNanos / 1000000) * PING_MULTIPLIER.toLong()
+        val basePingMs = (pingNanos / 1_000_000).coerceAtLeast(MIN_BACKOFF_MS)
 
-        // Calculate backoff with attempt scaling
-        var backoffMs = basePingMs + (basePingMs * ATTEMPT_MULTIPLIER * attempt).toLong()
+        // Use exponential backoff but with much smaller multiplier
+        val backoffMs = basePingMs * (1.2).pow(attempt - 2).toLong()
 
-        // Clamp the value between min and max
-        backoffMs = backoffMs.coerceAtLeast(MIN_BACKOFF_MS).coerceAtMost(MAX_BACKOFF_MS)
+        // Add jitter (±20%)
+        val jitter = random.nextLong(-backoffMs / 5, backoffMs / 5)
 
-        // Add jitter (±25%)
-        val half = backoffMs / 4 // 25% of total
-        val jitter = random.nextLong(-half, half)
-
-        return backoffMs + jitter
+        return (backoffMs + jitter).coerceIn(MIN_BACKOFF_MS, MAX_BACKOFF_MS)
     }
 
     override val coroutineContext: CoroutineContext
