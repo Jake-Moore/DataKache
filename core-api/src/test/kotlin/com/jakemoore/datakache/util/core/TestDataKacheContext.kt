@@ -30,7 +30,11 @@ class TestDataKacheContext(
             msg: String,
             level: LoggerService.LogLevel
         ) {
-            println("[$level] $msg")
+            if (level == LoggerService.LogLevel.SEVERE) {
+                System.err.println("[$level] $msg")
+            } else {
+                println("[$level] $msg")
+            }
         }
     }
 

@@ -12,4 +12,4 @@ package com.jakemoore.datakache.api.exception.doc
 class InvalidDocCopyHelperException(
     val docNamespace: String,
     message: String,
-) : RuntimeException(message)
+) : RuntimeException("[$docNamespace] $message")

@@ -309,7 +309,7 @@ object MongoTransactions : CoroutineScope {
         // Use much shorter delays since version conflicts are eliminated by queuing
         if (attempt <= 2) {
             // For the first few attempts, use minimal backoff (likely network hiccups)
-            val jitter = random.nextLong(10, 30) // 10-30ms jitter
+            val jitter = random.nextLong(10, 31) // 10-30ms jitter
             return MIN_BACKOFF_MS + jitter
         }
 
@@ -319,10 +319,7 @@ object MongoTransactions : CoroutineScope {
         val basePingMs = (pingNanos / 1_000_000).coerceAtLeast(MIN_BACKOFF_MS)
 
         // Use exponential backoff but with much smaller multiplier
-        val exponentialMs = basePingMs * (1.2).pow(attempt - 2).toLong()
-
-        // Clamp to reasonable bounds (much lower than original max)
-        val backoffMs = exponentialMs.coerceAtMost(500) // Max 500ms instead of 2000ms
+        val backoffMs = basePingMs * (1.2).pow(attempt - 2).toLong()
 
         // Add jitter (±20%)
         val jitter = random.nextLong(-backoffMs / 5, backoffMs / 5)

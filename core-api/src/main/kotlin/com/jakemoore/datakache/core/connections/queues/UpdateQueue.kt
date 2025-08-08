@@ -62,6 +62,10 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         doc: D,
         updateFunction: (D) -> D
     ): CompletableDeferred<D> {
+        require(doc.key == key) {
+            "Enqueued doc key does not match UpdateQueue key"
+        }
+
         val deferred = CompletableDeferred<D>()
         val request = UpdateRequest(doc, updateFunction, deferred)
 
@@ -78,9 +82,10 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         // Add to queue - this will suspend if the queue is full (shouldn't happen with unlimited channel)
         val sent = updateChannel.trySend(request)
         if (!sent.isSuccess) {
-            deferred.completeExceptionally(
-                IllegalStateException("Failed to enqueue update request for key ${docCache.keyToString(key)}")
+            val exception = sent.exceptionOrNull() ?: IllegalStateException(
+                "Failed to enqueue update request for key ${docCache.keyToString(key)}"
             )
+            deferred.completeExceptionally(exception)
         }
 
         return deferred
@@ -93,11 +98,19 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         docCache.getLoggerInternal().debug("Started UpdateQueue processing for key: ${docCache.keyToString(key)}")
 
         try {
-            for (request in updateChannel) {
+            while (isActive) {
+                val request = updateChannel.receiveCatching()
+                if (request.isClosed) {
+                    // Channel is closed, we're done processing
+                    break
+                }
+
+                val updateRequest = request.getOrNull() ?: continue
+
                 // Check if we're shutting down but still process pending updates
                 if (!isActive && !isShutdown.get()) {
                     // Only cancel if the coroutine was cancelled for reasons other than graceful shutdown
-                    request.deferred.cancel()
+                    updateRequest.deferred.cancel()
                     continue
                 }
 
@@ -105,13 +118,13 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 lastActivityTime.set(System.currentTimeMillis())
 
                 try {
-                    processUpdateRequest(request)
+                    processUpdateRequest(updateRequest)
                 } catch (e: Exception) {
                     docCache.getLoggerInternal().error(
                         e,
                         "Unexpected error processing update request for key: ${docCache.keyToString(key)}"
                     )
-                    request.deferred.completeExceptionally(e)
+                    updateRequest.deferred.completeExceptionally(e)
                 } finally {
                     isProcessing.set(false)
                 }
@@ -166,13 +179,16 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
             // with a timeout for emergency situations
             try {
                 withTimeout(timeoutMs) {
+                    // Cancel the job to signal the processing coroutine to stop
+                    // The processing coroutine will complete all pending updates before stopping
+                    job.cancel()
                     job.join()
                 }
                 docCache.getLoggerInternal().debug(
                     "UpdateQueue graceful shutdown complete for key: ${docCache.keyToString(key)}"
                 )
             } catch (_: TimeoutCancellationException) {
-                docCache.getLoggerInternal().warn(
+                docCache.getLoggerInternal().error(
                     "UpdateQueue shutdown timed out after ${timeoutMs}ms for key: ${docCache.keyToString(key)} - " +
                         "forcing cancellation"
                 )

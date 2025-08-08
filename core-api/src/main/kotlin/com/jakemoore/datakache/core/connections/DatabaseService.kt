@@ -23,6 +23,7 @@ import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.connections.queues.UpdateQueueManager
 import kotlinx.coroutines.flow.Flow
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
@@ -42,7 +43,7 @@ internal abstract class DatabaseService : LoggerService, Service {
     /**
      * Manager for per-document update queues to eliminate database-level conflicts.
      */
-    private val updateQueueManager = UpdateQueueManager(this)
+    private val updateQueueManager by lazy { UpdateQueueManager(this) }
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -117,12 +118,12 @@ internal abstract class DatabaseService : LoggerService, Service {
                 docCache = docCache,
                 doc = doc,
                 updateFunction = updateFunction,
-                updateExecutor = { cache, document, function ->
-                    updateInternal(cache, document, function)
-                }
+                updateExecutor = ::updateInternal,
             )
 
             return deferred.await()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateFail)

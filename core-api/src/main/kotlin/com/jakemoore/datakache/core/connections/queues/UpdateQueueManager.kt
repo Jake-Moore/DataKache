@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Manages the lifecycle of [UpdateQueue]s for different document keys.
@@ -140,12 +141,25 @@ internal class UpdateQueueManager(
                         queuesToRemove.forEach { queueKey ->
                             val queue = queues.remove(queueKey)
                             if (queue != null) {
-                                launch {
+                                // Only launch shutdown coroutine if we're still active
+                                if (isActive) {
+                                    launch {
+                                        try {
+                                            queue.shutdown()
+                                        } catch (e: Exception) {
+                                            // Log but don't fail the cleanup process
+                                            loggerService.error(e, "Error shutting down queue $queueKey")
+                                        }
+                                    }
+                                } else {
+                                    // If we're shutting down, shutdown the queue directly
                                     try {
                                         queue.shutdown()
                                     } catch (e: Exception) {
-                                        // Log but don't fail the cleanup process
-                                        loggerService.error("Error shutting down queue $queueKey: ${e.message}")
+                                        loggerService.error(
+                                            e,
+                                            "Error shutting down queue $queueKey during manager shutdown"
+                                        )
                                     }
                                 }
                             }
@@ -159,8 +173,11 @@ internal class UpdateQueueManager(
                             "Active queues: $activeQueues"
                     )
                 }
+            } catch (_: CancellationException) {
+                // Don't log cancellation exceptions as errors during shutdown
+                loggerService.debug("UpdateQueueManager cleanup cancelled during shutdown")
             } catch (e: Exception) {
-                loggerService.error("Error during UpdateQueueManager cleanup: ${e.message}")
+                loggerService.error(e, "Error during UpdateQueueManager cleanup")
                 // Continue the cleanup loop even if there's an error
             }
         }
@@ -184,12 +201,10 @@ internal class UpdateQueueManager(
         queues.clear()
 
         activeQueues.forEach { queue ->
-            launch {
-                try {
-                    queue.shutdown()
-                } catch (e: Exception) {
-                    loggerService.error("Error shutting down queue during manager shutdown: ${e.message}")
-                }
+            try {
+                queue.shutdown(1_500)
+            } catch (e: Exception) {
+                loggerService.error(e, "Error shutting down queue during manager shutdown")
             }
         }
 
