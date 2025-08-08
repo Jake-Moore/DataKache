@@ -15,7 +15,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.2.1"
+val VERSION = "0.2.2"
 
 ext {
     // KotlinX
@@ -34,6 +34,23 @@ ext {
 
     // Google Guava (for CacheBuilder)
     set("guava", "com.google.guava:guava:33.4.8-jre")
+
+    // Testing Dependencies
+    val kotestVer = "5.9.1"
+    set("kotest-runner-junit5", "io.kotest:kotest-runner-junit5:${kotestVer}")
+    set("kotest-assertions-core", "io.kotest:kotest-assertions-core:${kotestVer}")
+    set("kotest-property", "io.kotest:kotest-property:${kotestVer}")
+    set("kotest-framework-datatest", "io.kotest:kotest-framework-datatest:${kotestVer}")
+
+    val testcontainersVer = "1.21.3"
+    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:${testcontainersVer}")
+    // NOTE: the MongoDB container automatically sets up its own single-node replica set
+    //       This means it supports retryable writes and transactions automatically.
+    set("testcontainers-mongodb", "org.testcontainers:mongodb:${testcontainersVer}")
+    set("testcontainers-core", "org.testcontainers:testcontainers:${testcontainersVer}")
+
+    // Logback for testing
+    set("logback-test", "ch.qos.logback:logback-classic:1.5.18")
 }
 
 allprojects {

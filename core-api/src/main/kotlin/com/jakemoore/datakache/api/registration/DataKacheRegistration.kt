@@ -56,7 +56,7 @@ class DataKacheRegistration internal constructor( // Internal constructor, insta
         docCaches.clear()
 
         // Remove this registration from the API records
-        DataKacheAPI.registrations.remove(this)
+        DataKacheAPI.shutdown(this)
     }
 
     // ------------------------------------------------------------ //

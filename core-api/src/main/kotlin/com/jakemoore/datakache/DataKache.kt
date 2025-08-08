@@ -8,7 +8,6 @@ import com.jakemoore.datakache.api.DataKacheContext
 import com.jakemoore.datakache.api.coroutines.GlobalDataKacheScope
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.mode.StorageMode
-import kotlinx.coroutines.runBlocking
 
 object DataKache {
     var enabled = false
@@ -17,7 +16,7 @@ object DataKache {
         private set
 
     // Internal Properties
-    var onEnableTime: Long = 0
+    var onEnableTime: Long = -1
         private set
 
     /**
@@ -29,6 +28,9 @@ object DataKache {
         if (enabled) {
             return false
         }
+        val msStart = System.currentTimeMillis()
+        info("Enabling DataKache...")
+
         DataKache.context = context
         enabled = true
 
@@ -43,6 +45,7 @@ object DataKache {
         }
 
         onEnableTime = System.currentTimeMillis()
+        info("DataKache enabled successfully in ${onEnableTime - msStart}ms!")
         return true
     }
 
@@ -53,16 +56,16 @@ object DataKache {
         if (!enabled) {
             return false
         }
+        val msStart = System.currentTimeMillis()
+        info("Disabling DataKache...")
 
         // Wait for Coroutines
         logger.info("&aWaiting for DataKacheScope coroutines to finish...")
-        runBlocking {
-            if (!GlobalDataKacheScope.awaitAllChildrenCompletion(logger)) {
-                logger.severe("&cFailed to wait for all coroutines to finish!")
-                GlobalDataKacheScope.logActiveCoroutines()
-            }
-            GlobalDataKacheScope.cancelAll()
+        if (!GlobalDataKacheScope.awaitAllChildrenCompletion(logger)) {
+            logger.severe("&cFailed to wait for all coroutines to finish!")
+            GlobalDataKacheScope.logActiveCoroutines()
         }
+        GlobalDataKacheScope.cancelAll()
         logger.info("&aAll DataKacheScope coroutines finished!")
 
         // Shutdown any running DocCaches
@@ -78,7 +81,7 @@ object DataKache {
                     "Manually shutting it down! " +
                         "(PLEASE CONTACT AUTHORS OF ${it.client.name} TO FIX THIS)"
                 )
-                runBlocking { it.shutdown() }
+                it.shutdown()
             }
             DataKacheAPI.registrations.clear()
         }
@@ -92,6 +95,9 @@ object DataKache {
 
         // Reset State
         enabled = false
+        context = null
+        onEnableTime = -1
+        info("DataKache disabled successfully in ${System.currentTimeMillis() - msStart}ms!")
         return true
     }
 
@@ -135,7 +141,7 @@ object DataKache {
     internal fun error(msg: String) {
         val logger: LoggerService? = context?.logger
         if (logger == null) {
-            println("[ERROR] $msg")
+            System.err.println("[ERROR] $msg")
         } else {
             logger.severe(msg)
         }

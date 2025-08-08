@@ -44,6 +44,11 @@ object DataKacheAPI {
         }
     }
 
+    internal fun shutdown(registration: DataKacheRegistration) {
+        registrations.remove(registration)
+        databases.remove(registration.databaseName.lowercase())
+    }
+
     // ---------------------------------------- //
     //            Database Methods              //
     // ---------------------------------------- //

@@ -139,6 +139,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         val superShutdownSuccess = shutdownSuper()
 
         // Mark as not running
+        cacheMap.clear()
         running = false
 
         // Unregister the cache
@@ -199,7 +200,12 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateDocNotFoundFail)
 
-            throw DocumentNotFoundException(key, this)
+            val keyString = this.keyToString(key)
+            throw DocumentNotFoundException(
+                keyString = keyString,
+                docCache = this,
+                operation = "update"
+            )
         }
         return DataKache.storageMode.databaseService.update(this, doc, updateFunction)
     }

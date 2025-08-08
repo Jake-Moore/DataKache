@@ -251,6 +251,7 @@ internal class MongoDatabaseService : DatabaseService() {
                             // Primary key violation (duplicate _id)
                             throw DuplicateDocumentKeyException(
                                 docCache = docCache,
+                                docCache.keyToString(doc.key),
                                 fullMessage = errorMessage,
                                 operation = "insert",
                             )
@@ -471,8 +472,9 @@ internal class MongoDatabaseService : DatabaseService() {
 
             // Fail State - No Document Replaced
             if (result.matchedCount == 0L) {
+                val keyString = docCache.keyToString(key)
                 throw DocumentNotFoundException(
-                    key = key,
+                    keyString = keyString,
                     docCache = docCache,
                     operation = "replace",
                 )
@@ -659,8 +661,7 @@ internal class MongoDatabaseService : DatabaseService() {
         keyFieldName: String,
         docCache: DocCache<K, D>
     ): K? {
-        val field = document.get(keyFieldName)
-        return when (field) {
+        return when (val field = document.get(keyFieldName)) {
             is String -> docCache.keyFromString(field)
             is ObjectId -> docCache.keyFromString(field.toHexString())
             else -> {

@@ -21,7 +21,7 @@ import kotlin.reflect.KProperty
  */
 abstract class DocUniqueIndex<K : Any, D : Doc<K, D>, T>(
     internal val docCache: DocCache<K, D>,
-    private val kProperty: KProperty<T>,
+    private val kProperty: KProperty<T?>,
 ) {
     val fieldName: String
         get() = SerializationUtil.getSerialNameFromProperty(kProperty)

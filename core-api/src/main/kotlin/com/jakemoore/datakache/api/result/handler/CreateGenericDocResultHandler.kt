@@ -25,7 +25,7 @@ internal object CreateGenericDocResultHandler {
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onGenericDocCreate)
 
             val value = work()
-            return Success(requireNotNull(value))
+            return Success(value)
         } catch (d: DuplicateDocumentKeyException) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onGenericDocCreateDuplicateFail)

@@ -1,5 +1,6 @@
 package com.jakemoore.datakache.api.logging
 
+// TODO we still need a better color solution other than sending minecraft ampersand codes like &a in logs
 @Suppress("unused", "MemberVisibilityCanBePrivate")
 interface LoggerService {
     enum class LogLevel {

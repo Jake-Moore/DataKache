@@ -37,4 +37,11 @@ class Failure<T>(
      * @return the exception ([exception]) that caused this failure
      */
     override fun exceptionOrNull(): Throwable = exception
+
+    /**
+     * Throws the exception wrapped in this failure.
+     */
+    override fun getOrThrow(): T {
+        throw exception
+    }
 }

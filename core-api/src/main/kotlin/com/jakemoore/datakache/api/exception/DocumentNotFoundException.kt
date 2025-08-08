@@ -5,9 +5,9 @@ package com.jakemoore.datakache.api.exception
 import com.jakemoore.datakache.api.cache.DocCache
 
 class DocumentNotFoundException(
-    val key: Any,
+    val keyString: String,
     val docCache: DocCache<*, *>,
-    val operation: String? = null,
+    val operation: String,
 ) : DataKacheException(
-    "No document found with key '$key' in DocCache '${docCache.cacheName}'."
+    "No document found with key '$keyString' in DocCache '${docCache.cacheName}'."
 )
