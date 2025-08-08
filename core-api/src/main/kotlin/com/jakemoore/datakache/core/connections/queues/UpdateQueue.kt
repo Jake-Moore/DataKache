@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * A FIFO queue for processing document updates to ensure ordered execution and eliminate database-level conflicts.
@@ -128,6 +129,13 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 } finally {
                     isProcessing.set(false)
                 }
+            }
+        } catch (_: CancellationException) {
+            // Don't log cancellation exceptions as errors during shutdown
+            if (!isShutdown.get()) {
+                docCache.getLoggerInternal().debug(
+                    "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}"
+                )
             }
         } catch (e: Exception) {
             docCache.getLoggerInternal().error(
