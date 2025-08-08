@@ -8,6 +8,7 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.DatabaseService
@@ -282,7 +283,7 @@ internal class MongoDatabaseService : DatabaseService() {
         }
     }
 
-    @Throws(DocumentNotFoundException::class)
+    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
     override suspend fun <K : Any, D : Doc<K, D>> updateInternal(
         docCache: DocCache<K, D>,
         doc: D,
@@ -675,6 +676,6 @@ internal class MongoDatabaseService : DatabaseService() {
     }
 
     companion object {
-        private const val DUPLICATE_KEY_VIOLATION_CODE = 11000
+        internal const val DUPLICATE_KEY_VIOLATION_CODE = 11000
     }
 }

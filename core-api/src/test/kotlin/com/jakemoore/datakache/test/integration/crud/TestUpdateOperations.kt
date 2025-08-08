@@ -2,6 +2,9 @@ package com.jakemoore.datakache.test.integration.crud
 
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Reject
 import com.jakemoore.datakache.api.result.Success
@@ -295,6 +298,73 @@ class TestUpdateOperations : AbstractDataKacheTest() {
                 updatedDoc.key shouldBe specialKey
                 updatedDoc.name shouldBe "Updated Special Key"
                 updatedDoc.version shouldBe (originalDoc.version + 1)
+            }
+
+            it("should fail when update function returns same instance") {
+                val cache = getCache()
+
+                // Create a document
+                cache.create("sameInstanceKey") { doc ->
+                    doc.copy(name = "Original Document", balance = 100.0)
+                }.getOrThrow()
+
+                // Try to update with function that returns same instance
+                val updateResult = cache.update("sameInstanceKey") { doc ->
+                    doc // Return same instance - should fail
+                }
+
+                updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
+                updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
+
+                val wrapper: ResultExceptionWrapper = updateResult.exception
+                wrapper.exception.shouldBeInstanceOf<UpdateFunctionReturnedSameInstanceException>()
+                wrapper.exception.docNamespace shouldBe cache.getKeyNamespace("sameInstanceKey")
+            }
+
+            it("should fail when update function modifies document key") {
+                val cache = getCache()
+
+                // Create a document
+                cache.create("keyModificationKey") { doc ->
+                    doc.copy(name = "Original Document", balance = 100.0)
+                }.getOrThrow()
+
+                // Try to update with function that modifies the key
+                val updateResult = cache.update("keyModificationKey") { doc ->
+                    doc.copy(key = "modifiedKey") // Modify key - should fail
+                }
+
+                updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
+                updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
+
+                val wrapper: ResultExceptionWrapper = updateResult.exception
+                wrapper.exception.shouldBeInstanceOf<IllegalDocumentKeyModificationException>()
+                wrapper.exception.docNamespace shouldBe cache.getKeyNamespace("keyModificationKey")
+                wrapper.exception.foundKeyString shouldBe "modifiedKey"
+                wrapper.exception.expectedKeyString shouldBe "keyModificationKey"
+            }
+
+            it("should fail when update function modifies document version") {
+                val cache = getCache()
+
+                // Create a document
+                val originalDoc = cache.create("versionModificationKey") { doc ->
+                    doc.copy(name = "Original Document", balance = 100.0)
+                }.getOrThrow()
+
+                // Try to update with function that modifies the version
+                val updateResult = cache.update("versionModificationKey") { doc ->
+                    doc.copy(version = 999L) // Modify version - should fail
+                }
+
+                updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
+                updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
+
+                val wrapper: ResultExceptionWrapper = updateResult.exception
+                wrapper.exception.shouldBeInstanceOf<IllegalDocumentVersionModificationException>()
+                wrapper.exception.docNamespace shouldBe cache.getKeyNamespace("versionModificationKey")
+                wrapper.exception.foundVersion shouldBe 999L
+                wrapper.exception.expectedVersion shouldBe originalDoc.version + 1
             }
         }
     }

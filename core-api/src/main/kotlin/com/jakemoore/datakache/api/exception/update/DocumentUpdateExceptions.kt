@@ -1,0 +1,31 @@
+@file:Suppress("CanBeParameter")
+
+package com.jakemoore.datakache.api.exception.update
+
+// DocumentUpdateExceptions.kt
+sealed class DocumentUpdateException(message: String) : RuntimeException(message)
+
+/** Thrown when the update function returns the _same_ instance. */
+class UpdateFunctionReturnedSameInstanceException(
+    val docNamespace: String
+) : DocumentUpdateException(
+    "Update function (for $docNamespace) must return a new doc (using data class copy)"
+)
+
+/** Thrown when the key of the updated document doesn’t match the expected key. */
+class IllegalDocumentKeyModificationException(
+    val docNamespace: String,
+    val foundKeyString: String,
+    val expectedKeyString: String
+) : DocumentUpdateException(
+    "Updated doc ($docNamespace) key mismatch! Found: $foundKeyString, Expected: $expectedKeyString"
+)
+
+/** Thrown when the version on the updated document isn’t the next optimistic version. */
+class IllegalDocumentVersionModificationException(
+    val docNamespace: String,
+    val foundVersion: Long,
+    val expectedVersion: Long
+) : DocumentUpdateException(
+    "Updated doc ($docNamespace) version mismatch! Found: $foundVersion, Expected: $expectedVersion"
+)

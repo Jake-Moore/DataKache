@@ -4,13 +4,22 @@ import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
+import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.core.connections.TransactionResult
+import com.jakemoore.datakache.core.connections.mongo.MongoDatabaseService.Companion.DUPLICATE_KEY_VIOLATION_CODE
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.jakemoore.datakache.util.DataKacheFileLogger
 import com.mongodb.MongoCommandException
+import com.mongodb.MongoWriteException
 import com.mongodb.client.model.Filters
 import com.mongodb.kotlin.client.coroutine.ClientSession
 import com.mongodb.kotlin.client.coroutine.MongoClient
@@ -40,7 +49,7 @@ object MongoTransactions : CoroutineScope {
     /**
      * Execute a MongoDB document update with retries and version filter (CAS logic).
      */
-    @Throws(DocumentNotFoundException::class, TransactionRetriesExceededException::class)
+    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
     suspend fun <K : Any, D : Doc<K, D>> update(
         client: MongoClient,
         collection: MongoCollection<D>,
@@ -70,7 +79,7 @@ object MongoTransactions : CoroutineScope {
     }
 
     // If no error is thrown, this method succeeded
-    @Throws(DocumentNotFoundException::class, TransactionRetriesExceededException::class)
+    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
     private suspend fun <K : Any, D : Doc<K, D>> recursiveRetryUpdate(
         client: MongoClient,
         collection: MongoCollection<D>,
@@ -137,6 +146,7 @@ object MongoTransactions : CoroutineScope {
 
                 return requireNotNull(result.doc)
             } catch (mE: MongoCommandException) {
+                // write conflict may occur and is not to worry, we can retry
                 if (mE.errorCode == WRITE_CONFLICT_ERROR_CODE) {
                     logWriteConflict(attemptNum, mE, docCache, doc)
 
@@ -152,6 +162,40 @@ object MongoTransactions : CoroutineScope {
                     )
                 }
                 throw mE
+            } catch (e: MongoWriteException) {
+                // Handle duplicate unique index exceptions
+                if (e.error.code == DUPLICATE_KEY_VIOLATION_CODE) {
+                    val errorMessage = e.message ?: ""
+                    when {
+                        errorMessage.contains("index: _id") -> {
+                            // Primary key violation (duplicate _id)
+                            throw DuplicateDocumentKeyException(
+                                docCache = docCache,
+                                docCache.keyToString(doc.key),
+                                fullMessage = errorMessage,
+                                operation = "update",
+                            )
+                        }
+                        errorMessage.contains("index:") -> {
+                            // Unique index violation (duplicate value in a unique index)
+                            throw DuplicateUniqueIndexException(
+                                docCache = docCache,
+                                fullMessage = errorMessage,
+                                operation = "update",
+                            )
+                        }
+                    }
+                }
+                throw e
+            } catch (e: DocumentNotFoundException) {
+                // promote exception to caller
+                throw e
+            } catch (e: DocumentUpdateException) {
+                // promote exception to caller
+                throw e
+            } catch (e: InvalidDocCopyHelperException) {
+                // promote exception to caller
+                throw e
             } finally {
                 if (!sessionResolved && session.hasActiveTransaction()) {
                     session.abortTransaction()
@@ -161,6 +205,7 @@ object MongoTransactions : CoroutineScope {
         }
     }
 
+    @Throws(DocumentNotFoundException::class, DocumentUpdateException::class, InvalidDocCopyHelperException::class)
     private suspend fun <K : Any, D : Doc<K, D>> getTransactionResult(
         session: ClientSession,
         collection: MongoCollection<D>,
@@ -174,20 +219,31 @@ object MongoTransactions : CoroutineScope {
         val namespace = docCache.getKeyNamespace(doc.key)
 
         // Apply the Update Function
-        val updatedDoc: D = updateFunction(doc).copyHelper(nextVersion)
-        require(updatedDoc !== doc) {
-            "Update function (for $namespace) must return a new doc (using data class copy)"
+        val rawUpdated: D = updateFunction(doc)
+        if (rawUpdated === doc) {
+            throw UpdateFunctionReturnedSameInstanceException(namespace)
         }
 
         // Validate ID Property
-        require(id == docCache.keyToString(updatedDoc.key)) {
-            "Updated doc ($namespace) failed key check! Found: ${updatedDoc.key}, Expected: ${doc.key}"
+        val foundKeyString = docCache.keyToString(rawUpdated.key)
+        if (id != foundKeyString) {
+            throw IllegalDocumentKeyModificationException(namespace, foundKeyString, id)
         }
 
         // Validate Incremented Version (Optimistic Versioning)
-        require(updatedDoc.version == nextVersion) {
-            "Updated doc ($namespace) failed copy version check! " +
-                "Found: ${updatedDoc.version}, Expected: $nextVersion"
+        val foundVersion = rawUpdated.version
+        if (currentVersion != foundVersion) {
+            throw IllegalDocumentVersionModificationException(namespace, foundVersion, nextVersion)
+        }
+
+        // Increment the version on the validated document
+        val updatedDoc = rawUpdated.copyHelper(nextVersion)
+        if (updatedDoc.version != nextVersion) {
+            throw InvalidDocCopyHelperException(
+                docNamespace = namespace,
+                message = "The copyHelper did not return a document with the expected version. " +
+                    "Expected version: $nextVersion, but got: ${updatedDoc.version}."
+            )
         }
 
         val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
@@ -214,9 +270,13 @@ object MongoTransactions : CoroutineScope {
             // If update failed, fetch current version
             val databaseDoc: D = collection.find(session).filter(
                 Filters.eq(keyFieldName, id)
-            ).firstOrNull() ?: throw RuntimeException(
-                "Doc not found for collection: ${docCache.cacheName}, id: $keyFieldName -> $id"
-            )
+            ).firstOrNull() ?: run {
+                throw DocumentNotFoundException(
+                    keyString = id,
+                    docCache = docCache,
+                    operation = "update",
+                )
+            }
 
             // Update our working copy with latest version and retry
             return TransactionResult(null, databaseDoc)

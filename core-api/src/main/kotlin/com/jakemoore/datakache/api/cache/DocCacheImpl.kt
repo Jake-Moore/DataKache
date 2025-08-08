@@ -7,6 +7,7 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -180,23 +181,22 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    @Throws(DocumentNotFoundException::class)
     override suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D> {
         return UpdateResultHandler.wrap {
             return@wrap updateInternal(key, updateFunction)
         }
     }
 
-    @Throws(DocumentNotFoundException::class)
     override suspend fun updateRejectable(key: K, updateFunction: (D) -> D): RejectableResult<D> {
         return RejectableUpdateResultHandler.wrap {
             return@wrap updateInternal(key, updateFunction)
         }
     }
 
-    @Throws(DocumentNotFoundException::class)
+    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
     private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
-        val doc: D = cacheMap[key] ?: run {
+        // Read from the database because having a false negative cache hit is worse than waiting for the database read.
+        val doc: D = this.readFromDatabase(key).getOrNull() ?: run {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateDocNotFoundFail)
 
@@ -240,7 +240,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    override suspend fun readAllFromDatabase(key: K): DefiniteResult<Flow<D>> {
+    override suspend fun readAllFromDatabase(): DefiniteResult<Flow<D>> {
         return DbReadAllResultHandler.wrap {
             DataKache.storageMode.databaseService.readAll(this).map {
                 // Cache each document as it is read from the database

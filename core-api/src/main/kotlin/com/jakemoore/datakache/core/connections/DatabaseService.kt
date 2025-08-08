@@ -6,6 +6,7 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -68,10 +69,13 @@ internal abstract class DatabaseService : LoggerService, Service {
     /**
      * Update the given document in the database using the provided update function.
      *
-     * Requires that the document exists in the database, otherwise a
-     * [com.jakemoore.datakache.api.exception.DocumentNotFoundException] will be thrown
+     * Requires that the document exists in the database, otherwise the following exception will be thrown:
+     * - [DocumentNotFoundException]
+     *
+     * Additionally, if using Unique Indexes, the following exception may be thrown for violations:
+     * - [DuplicateUniqueIndexException]
      */
-    @Throws(DocumentNotFoundException::class)
+    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
     suspend fun <K : Any, D : Doc<K, D>> update(
         docCache: DocCache<K, D>,
         doc: D,
@@ -88,6 +92,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+    @Throws(DocumentNotFoundException::class, DuplicateUniqueIndexException::class, TransactionRetriesExceededException::class)
     protected abstract suspend fun <K : Any, D : Doc<K, D>> updateInternal(
         docCache: DocCache<K, D>,
         doc: D,
