@@ -21,7 +21,8 @@ class TestGenericDocCache internal constructor(
     cacheName = "RandomGenericDocs",
     docClass = TestGenericDoc::class.java,
     instantiator = ::TestGenericDoc,
-), DataKacheScope {
+),
+    DataKacheScope {
     private val nameField: DocUniqueIndex<String, TestGenericDoc, String>
     private val balanceField: DocUniqueIndex<String, TestGenericDoc, Double>
 

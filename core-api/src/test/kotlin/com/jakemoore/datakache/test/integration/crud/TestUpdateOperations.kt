@@ -1,10 +1,10 @@
 package com.jakemoore.datakache.test.integration.crud
 
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
-import com.jakemoore.datakache.api.exception.update.RejectUpdateException
-import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Reject
 import com.jakemoore.datakache.api.result.Success
