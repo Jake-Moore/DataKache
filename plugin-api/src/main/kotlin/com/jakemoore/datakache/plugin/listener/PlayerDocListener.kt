@@ -8,9 +8,10 @@ import com.jakemoore.datakache.api.DataKacheAPI
 import com.jakemoore.datakache.api.cache.PlayerDocCache
 import com.jakemoore.datakache.api.doc.PlayerDoc
 import com.jakemoore.datakache.api.event.PlayerDocJoinEvent
+import com.jakemoore.datakache.api.result.Failure
+import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.Color
 import com.jakemoore.datakache.util.DataKacheFileLogger
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -28,7 +29,7 @@ import org.bukkit.event.player.PlayerLoginEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 
 /**
  * This Bukkit listener manages [PlayerDoc] objects for joining bukkit [Player]s.
@@ -43,58 +44,48 @@ object PlayerDocListener : Listener {
      * Without a permit, the player will be denied join.
      * Permits are granted at the end of PreLogin when all PlayerDoc objects are loaded.
      */
-    private val loginPermits: Cache<UUID, Long> = CacheBuilder.newBuilder()
+    private val loginPermits: Cache<UUID, Boolean> = CacheBuilder.newBuilder()
         .expireAfterWrite(15, TimeUnit.SECONDS)
         .build()
 
     @EventHandler(priority = EventPriority.LOW)
     fun onPreLogin(event: AsyncPlayerPreLoginEvent) {
-        val config = DataKachePlugin.context.fileConfiguration
+        val lang = requireNotNull(DataKachePlugin.context).lang
         val username = event.name
         val uuid = event.uniqueId
 
         // Deny joins if the database service is not ready to create docs
         if (!DataKache.storageMode.isDatabaseReadyForWrites()) {
-            DataKachePlugin.context.logger.warn(
+            requireNotNull(DataKachePlugin.context).logger.warn(
                 "DatabaseService is not ready to write PlayerDocs, denying join for $username ($uuid)."
-            )
-            val message = config.getString(
-                "language.joinDenied.databaseNotReady",
-                "&cConnection failed."
             )
             event.disallow(
                 AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                Color.t(message)
+                Color.t(lang.joinDeniedDatabaseNotReady)
             )
             return
         }
 
-        val msStart = System.currentTimeMillis()
+        val startMark = TimeSource.Monotonic.markNow()
 
         // Suspend player join while PlayerDoc's are loaded or created
-        val timeoutMS = config.getInt("joinOptions.preloadPlayerDocTimeoutMS", 5_000)
+        val timeoutDuration = lang.preloadPlayerDocTimeout
         val success = runBlocking {
             try {
-                withTimeout(timeoutMS.milliseconds) {
+                return@runBlocking withTimeout(timeoutDuration) {
                     // cache all PlayerDoc objects for this player in parallel
-                    cachePlayerDocs(uuid, username)
+                    return@withTimeout cachePlayerDocs(uuid, username)
                 }
-                return@runBlocking true
             } catch (_: TimeoutCancellationException) {
-                val message = config.getString(
-                    "language.joinDenied.playerDocTimeout",
-                    "&cConnection failed."
-                )
-                DataKachePlugin.context.logger.warn(
-                    "PlayerDoc loading timed out for $username ($uuid) after ${timeoutMS}ms."
+                val message = lang.joinDeniedPlayerDocTimeout
+                requireNotNull(DataKachePlugin.context).logger.warn(
+                    "PlayerDoc loading timed out for $username ($uuid) " +
+                        "after ${timeoutDuration.inWholeMilliseconds}ms."
                 )
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, Color.t(message))
                 return@runBlocking false
             } catch (e: Exception) {
-                val message = config.getString(
-                    "language.joinDenied.playerDocException",
-                    "&cConnection failed."
-                )
+                val message = lang.joinDeniedPlayerDocException
                 DataKacheFileLogger.severe(
                     "An error occurred while loading PlayerDoc for $username ($uuid): ${e.message}",
                     e
@@ -103,15 +94,26 @@ object PlayerDocListener : Listener {
                 return@runBlocking false
             }
         }
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
         if (!success) {
+            if (event.loginResult == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+                requireNotNull(DataKachePlugin.context).logger.severe(
+                    "Failed to load PlayerDoc for $username ($uuid) " +
+                        "after ${elapsedMillis}ms."
+                )
+                event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Color.t(lang.joinDeniedPlayerDocException)
+                )
+            }
             return // Join was denied, no need to continue
         }
 
         // Success!
-        DataKachePlugin.context.logger.debug(
-            "PlayerDoc for $username ($uuid) loaded in ${System.currentTimeMillis() - msStart}ms."
+        requireNotNull(DataKachePlugin.context).logger.debug(
+            "PlayerDoc for $username ($uuid) loaded in ${elapsedMillis}ms."
         )
-        loginPermits.put(uuid, System.currentTimeMillis()) // Grant the player a login permit
+        loginPermits.put(uuid, true) // Grant the player a login permit
     }
 
     @EventHandler(priority = EventPriority.LOW)
@@ -124,13 +126,10 @@ object PlayerDocListener : Listener {
         //  is not allowed to join (because their PlayerDocs may not have been created yet).
 
         if (!loginPermits.asMap().containsKey(uuid)) {
-            DataKachePlugin.context.logger.warn(
+            requireNotNull(DataKachePlugin.context).logger.warn(
                 "Player $username ($uuid) connected too early, denying join!"
             )
-            val message = DataKachePlugin.context.fileConfiguration.getString(
-                "language.joinDenied.earlyJoin",
-                "&cConnection failed."
-            )
+            val message = requireNotNull(DataKachePlugin.context).lang.joinDeniedEarlyJoin
             event.disallow(PlayerLoginEvent.Result.KICK_OTHER, Color.t(message))
         }
 
@@ -157,23 +156,49 @@ object PlayerDocListener : Listener {
         loginPermits.invalidate(uuid)
     }
 
+    /**
+     * @return if all PlayerDoc objects for the given player were successfully cached.
+     */
     private suspend fun cachePlayerDocs(
         uuid: UUID,
         username: String,
-    ) {
+    ): Boolean {
         // Wrap each readOrCreate call in an async block to allow parallel loading
-        val loadsDeferred = DataKacheAPI.listRegistrations()
-            .flatMap { it.getDocCaches() }
-            .filterIsInstance(PlayerDocCache::class.java)
-            .map { cache ->
-                CoroutineScope(Dispatchers.IO).async {
-                    cache.readOrCreate(uuid) { doc ->
-                        doc.copyHelper(username = username)
-                    }
-                }
-            }
+        val results = kotlinx.coroutines.coroutineScope {
+            DataKacheAPI.listRegistrations()
+                .flatMap { it.getDocCaches() }
+                .filterIsInstance<PlayerDocCache<*>>()
+                .map { cache ->
+                    async(Dispatchers.IO) {
+                        val createResult = cache.readOrCreate(uuid)
+                        // If not successful, return to the caller
+                        if (createResult !is Success<PlayerDoc<*>>) {
+                            return@async createResult
+                        }
 
-        // Wait for all loads to complete
-        loadsDeferred.awaitAll()
+                        // If successful, double-check the username field
+                        val doc = createResult.value
+                        if (doc.username == username) {
+                            // username matches, return the normal result
+                            return@async createResult
+                        }
+
+                        // If the username is not set correctly, update it
+                        return@async cache.updateUsername(key = uuid, username)
+                    }
+                }.awaitAll()
+        }
+
+        // Check if all PlayerDoc objects were successfully loaded or created
+        results.forEach { result ->
+            if (result !is Failure<*>) return@forEach
+
+            DataKacheFileLogger.severe(
+                "Failed to load or create PlayerDoc for $username ($uuid): ${result.exception.message}",
+                result.exception
+            )
+        }
+
+        return results.all { it is Success<*> }
     }
 }

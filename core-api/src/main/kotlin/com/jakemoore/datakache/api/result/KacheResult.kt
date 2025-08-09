@@ -9,7 +9,9 @@ sealed interface KacheResult<T> {
 }
 
 // For operations that CANNOT return Empty
-sealed interface DefiniteResult<T> : KacheResult<T>
+sealed interface DefiniteResult<T> : KacheResult<T> {
+    fun getOrThrow(): T
+}
 
 // For operations that CAN return Empty
 sealed interface OptionalResult<T> : KacheResult<T> {

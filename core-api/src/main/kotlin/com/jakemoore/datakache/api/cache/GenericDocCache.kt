@@ -3,13 +3,19 @@
 package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.DataKache
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.doc.GenericDoc
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
 import com.jakemoore.datakache.api.logging.DefaultCacheLogger
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.CreateGenericDocResultHandler
 import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
+import com.jakemoore.datakache.api.result.handler.RejectableUpdateGenericDocResultHandler
+import com.jakemoore.datakache.api.result.handler.UpdateGenericDocResultHandler
 import java.util.UUID
 
 abstract class GenericDocCache<D : GenericDoc<D>>(
@@ -23,6 +29,8 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      * @param Long the version of the document.
      */
     val instantiator: (String, Long) -> D,
+
+    override val config: DocCacheConfig<String, D> = DocCacheConfig.default(),
 
 ) : DocCacheImpl<String, D>(cacheName, registration, docClass, logger) {
 
@@ -40,22 +48,35 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
 
     override suspend fun create(key: String, initializer: (D) -> D): DefiniteResult<D> {
         return CreateGenericDocResultHandler.wrap {
+            val namespace = this.getKeyNamespace(key)
+
             // Create a new instance in modifiable state
             val instantiated: D = instantiator(key, 0L)
-            instantiated.initializeInternal(this)
 
             // Allow caller to initialize the document with starter data
             val doc: D = initializer(instantiated)
-            require(doc.key == key) {
-                "The key of the GenericDoc must not change during initializer. Expected: $key, Actual: ${doc.key}"
-            }
-            assert(doc.version == 0L) {
-                "The version of the GenericDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
-            }
-            doc.initializeInternal(this)
 
+            // Require the Key to stay the same
+            if (doc.key != key) {
+                val foundKeyString = this.keyToString(doc.key)
+                val expectedKeyString = this.keyToString(key)
+                throw IllegalDocumentKeyModificationException(
+                    namespace,
+                    foundKeyString,
+                    expectedKeyString,
+                )
+            }
+
+            // Require the Version to stay the same
+            val expectedVersion = 0L
+            val foundVersion = doc.version
+            if (foundVersion != expectedVersion) {
+                throw IllegalDocumentVersionModificationException(namespace, foundVersion, expectedVersion)
+            }
+
+            doc.initializeInternal(this)
             // Access internal method to save and cache the document
-            return@wrap this.insertDocumentInternal(doc)
+            return@wrap this.insertDocumentInternal(doc, force = true)
         }
     }
 
@@ -70,6 +91,20 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      */
     suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D> {
         return create(UUID.randomUUID().toString(), initializer)
+    }
+
+    // Regular update method (does not bypass validation)
+    override suspend fun update(key: String, updateFunction: (D) -> D): DefiniteResult<D> {
+        return UpdateGenericDocResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction, false)
+        }
+    }
+
+    // Regular update (rejectable) method (does not bypass validation)
+    override suspend fun updateRejectable(key: String, updateFunction: (D) -> D): RejectableResult<D> {
+        return RejectableUpdateGenericDocResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction, false)
+        }
     }
 
     /**
@@ -97,7 +132,16 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
     override fun keyFromString(string: String): String {
         return string
     }
+
     override fun keyToString(key: String): String {
         return key
+    }
+
+    // ------------------------------------------------------------ //
+    //                        Internal Methods                      //
+    // ------------------------------------------------------------ //
+    override fun isUpdateValidInternal(originalDoc: D, updatedDoc: D) {
+        // no extra validation needed for GenericDocCache
+        // the key and version are already validated in create/update methods
     }
 }

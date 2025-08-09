@@ -17,6 +17,19 @@ dependencies {
     api(project.property("logback-classic") as String)
 
     api(project.property("guava") as String)
+
+    // Testing Dependencies
+    testImplementation(project.property("kotest-runner-junit5") as String)
+    testImplementation(project.property("kotest-assertions-core") as String)
+    testImplementation(project.property("kotest-property") as String)
+    testImplementation(project.property("kotest-framework-datatest") as String)
+
+    testImplementation(project.property("testcontainers-junit-jupiter") as String)
+    testImplementation(project.property("testcontainers-mongodb") as String)
+    testImplementation(project.property("testcontainers-core") as String)
+    testImplementation(project.property("kotlinx-coroutines-test") as String)
+
+    testRuntimeOnly(project.property("logback-classic") as String)
 }
 
 tasks {

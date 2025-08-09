@@ -35,4 +35,9 @@ class Success<T>(
      * @return null (no exception occurred).
      */
     override fun exceptionOrNull(): Throwable? = null
+
+    /**
+     * @return the [value] that was successfully retrieved.
+     */
+    override fun getOrThrow(): T = value
 }

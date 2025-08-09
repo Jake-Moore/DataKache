@@ -3,11 +3,13 @@
 package com.jakemoore.datakache.api.exception
 
 import com.jakemoore.datakache.api.cache.DocCache
+import com.jakemoore.datakache.api.exception.data.Operation
 
 class DocumentNotFoundException(
-    val key: Any,
+    val keyString: String,
     val docCache: DocCache<*, *>,
-    val operation: String? = null,
+    val operation: Operation,
 ) : DataKacheException(
-    "No document found with key '$key' in DocCache '${docCache.cacheName}'."
+    "No document found with key '$keyString' in DocCache '${docCache.cacheName}'" +
+        " during operation '${operation.name}'."
 )

@@ -1,12 +1,19 @@
 package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.DataKache
-import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.data.Operation
+import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -14,11 +21,9 @@ import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
-import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadUniqueIndexResultHandler
-import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
-import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
+import com.jakemoore.datakache.api.result.handler.database.DbClearResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbHasKeyResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadAllResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadKeysResultHandler
@@ -46,7 +51,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      */
     private val loggerInstantiator: (String) -> LoggerService,
 
-    override val config: DocCacheConfig<K, D> = DocCacheConfig.default(),
 ) : DocCache<K, D> {
 
     override val databaseName: String
@@ -139,6 +143,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         val superShutdownSuccess = shutdownSuper()
 
         // Mark as not running
+        cacheMap.clear()
         running = false
 
         // Unregister the cache
@@ -152,6 +157,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         getLoggerInternal().debug("Cache shutdown completed: $cacheName")
         return superShutdownSuccess
     }
+
     protected abstract suspend fun shutdownSuper(): Boolean
 
     // ------------------------------------------------------------ //
@@ -179,29 +185,28 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    @Throws(DocumentNotFoundException::class)
-    override suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D> {
-        return UpdateResultHandler.wrap {
-            return@wrap updateInternal(key, updateFunction)
-        }
-    }
-
-    @Throws(DocumentNotFoundException::class)
-    override suspend fun updateRejectable(key: K, updateFunction: (D) -> D): RejectableResult<D> {
-        return RejectableUpdateResultHandler.wrap {
-            return@wrap updateInternal(key, updateFunction)
-        }
-    }
-
-    @Throws(DocumentNotFoundException::class)
-    private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
-        val doc: D = cacheMap[key] ?: run {
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
+    protected suspend fun updateInternal(key: K, updateFunction: (D) -> D, bypassValidation: Boolean): D {
+        // Read from the database because having a false negative cache hit is worse than waiting for the database read.
+        val doc: D = this.readFromDatabase(key).getOrNull() ?: run {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateDocNotFoundFail)
 
-            throw DocumentNotFoundException(key, this)
+            val keyString = this.keyToString(key)
+            throw DocumentNotFoundException(
+                keyString = keyString,
+                docCache = this,
+                operation = Operation.UPDATE,
+            )
         }
-        return DataKache.storageMode.databaseService.update(this, doc, updateFunction)
+        return DataKache.storageMode.databaseService.update(this, doc, updateFunction, bypassValidation)
+            .also { cacheInternal(it, force = true) }
     }
 
     override fun readAll(): Collection<D> {
@@ -220,6 +225,26 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         return cacheMap.size
     }
 
+    override suspend fun clearDocsFromDatabasePermanently(): DefiniteResult<Long> {
+        check(config.enableMassDestructiveOps) {
+            "Cannot clear documents from database permanently when " +
+                "enableMassDestructiveOps is set to false in cache config."
+        }
+
+        return DbClearResultHandler.wrap {
+            // Clear the database collection
+            val cleared = DataKache.storageMode.databaseService.clear(this)
+
+            // Clear the in-memory cache
+            cacheMap.clear()
+
+            getLoggerInternal().info(
+                "Cleared all documents from cache: $cacheName ($cleared documents)"
+            )
+            return@wrap cleared
+        }
+    }
+
     // ------------------------------------------------------------ //
     //                       Extra CRUD Methods                     //
     // ------------------------------------------------------------ //
@@ -234,7 +259,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    override suspend fun readAllFromDatabase(key: K): DefiniteResult<Flow<D>> {
+    override suspend fun readAllFromDatabase(): DefiniteResult<Flow<D>> {
         return DbReadAllResultHandler.wrap {
             DataKache.storageMode.databaseService.readAll(this).map {
                 // Cache each document as it is read from the database
@@ -273,6 +298,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             DataKache.storageMode.databaseService.registerUniqueIndex(this, index)
         }
     }
+
     override fun <T> readByUniqueIndex(index: DocUniqueIndex<K, D, T>, value: T): OptionalResult<D> {
         return ReadUniqueIndexResultHandler.wrap {
             // Read from cache trying to find the first document that matches the unique index value
@@ -281,6 +307,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             }
         }
     }
+
     override suspend fun <T> readByUniqueIndexFromDatabase(
         index: DocUniqueIndex<K, D, T>,
         value: T
@@ -294,12 +321,12 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    override fun cacheInternal(doc: D, log: Boolean) {
+    override fun cacheInternal(doc: D, log: Boolean, force: Boolean) {
         doc.initializeInternal(this)
 
         // Optimization - if the document is in cache under the same version, assume the data is the same
         //  and therefore we can skip re-caching it.
-        if (config.optimisticCaching) {
+        if (!force && config.optimisticCaching) {
             val cached: D? = cacheMap[doc.key]
             if (cached != null && cached.version == doc.version) return
         }
@@ -325,11 +352,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      */
     @ApiStatus.Internal
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    suspend fun insertDocumentInternal(doc: D): D {
+    suspend fun insertDocumentInternal(doc: D, force: Boolean): D {
         // Insert the document in the database
         DataKache.storageMode.databaseService.insert(this, doc)
         // Cache the document in memory
-        this.cacheInternal(doc)
+        this.cacheInternal(doc, force = force)
         return doc
     }
 
@@ -402,7 +429,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                             it.onChangeStreamInsert(name, key)
                         }
 
-                        cacheInternal(doc, log = false)
+                        cacheInternal(doc, log = false, force = true)
                         getLoggerInternal().debug("Cached Document From INSERT: ${doc.key}")
                     }
                     ChangeDocumentType.REPLACE -> {
@@ -411,7 +438,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                             it.onChangeStreamReplace(name, key)
                         }
 
-                        cacheInternal(doc, log = false)
+                        cacheInternal(doc, log = false, force = true)
                         getLoggerInternal().debug("Cached Document From REPLACE: ${doc.key}")
                     }
                     ChangeDocumentType.UPDATE -> {
@@ -420,7 +447,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                             it.onChangeStreamUpdate(name, key)
                         }
 
-                        cacheInternal(doc, log = false)
+                        cacheInternal(doc, log = false, force = true)
                         getLoggerInternal().debug("Cached Document From UPDATE: ${doc.key}")
                     }
                 }
@@ -437,8 +464,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 val removed = uncacheInternal(key)
                 if (removed) {
                     getLoggerInternal().debug("Uncached Document From DELETE: $key")
-                } else {
-                    getLoggerInternal().warn("Attempted to delete non-cached document: $key")
                 }
             }
 

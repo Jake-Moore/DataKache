@@ -5,7 +5,10 @@ import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.doc.Doc.Status
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
+import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
@@ -114,9 +117,12 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * @param key The unique key of the document to be updated.
      *
-     * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
+     * Returns A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
+     * If [DefiniteResult] is a [Failure], common exceptions include:
+     * - [DocumentNotFoundException]: The document with the given key does not exist in the cache or database.
+     * - [DuplicateUniqueIndexException]: The update operation violates a unique index constraint.
+     * - [TransactionRetriesExceededException]: The update operation failed after exceeding allowed transaction retries.
      */
-    @Throws(DocumentNotFoundException::class)
     suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D>
 
     /**
@@ -124,9 +130,12 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * @param doc The document to be updated (will be updated via its key).
      *
-     * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
+     * Returns A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
+     * If [DefiniteResult] is a [Failure], common exceptions include:
+     * - [DocumentNotFoundException]: The document with the given key does not exist in the cache or database.
+     * - [DuplicateUniqueIndexException]: The update operation violates a unique index constraint.
+     * - [TransactionRetriesExceededException]: The update operation failed after exceeding allowed transaction retries.
      */
-    @Throws(DocumentNotFoundException::class)
     suspend fun update(doc: D, updateFunction: (D) -> D): DefiniteResult<D> {
         return update(doc.key, updateFunction)
     }
@@ -163,7 +172,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
 
     /**
      * See parent implementations for details on the behavior of this method:
-     * - [com.jakemoore.datakache.api.doc.GenericDoc.delete]
+     * - [GenericDocCache.delete]
      */
     suspend fun delete(key: K): DefiniteResult<Boolean>
 
@@ -211,6 +220,18 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      */
     fun getCacheSize(): Int
 
+    /**
+     * Clears ALL documents from the cache AND **database**.
+     *
+     * DATA IS NOT RECOVERABLE AFTER THIS OPERATION.
+     *
+     * REQUIRES [DocCacheConfig.enableMassDestructiveOps] to be true, otherwise it will throw [IllegalStateException]
+     *
+     * @return A [DefiniteResult] indicating success or failure of the operation.
+     * (long value indicates number of documents deleted)
+     */
+    suspend fun clearDocsFromDatabasePermanently(): DefiniteResult<Long>
+
     // ------------------------------------------------------------ //
     //                     CRUD Database Methods                    //
     // ------------------------------------------------------------ //
@@ -230,11 +251,9 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * All documents will be automatically cached on success.
      *
-     * @param key The unique key of the document to be fetched.
-     *
      * @return An [DefiniteResult] containing a [Flow] of documents.
      */
-    suspend fun readAllFromDatabase(key: K): DefiniteResult<Flow<D>>
+    suspend fun readAllFromDatabase(): DefiniteResult<Flow<D>>
 
     /**
      * Counts the total number of documents in the **database**.
@@ -373,7 +392,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    fun cacheInternal(doc: D, log: Boolean = true)
+    fun cacheInternal(doc: D, log: Boolean = true, force: Boolean = false)
 
     /**
      * @return If a document was removed from the cache.
@@ -389,4 +408,21 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
 
     @ApiStatus.Internal
     fun getLoggerInternal(): LoggerService
+
+    /**
+     * Throws an exception if the update is not valid according to the cache's rules.
+     *
+     * If this method returns successfully, the update is valid and can be applied.
+     *
+     * @param originalDoc The original document before the update.
+     * @param updatedDoc The document after the update.
+     *
+     * @throws DocumentUpdateException if the update breaks a document update rule.
+     */
+    @ApiStatus.Internal
+    @Throws(DocumentUpdateException::class)
+    fun isUpdateValidInternal(
+        originalDoc: D,
+        updatedDoc: D,
+    )
 }

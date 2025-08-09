@@ -1,0 +1,10 @@
+name: TestPlugin
+main: com.jakemoore.datakache.util.TestPlugin
+version: 1.0.0
+authors: [Jake-Moore]
+description: A testing plugin for DataKache
+api-version: 1.13
+commands:
+  datakache:
+    description: Core DataKache Command
+    permission: datakache.command

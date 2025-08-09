@@ -1,6 +1,6 @@
 package com.jakemoore.datakache.api.result.handler
 
-import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.doc.GenericDoc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -10,9 +10,10 @@ import com.jakemoore.datakache.api.result.Reject
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
+import kotlinx.coroutines.CancellationException
 
-internal object RejectableUpdateResultHandler {
-    internal suspend fun <K : Any, D : Doc<K, D>> wrap(
+internal object RejectableUpdateGenericDocResultHandler {
+    internal suspend fun <D : GenericDoc<D>> wrap(
         // Work cannot return a null document.
         //   If the document is not found it should throw a [DocumentNotFoundException].
         work: suspend () -> D
@@ -22,7 +23,10 @@ internal object RejectableUpdateResultHandler {
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdate)
 
             val value = work()
-            return Success(requireNotNull(value))
+            return Success(value)
+        } catch (e: CancellationException) {
+            // propagate cancellation exceptions
+            throw e
         } catch (e: DocumentNotFoundException) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateNotFoundFail)
@@ -35,30 +39,16 @@ internal object RejectableUpdateResultHandler {
                     exception = e,
                 )
             )
+        } catch (e: RejectUpdateException) {
+            // METRICS
+            DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateRejected)
+
+            return Reject(e)
         } catch (e: Exception) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateFail)
 
-            val rejectException = getRejectException(e)
-            return if (rejectException != null) {
-                Reject(rejectException)
-            } else {
-                Failure(ResultExceptionWrapper("Update operation failed.", e))
-            }
+            return Failure(ResultExceptionWrapper("Rejectable Update operation failed.", e))
         }
-    }
-
-    private fun getRejectException(exception: Throwable): RejectUpdateException? {
-        val cause = exception.cause
-        return exception as? RejectUpdateException
-            ?: (
-                cause as? RejectUpdateException
-                    ?: if (cause != null && cause.cause is RejectUpdateException) {
-                        // If its more than 2 levels deep, I feel like that's an issue with the user's code
-                        cause.cause as RejectUpdateException
-                    } else {
-                        null
-                    }
-                )
     }
 }

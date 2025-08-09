@@ -1,4 +1,5 @@
-@file:Suppress("deprecation")
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
 
 plugins {
     // Java Build Plugins
@@ -15,11 +16,13 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.2.1"
+val VERSION = "0.3.2"
 
 ext {
     // KotlinX
-    set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    val coroutinesVer = "1.10.2"
+    set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVer")
+    set("kotlinx-coroutines-test", "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVer")
     val serializationVer = "1.9.0"
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
@@ -34,6 +37,20 @@ ext {
 
     // Google Guava (for CacheBuilder)
     set("guava", "com.google.guava:guava:33.4.8-jre")
+
+    // Testing Dependencies
+    val kotestVer = "5.9.1"
+    set("kotest-runner-junit5", "io.kotest:kotest-runner-junit5:${kotestVer}")
+    set("kotest-assertions-core", "io.kotest:kotest-assertions-core:${kotestVer}")
+    set("kotest-property", "io.kotest:kotest-property:${kotestVer}")
+    set("kotest-framework-datatest", "io.kotest:kotest-framework-datatest:${kotestVer}")
+
+    val testcontainersVer = "1.21.3"
+    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:${testcontainersVer}")
+    // NOTE: the MongoDB container automatically sets up its own single-node replica set
+    //       This means it supports retryable writes and transactions automatically.
+    set("testcontainers-mongodb", "org.testcontainers:mongodb:${testcontainersVer}")
+    set("testcontainers-core", "org.testcontainers:testcontainers:${testcontainersVer}")
 }
 
 allprojects {
@@ -72,6 +89,19 @@ allprojects {
     tasks.withType<Javadoc> {
         options.encoding = Charsets.UTF_8.name()
         charset("UTF-8")
+    }
+
+    // Configure Kotest to run with JUnit Platform
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
+
+        testLogging {
+            showExceptions = true
+            showStackTraces = true
+
+            // log all event types
+            events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_ERROR)
+        }
     }
 
     // Register a cleaning task to remove libs outputs and detekt reports

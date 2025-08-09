@@ -17,7 +17,7 @@ internal object DeleteResultHandler {
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocDelete)
 
             val value = work()
-            return Success(requireNotNull(value))
+            return Success(value)
         } catch (e: Exception) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocDeleteFail)

@@ -2,6 +2,7 @@ package com.jakemoore.datakache.api.doc
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.cache.GenericDocCache
+import org.jetbrains.annotations.ApiStatus
 import java.util.Objects
 
 /**
@@ -26,6 +27,11 @@ abstract class GenericDoc<D : GenericDoc<D>> : Doc<String, D> {
     private lateinit var docCache: GenericDocCache<D>
     override fun getDocCache(): DocCache<String, D> {
         return docCache
+    }
+
+    @ApiStatus.Internal
+    override fun hasDocCacheInternal(): Boolean {
+        return ::docCache.isInitialized
     }
 
     // ------------------------------------------------------------ //

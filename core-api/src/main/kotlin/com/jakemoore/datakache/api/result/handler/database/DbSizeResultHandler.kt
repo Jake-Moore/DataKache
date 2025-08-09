@@ -12,7 +12,7 @@ internal object DbSizeResultHandler {
     ): DefiniteResult<Long> {
         try {
             val value = work()
-            return Success(requireNotNull(value))
+            return Success(value)
         } catch (e: Exception) {
             return Failure(ResultExceptionWrapper("DB Size operation failed.", e))
         }

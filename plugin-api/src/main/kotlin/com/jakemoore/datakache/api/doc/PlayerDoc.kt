@@ -7,6 +7,7 @@ import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.serialization.Serializable
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.jetbrains.annotations.ApiStatus
 import java.util.Objects
 import java.util.UUID
 
@@ -23,6 +24,11 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     private lateinit var docCache: PlayerDocCache<D>
     override fun getDocCache(): DocCache<UUID, D> {
         return docCache
+    }
+
+    @ApiStatus.Internal
+    override fun hasDocCacheInternal(): Boolean {
+        return ::docCache.isInitialized
     }
 
     // ------------------------------------------------------------ //
@@ -45,7 +51,9 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     val uniqueId: UUID
         get() = this.key
 
-    @kotlinx.serialization.Transient @Transient
+    @kotlinx.serialization.Transient
+    @Transient
+    @Volatile
     private var _player: Player? = null
 
     /**
@@ -69,7 +77,7 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
      * See [isOnline] for a more lenient check.
      */
     val isTrulyOnline: Boolean
-        get() = PlayerUtil.isFullyValidPlayer(Bukkit.getPlayer(this.uniqueId))
+        get() = PlayerUtil.isFullyValidPlayer(getPlayer())
 
     /**
      * Checks if the [Player] behind this [PlayerDoc] is online. (not necessarily valid)
@@ -77,7 +85,11 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
      * See [isTrulyOnline] for a more strict check.
      */
     val isOnline: Boolean
-        get() = Bukkit.getPlayer(this.uniqueId)?.isOnline ?: false
+        get() {
+            val cached = _player
+            if (cached != null && cached.isOnline) return true
+            return Bukkit.getPlayer(this.uniqueId)?.isOnline ?: false
+        }
 
     // ------------------------------------------------------------ //
     //                      Internal API Methods                    //

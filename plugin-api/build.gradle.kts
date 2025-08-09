@@ -6,6 +6,10 @@ plugins {
     kotlin("plugin.serialization")
 }
 
+repositories {
+    maven(url = "https://repo.papermc.io/repository/maven-public/")
+}
+
 // Unique module dependencies
 dependencies {
     // bring the code part of core-api, but exclude all transitive dependencies
@@ -32,6 +36,22 @@ dependencies {
 
     // Guava
     api(project.property("guava") as String) // brings org.jspecify annotations
+
+    // Testing Dependencies
+    testImplementation(project.property("kotest-runner-junit5") as String)
+    testImplementation(project.property("kotest-assertions-core") as String)
+    testImplementation(project.property("kotest-property") as String)
+    testImplementation(project.property("kotest-framework-datatest") as String)
+
+    testImplementation(project.property("testcontainers-junit-jupiter") as String)
+    testImplementation(project.property("testcontainers-mongodb") as String)
+    testImplementation(project.property("testcontainers-core") as String)
+    testImplementation(project.property("kotlinx-coroutines-test") as String)
+
+    testRuntimeOnly(project.property("logback-classic") as String)
+
+    // MockBukkit
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.6")
 }
 
 tasks {

@@ -8,16 +8,12 @@ import com.jakemoore.datakache.api.DataKacheContext
 import com.jakemoore.datakache.api.coroutines.GlobalDataKacheScope
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.mode.StorageMode
-import kotlinx.coroutines.runBlocking
+import kotlin.time.TimeSource
 
 object DataKache {
     var enabled = false
         private set
     var context: DataKacheContext? = null
-        private set
-
-    // Internal Properties
-    var onEnableTime: Long = 0
         private set
 
     /**
@@ -29,6 +25,12 @@ object DataKache {
         if (enabled) {
             return false
         }
+        val startMark = TimeSource.Monotonic.markNow()
+        info("Enabling DataKache...")
+
+        // Enable Coroutines
+        GlobalDataKacheScope.restart()
+
         DataKache.context = context
         enabled = true
 
@@ -42,7 +44,8 @@ object DataKache {
             return false
         }
 
-        onEnableTime = System.currentTimeMillis()
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+        info("DataKache enabled successfully in ${elapsedMillis}ms!")
         return true
     }
 
@@ -53,16 +56,16 @@ object DataKache {
         if (!enabled) {
             return false
         }
+        val startMark = TimeSource.Monotonic.markNow()
+        info("Disabling DataKache...")
 
         // Wait for Coroutines
         logger.info("&aWaiting for DataKacheScope coroutines to finish...")
-        runBlocking {
-            if (!GlobalDataKacheScope.awaitAllChildrenCompletion(logger)) {
-                logger.severe("&cFailed to wait for all coroutines to finish!")
-                GlobalDataKacheScope.logActiveCoroutines()
-            }
-            GlobalDataKacheScope.cancelAll()
+        if (!GlobalDataKacheScope.awaitAllChildrenCompletion(logger)) {
+            logger.severe("&cFailed to wait for all coroutines to finish!")
+            GlobalDataKacheScope.logActiveCoroutines()
         }
+        GlobalDataKacheScope.shutdown()
         logger.info("&aAll DataKacheScope coroutines finished!")
 
         // Shutdown any running DocCaches
@@ -78,7 +81,7 @@ object DataKache {
                     "Manually shutting it down! " +
                         "(PLEASE CONTACT AUTHORS OF ${it.client.name} TO FIX THIS)"
                 )
-                runBlocking { it.shutdown() }
+                it.shutdown()
             }
             DataKacheAPI.registrations.clear()
         }
@@ -92,6 +95,9 @@ object DataKache {
 
         // Reset State
         enabled = false
+        context = null
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+        info("DataKache disabled successfully in ${elapsedMillis}ms!")
         return true
     }
 
@@ -135,7 +141,7 @@ object DataKache {
     internal fun error(msg: String) {
         val logger: LoggerService? = context?.logger
         if (logger == null) {
-            println("[ERROR] $msg")
+            System.err.println("[ERROR] $msg")
         } else {
             logger.severe(msg)
         }

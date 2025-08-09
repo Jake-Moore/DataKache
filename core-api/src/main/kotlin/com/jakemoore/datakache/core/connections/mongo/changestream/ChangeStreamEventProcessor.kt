@@ -18,6 +18,7 @@ import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import org.bson.BsonDocument
+import kotlin.time.TimeSource
 
 /**
  * Handles event processing for change streams including channel management,
@@ -35,7 +36,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
 
     // For monitoring and debugging
     private var totalEventsProcessed = 0L
-    private var lastTokenCleanupTime = System.currentTimeMillis()
+    private var lastTokenCleanupTime = TimeSource.Monotonic.markNow()
 
     /**
      * Creates a new event channel, replacing any existing one.
@@ -53,7 +54,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     fun resetCountersForRestart() {
         // Reset events counter to prevent overflow and provide fresh start
         totalEventsProcessed = 0L
-        lastTokenCleanupTime = System.currentTimeMillis()
+        lastTokenCleanupTime = TimeSource.Monotonic.markNow()
         context.logger.debug("Reset counters for restart")
     }
 
@@ -337,11 +338,11 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      * Performs periodic maintenance like token cleanup.
      */
     private fun performPeriodicMaintenance() {
-        val now = System.currentTimeMillis()
-        if (now - lastTokenCleanupTime > 300_000) { // Every 5 minutes
+        val elapsedMillis = lastTokenCleanupTime.elapsedNow().inWholeMilliseconds
+        if (elapsedMillis > 300_000) { // Every 5 minutes
             // Delegate token maintenance to the resume token manager
             resumeTokenManager.performTokenMaintenance(totalEventsProcessed)
-            lastTokenCleanupTime = now
+            lastTokenCleanupTime = TimeSource.Monotonic.markNow()
         }
     }
 

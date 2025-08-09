@@ -8,11 +8,20 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.data.Operation
+import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
+import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.DatabaseService
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import com.jakemoore.datakache.core.connections.mongo.MongoTransactions.checkDuplicateKeyExceptions
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
@@ -95,6 +104,14 @@ internal class MongoDatabaseService : DatabaseService() {
         }
 
         this.debug("Shutting down MongoDB connection...")
+
+        // First shutdown the parent (which handles UpdateQueueManager)
+        val parentShutdownSuccess = super.shutdown()
+        if (!parentShutdownSuccess) {
+            this.error("Failed to shutdown parent DatabaseService components!")
+        }
+
+        // Then shutdown MongoDB-specific components
         keepMongoConnected = false
         if (!this.disconnectFromMongoDB()) {
             this.error("Failed to disconnect from MongoDB!")
@@ -102,7 +119,7 @@ internal class MongoDatabaseService : DatabaseService() {
         }
 
         this.running = false
-        return true
+        return parentShutdownSuccess
     }
 
     // ------------------------------------------------------------ //
@@ -195,6 +212,7 @@ internal class MongoDatabaseService : DatabaseService() {
             this.mongoConnected = false
             this.databases.clear()
             this.collections.clear()
+            this.rawCollections.clear()
             this.info("&aDisconnected from MongoDB successfully.")
             return true
         } catch (e: Exception) {
@@ -244,27 +262,7 @@ internal class MongoDatabaseService : DatabaseService() {
                 }
 
                 // Transform certain MongoWrite exceptions into standard DataKache exceptions
-                if (e.error.code == DUPLICATE_KEY_VIOLATION_CODE) {
-                    val errorMessage = e.message ?: ""
-                    when {
-                        errorMessage.contains("index: _id") -> {
-                            // Primary key violation (duplicate _id)
-                            throw DuplicateDocumentKeyException(
-                                docCache = docCache,
-                                fullMessage = errorMessage,
-                                operation = "insert",
-                            )
-                        }
-                        errorMessage.contains("index:") -> {
-                            // Unique index violation (duplicate value in a unique index)
-                            throw DuplicateUniqueIndexException(
-                                docCache = docCache,
-                                fullMessage = errorMessage,
-                                operation = "insert",
-                            )
-                        }
-                    }
-                }
+                checkDuplicateKeyExceptions(e, docCache, doc, Operation.CREATE)
 
                 // Any Other WriteException -> Promote to caller (no additional logging needed)
                 throw e
@@ -281,11 +279,18 @@ internal class MongoDatabaseService : DatabaseService() {
         }
     }
 
-    @Throws(DocumentNotFoundException::class)
+    @Throws(
+        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        TransactionRetriesExceededException::class, DocumentUpdateException::class,
+        InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
+        IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
+        RejectUpdateException::class,
+    )
     override suspend fun <K : Any, D : Doc<K, D>> updateInternal(
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): D = withContext(Dispatchers.IO) {
         val client = requireNotNull(mongoClient) {
             "MongoClient is not initialized! Could not update Doc in MongoDB!"
@@ -298,6 +303,7 @@ internal class MongoDatabaseService : DatabaseService() {
             docCache,
             doc,
             updateFunction,
+            bypassValidation,
         )
     }
 
@@ -471,12 +477,16 @@ internal class MongoDatabaseService : DatabaseService() {
 
             // Fail State - No Document Replaced
             if (result.matchedCount == 0L) {
+                val keyString = docCache.keyToString(key)
                 throw DocumentNotFoundException(
-                    key = key,
+                    keyString = keyString,
                     docCache = docCache,
-                    operation = "replace",
+                    operation = Operation.REPLACE,
                 )
             }
+        } catch (e: DocumentNotFoundException) {
+            // don't log, this is fine, promote to caller
+            throw e
         } catch (me: MongoException) {
             docCache.getLoggerInternal().info(
                 throwable = me,
@@ -631,7 +641,7 @@ internal class MongoDatabaseService : DatabaseService() {
             val result = adminDatabase.runCommand(Document("hello", 1))
 
             // Extract cluster time from the result
-            val clusterTimeDoc = result.get("\$clusterTime") as? Document
+            val clusterTimeDoc = result["\$clusterTime"] as? Document
             clusterTimeDoc?.get("clusterTime") as? org.bson.BsonTimestamp
         } catch (e: Exception) {
             this.warn("Failed to get current operation time: ${e.message}")
@@ -659,8 +669,7 @@ internal class MongoDatabaseService : DatabaseService() {
         keyFieldName: String,
         docCache: DocCache<K, D>
     ): K? {
-        val field = document.get(keyFieldName)
-        return when (field) {
+        return when (val field = document.get(keyFieldName)) {
             is String -> docCache.keyFromString(field)
             is ObjectId -> docCache.keyFromString(field.toHexString())
             else -> {
@@ -674,6 +683,6 @@ internal class MongoDatabaseService : DatabaseService() {
     }
 
     companion object {
-        private const val DUPLICATE_KEY_VIOLATION_CODE = 11000
+        internal const val DUPLICATE_KEY_VIOLATION_CODE = 11000
     }
 }

@@ -14,6 +14,10 @@ open class DefaultLoggerService : LoggerService {
 
     override fun logToConsole(msg: String, level: LoggerService.LogLevel) {
         // Simple console logging
-        println("[$level] $msg")
+        when (level) {
+            LoggerService.LogLevel.WARNING,
+            LoggerService.LogLevel.SEVERE -> System.err.println("[$loggerName] [$level] $msg")
+            else -> println("[$loggerName] [$level] $msg")
+        }
     }
 }
