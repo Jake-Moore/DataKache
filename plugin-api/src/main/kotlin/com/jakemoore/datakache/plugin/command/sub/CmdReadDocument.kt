@@ -139,7 +139,7 @@ internal class CmdReadDocument(
 
         if (cacheDoc != null) {
             sender.sendMessage(Color.t("&7Document in Cache: &aFound"))
-            sender.sendMessage("&8(&7See console for full document data.&8)")
+            sender.sendMessage(Color.t("&8(&7See console for full document data.&8)"))
             val jsonStr = json.encodeToString(docCache.getKSerializer(), cacheDoc)
             requireNotNull(DataKachePlugin.getController()).logger.info(
                 "Read Cache Document: ${namespace}\n" + jsonStr
@@ -150,13 +150,20 @@ internal class CmdReadDocument(
 
         if (dbDoc != null) {
             sender.sendMessage(Color.t("&7Document in Database: &aFound"))
-            sender.sendMessage("&8(&7See console for full document data.&8)")
+            sender.sendMessage(Color.t("&8(&7See console for full document data.&8)"))
             val jsonStr = json.encodeToString(docCache.getKSerializer(), dbDoc)
             requireNotNull(DataKachePlugin.getController()).logger.info(
                 "Read Database Document: ${namespace}\n" + jsonStr
             )
         } else {
             sender.sendMessage(Color.t("&7Document in Database: &cNot Found"))
+        }
+
+        // Compare equality (they should contain the same data)
+        if (cacheDoc == dbDoc) {
+            sender.sendMessage(Color.t("&7Documents are &aEqual&7."))
+        } else {
+            sender.sendMessage(Color.t("&7Documents are &cNot Equal&7."))
         }
     }
 
