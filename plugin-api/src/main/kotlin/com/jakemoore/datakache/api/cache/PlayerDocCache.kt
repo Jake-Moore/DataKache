@@ -6,6 +6,10 @@ import com.jakemoore.datakache.api.doc.PlayerDoc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.InvalidPlayerException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentUsernameModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.logging.PluginCacheLogger
@@ -79,8 +83,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * @return An [DefiniteResult] containing the document or an exception if the document could not be read.
      */
     fun read(player: Player): DefiniteResult<D> {
-        require(PlayerUtil.isFullyValidPlayer(player)) {
-            "Cannot read PlayerDoc for player ${player.name} (${player.uniqueId}). Player is not online or valid!"
+        if (!PlayerUtil.isFullyValidPlayer(player)) {
+            throw InvalidPlayerException(
+                player = player,
+                operation = "read",
+            )
         }
 
         return when (val result = this.read(player.uniqueId)) {
@@ -103,7 +110,12 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                 return runBlocking {
                     CreatePlayerDocResultHandler.wrap {
                         // method will also save the document to database and cache
-                        createNewPlayerDoc(player.uniqueId, player.name, null)
+                        createAndInsertNewPlayerDoc(
+                            uuid = player.uniqueId,
+                            username = player.name,
+                            loginEvent = null,
+                            initializer = { it },
+                        )
                     }
                 }
             }
@@ -113,21 +125,12 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     override suspend fun create(key: UUID, initializer: (D) -> D): DefiniteResult<D> {
         return CreatePlayerDocResultHandler.wrap {
             // Create a new instance in modifiable state
-            val instantiated: D = instantiator(key, 0L, null)
-            instantiated.initializeInternal(this)
-
-            // Allow caller to initialize the document with starter data
-            val doc: D = initializer(instantiated)
-            require(doc.key == key) {
-                "The key of the PlayerDoc must not change during initializer. Expected: $key, Actual: ${doc.key}"
-            }
-            assert(doc.version == 0L) {
-                "The version of the PlayerDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
-            }
-            doc.initializeInternal(this)
-
-            // Access internal method to save and cache the document
-            return@wrap this.insertDocumentInternal(doc)
+            return@wrap createAndInsertNewPlayerDoc(
+                uuid = key,
+                username = null,
+                loginEvent = null,
+                initializer = initializer,
+            )
         }
     }
 
@@ -164,8 +167,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
      */
     suspend fun update(player: Player, updateFunction: (D) -> D): DefiniteResult<D> {
-        require(PlayerUtil.isFullyValidPlayer(player)) {
-            "Cannot update PlayerDoc for player ${player.name} (${player.uniqueId}). Player is not online or valid!"
+        if (!PlayerUtil.isFullyValidPlayer(player)) {
+            throw InvalidPlayerException(
+                player = player,
+                operation = "update",
+            )
         }
         return this.update(player.uniqueId, updateFunction)
     }
@@ -186,8 +192,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     @Throws(DocumentNotFoundException::class)
     suspend fun updateRejectable(player: Player, updateFunction: (D) -> D): RejectableResult<D> {
-        require(PlayerUtil.isFullyValidPlayer(player)) {
-            "Cannot update PlayerDoc for player ${player.name} (${player.uniqueId}). Player is not online or valid!"
+        if (!PlayerUtil.isFullyValidPlayer(player)) {
+            throw InvalidPlayerException(
+                player = player,
+                operation = "updateRejectable",
+            )
         }
         return this.updateRejectable(player.uniqueId, updateFunction)
     }
@@ -205,7 +214,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     override suspend fun delete(key: UUID): DefiniteResult<Boolean> {
         return ClearPlayerDocResultHandler.wrap {
             val username: String? = this@PlayerDocCache.read(key).getOrNull()?.username
-            val defaultDoc = constructNewPlayerDoc(key, username)
+            val defaultDoc = constructNewPlayerDoc(key, username) { it }
 
             // Replace the current document with the new one.
             // If a DocumentNotFoundException is thrown, it means the document was not found.
@@ -227,8 +236,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
      */
     suspend fun delete(player: Player): DefiniteResult<Boolean> {
-        require(PlayerUtil.isFullyValidPlayer(player)) {
-            "Cannot delete PlayerDoc for player ${player.name} (${player.uniqueId}). Player is not online or valid!"
+        if (!PlayerUtil.isFullyValidPlayer(player)) {
+            throw InvalidPlayerException(
+                player = player,
+                operation = "delete",
+            )
         }
         return this.delete(player.uniqueId)
     }
@@ -248,31 +260,75 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    private suspend fun createNewPlayerDoc(
+    private suspend fun createAndInsertNewPlayerDoc(
         uuid: UUID,
         username: String? = null,
         loginEvent: AsyncPlayerPreLoginEvent? = null,
+        initializer: (D) -> D,
     ): D {
-        val doc: D = constructNewPlayerDoc(uuid, username)
+        val doc: D = constructNewPlayerDoc(uuid, username, initializer)
 
         // Access internal method to save and cache the document
-        return this.insertDocumentInternal(doc)
+        return this.insertDocumentInternal(doc, force = true)
     }
 
-    private fun constructNewPlayerDoc(uuid: UUID, username: String?): D {
+    private fun constructNewPlayerDoc(
+        uuid: UUID,
+        username: String?,
+        initializer: (D) -> D,
+    ): D {
+        val namespace = this.getKeyNamespace(uuid)
+
         // Create from instantiator
         val instantiated: D = this.instantiator(uuid, 0L, username)
         instantiated.initializeInternal(this)
 
         // Initialize the document with default values
-        val doc: D = this.defaultInitializer(instantiated)
-        require(doc.key == uuid) {
-            "The key of the PlayerDoc must not change during initializer. Expected: $uuid, Actual: ${doc.key}"
-        }
-        assert(doc.version == 0L) {
-            "The version of the PlayerDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
-        }
+        val default: D = this.defaultInitializer(instantiated)
+        validateInitializer(namespace, uuid, 0L, username, default)
+
+        // Initialize with custom initializer
+        val doc: D = initializer(default)
+        validateInitializer(namespace, uuid, 0L, username, doc)
+
         doc.initializeInternal(this)
         return doc
+    }
+
+    @Throws(IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class)
+    @Suppress("SameParameterValue")
+    private fun validateInitializer(
+        namespace: String,
+        expectedKey: UUID,
+        expectedVersion: Long,
+        expectedUsername: String?,
+        doc: D,
+    ) {
+        // Require the Key to stay the same
+        if (doc.key != expectedKey) {
+            val foundKeyString = this.keyToString(doc.key)
+            val expectedKeyString = this.keyToString(expectedKey)
+            throw IllegalDocumentKeyModificationException(
+                namespace,
+                foundKeyString,
+                expectedKeyString,
+            )
+        }
+
+        // Require the Version to stay the same
+        val foundVersion = doc.version
+        if (foundVersion != expectedVersion) {
+            throw IllegalDocumentVersionModificationException(namespace, foundVersion, expectedVersion)
+        }
+
+        // Require the Username to stay the same
+        val foundUsername = doc.username
+        if (foundUsername != expectedUsername) {
+            throw IllegalDocumentUsernameModificationException(
+                docNamespace = namespace,
+                foundUsername = foundUsername,
+                expectedUsername = expectedUsername,
+            )
+        }
     }
 }

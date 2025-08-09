@@ -5,18 +5,11 @@ import io.kotest.core.spec.Order
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
-import kotlinx.serialization.json.Json
 import java.util.concurrent.atomic.AtomicInteger
 
 @Order(2)
 @Suppress("unused")
 class TestAsyncShutdown : AbstractDataKacheTest() {
-
-    private val json = Json {
-        encodeDefaults = true // Encodes default data class property values (instead of omitting them)
-        explicitNulls = true // Encodes null values (instead of omitting them)
-        prettyPrint = true
-    }
 
     private val atomicCount = AtomicInteger(0)
 

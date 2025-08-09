@@ -328,12 +328,12 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    override fun cacheInternal(doc: D, log: Boolean) {
+    override fun cacheInternal(doc: D, log: Boolean, force: Boolean) {
         doc.initializeInternal(this)
 
         // Optimization - if the document is in cache under the same version, assume the data is the same
         //  and therefore we can skip re-caching it.
-        if (config.optimisticCaching) {
+        if (!force && config.optimisticCaching) {
             val cached: D? = cacheMap[doc.key]
             if (cached != null && cached.version == doc.version) return
         }
@@ -359,11 +359,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      */
     @ApiStatus.Internal
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    suspend fun insertDocumentInternal(doc: D): D {
+    suspend fun insertDocumentInternal(doc: D, force: Boolean): D {
         // Insert the document in the database
         DataKache.storageMode.databaseService.insert(this, doc)
         // Cache the document in memory
-        this.cacheInternal(doc)
+        this.cacheInternal(doc, force = force)
         return doc
     }
 
@@ -436,7 +436,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                             it.onChangeStreamInsert(name, key)
                         }
 
-                        cacheInternal(doc, log = false)
+                        cacheInternal(doc, log = false, force = true)
                         getLoggerInternal().debug("Cached Document From INSERT: ${doc.key}")
                     }
                     ChangeDocumentType.REPLACE -> {
@@ -445,7 +445,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                             it.onChangeStreamReplace(name, key)
                         }
 
-                        cacheInternal(doc, log = false)
+                        cacheInternal(doc, log = false, force = true)
                         getLoggerInternal().debug("Cached Document From REPLACE: ${doc.key}")
                     }
                     ChangeDocumentType.UPDATE -> {
@@ -454,7 +454,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                             it.onChangeStreamUpdate(name, key)
                         }
 
-                        cacheInternal(doc, log = false)
+                        cacheInternal(doc, log = false, force = true)
                         getLoggerInternal().debug("Cached Document From UPDATE: ${doc.key}")
                     }
                 }

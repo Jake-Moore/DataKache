@@ -27,5 +27,19 @@ data class MyData(
                 SAMPLE_LIST
             )
         }
+
+        fun createRandom(): MyData {
+            return MyData(
+                name = randomString(16),
+                age = (1..1000).random(),
+                list = List(10) { randomString(10) }.shuffled()
+            )
+        }
+
+        private fun randomString(length: Int = 10): String {
+            return (1..length)
+                .map { ('a'..'z').random() }
+                .joinToString("")
+        }
     }
 }

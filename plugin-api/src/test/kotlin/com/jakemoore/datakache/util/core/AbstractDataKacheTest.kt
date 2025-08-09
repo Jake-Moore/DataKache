@@ -10,6 +10,7 @@ import com.jakemoore.datakache.util.core.container.DataKacheTestContainer
 import com.jakemoore.datakache.util.doc.TestPlayerDocCache
 import io.kotest.core.spec.style.DescribeSpec
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.bukkit.entity.Player
 import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.entity.PlayerMock
@@ -20,6 +21,12 @@ import org.mockbukkit.mockbukkit.entity.PlayerMock
  * Provides common setup and teardown functionality for all tests.
  */
 abstract class AbstractDataKacheTest : DescribeSpec() {
+
+    protected val json = Json {
+        encodeDefaults = true // Encodes default data class property values (instead of omitting them)
+        explicitNulls = true // Encodes null values (instead of omitting them)
+        prettyPrint = true
+    }
 
     private lateinit var testContainer: DataKacheTestContainer
 

@@ -8,6 +8,7 @@ import com.jakemoore.datakache.api.DataKacheAPI
 import com.jakemoore.datakache.api.cache.PlayerDocCache
 import com.jakemoore.datakache.api.doc.PlayerDoc
 import com.jakemoore.datakache.api.event.PlayerDocJoinEvent
+import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.Color
 import com.jakemoore.datakache.util.DataKacheFileLogger
 import kotlinx.coroutines.CoroutineScope
@@ -144,23 +145,43 @@ object PlayerDocListener : Listener {
         loginPermits.invalidate(uuid)
     }
 
+    /**
+     * @return if all PlayerDoc objects for the given player were successfully cached.
+     */
     private suspend fun cachePlayerDocs(
         uuid: UUID,
         username: String,
-    ) {
+    ): Boolean {
         // Wrap each readOrCreate call in an async block to allow parallel loading
         val loadsDeferred = DataKacheAPI.listRegistrations()
             .flatMap { it.getDocCaches() }
             .filterIsInstance(PlayerDocCache::class.java)
             .map { cache ->
                 CoroutineScope(Dispatchers.IO).async {
-                    cache.readOrCreate(uuid) { doc ->
+                    val createResult = cache.readOrCreate(uuid) { doc ->
                         doc.copyHelper(username = username)
+                    }
+                    // If not successful, return to the caller
+                    if (createResult !is Success<PlayerDoc<*>>) {
+                        return@async createResult
+                    }
+                    // If successful, double-check the username field
+                    val doc = createResult.value
+                    if (doc.username == username) {
+                        // username matches, return the normal result
+                        return@async createResult
+                    }
+
+                    // If the username is not set correctly, update it
+                    return@async doc.update {
+                        it.copyHelper(username = username)
                     }
                 }
             }
 
         // Wait for all loads to complete
-        loadsDeferred.awaitAll()
+        val results = loadsDeferred.awaitAll()
+        // Check if all PlayerDoc objects were successfully loaded or created
+        return results.all { it is Success<*> }
     }
 }

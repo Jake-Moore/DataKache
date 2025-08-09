@@ -3,7 +3,7 @@
 package com.jakemoore.datakache.api.exception.update
 
 // DocumentUpdateExceptions.kt
-sealed class DocumentUpdateException(message: String) : RuntimeException(message)
+open class DocumentUpdateException(message: String) : RuntimeException(message)
 
 /** Thrown when the update function returns the _same_ instance. */
 class UpdateFunctionReturnedSameInstanceException(

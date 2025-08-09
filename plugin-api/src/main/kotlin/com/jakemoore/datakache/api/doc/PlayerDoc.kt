@@ -7,6 +7,7 @@ import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.serialization.Serializable
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
+import org.jetbrains.annotations.ApiStatus
 import java.util.Objects
 import java.util.UUID
 
@@ -23,6 +24,11 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     private lateinit var docCache: PlayerDocCache<D>
     override fun getDocCache(): DocCache<UUID, D> {
         return docCache
+    }
+
+    @ApiStatus.Internal
+    override fun hasDocCacheInternal(): Boolean {
+        return ::docCache.isInitialized
     }
 
     // ------------------------------------------------------------ //
@@ -69,7 +75,7 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
      * See [isOnline] for a more lenient check.
      */
     val isTrulyOnline: Boolean
-        get() = PlayerUtil.isFullyValidPlayer(Bukkit.getPlayer(this.uniqueId))
+        get() = PlayerUtil.isFullyValidPlayer(getPlayer())
 
     /**
      * Checks if the [Player] behind this [PlayerDoc] is online. (not necessarily valid)
@@ -77,7 +83,15 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
      * See [isTrulyOnline] for a more strict check.
      */
     val isOnline: Boolean
-        get() = Bukkit.getPlayer(this.uniqueId)?.isOnline ?: false
+        get() = getPlayer()?.isOnline ?: false
+
+    @ApiStatus.Internal
+    fun initializePlayerInternal(player: Player) {
+        require(player.uniqueId == this.uniqueId) {
+            "Player UUID does not match PlayerDoc UUID: ${player.uniqueId} != ${this.uniqueId}"
+        }
+        this._player = player
+    }
 
     // ------------------------------------------------------------ //
     //                      Internal API Methods                    //

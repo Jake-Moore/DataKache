@@ -4,6 +4,8 @@ package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.doc.GenericDoc
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
 import com.jakemoore.datakache.api.logging.DefaultCacheLogger
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
@@ -40,22 +42,36 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
 
     override suspend fun create(key: String, initializer: (D) -> D): DefiniteResult<D> {
         return CreateGenericDocResultHandler.wrap {
+            val namespace = this.getKeyNamespace(key)
+
             // Create a new instance in modifiable state
             val instantiated: D = instantiator(key, 0L)
             instantiated.initializeInternal(this)
 
             // Allow caller to initialize the document with starter data
             val doc: D = initializer(instantiated)
-            require(doc.key == key) {
-                "The key of the GenericDoc must not change during initializer. Expected: $key, Actual: ${doc.key}"
-            }
-            assert(doc.version == 0L) {
-                "The version of the GenericDoc must not change during initializer. Expected: 0L, Actual: ${doc.version}"
-            }
-            doc.initializeInternal(this)
 
+            // Require the Key to stay the same
+            if (doc.key != key) {
+                val foundKeyString = this.keyToString(doc.key)
+                val expectedKeyString = this.keyToString(key)
+                throw IllegalDocumentKeyModificationException(
+                    namespace,
+                    foundKeyString,
+                    expectedKeyString,
+                )
+            }
+
+            // Require the Version to stay the same
+            val expectedVersion = 0L
+            val foundVersion = doc.version
+            if (foundVersion != expectedVersion) {
+                throw IllegalDocumentVersionModificationException(namespace, foundVersion, expectedVersion)
+            }
+
+            doc.initializeInternal(this)
             // Access internal method to save and cache the document
-            return@wrap this.insertDocumentInternal(doc)
+            return@wrap this.insertDocumentInternal(doc, force = true)
         }
     }
 

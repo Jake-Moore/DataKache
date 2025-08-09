@@ -20,27 +20,19 @@ import java.io.File
  *
  * Manages MongoDB container lifecycle and provides access to test resources.
  */
+@Suppress("UnusedVariable", "unused")
 class MongoDataKacheTestContainer(
     private val container: MongoDBContainer,
     private val databaseName: String = "TestDatabase"
 ) : DataKacheTestContainer {
 
-    private lateinit var mockServer: ServerMock
-    private lateinit var mockPlugin: TestPlugin
     private lateinit var config: DataKacheConfig
-    private lateinit var context: DataKachePluginContext
+    private var mockServer: ServerMock? = null
+    private var mockPlugin: TestPlugin? = null
     private var registration: DataKacheRegistration? = null
     private var cache: TestPlayerDocCache? = null
 
     override suspend fun beforeSpec() {
-        // Load the sample plugin.yml in order to register the datakache command properly
-        val resource = requireNotNull(this::class.java.classLoader.getResource("plugin.yml"))
-        val pluginYml = File(resource.toURI())
-
-        // Start the MockBukkit server
-        mockServer = MockBukkit.getOrCreateMock()
-        mockPlugin = MockBukkit.loadWith(TestPlugin::class.java, pluginYml)
-
         // Start the MongoDB container
         container.start()
 
@@ -57,23 +49,36 @@ class MongoDataKacheTestContainer(
             storageMode = StorageMode.MONGODB,
             mongoURI = container.connectionString
         )
-        context = DataKachePluginContext(
-            plugin = mockPlugin,
+    }
+
+    override suspend fun beforeEach() {
+        // Load the sample plugin.yml in order to register the datakache command properly
+        val resource = requireNotNull(this::class.java.classLoader.getResource("plugin.yml"))
+        val pluginYml = File(resource.toURI())
+
+        // Start the MockBukkit server
+        val server = MockBukkit.mock().also {
+            mockServer = it
+        }
+        val plugin = MockBukkit.loadWith(TestPlugin::class.java, pluginYml).also {
+            mockPlugin = it
+        }
+
+        val context = DataKachePluginContext(
+            plugin = plugin,
             config = config,
             lang = DataKachePluginLang(),
         )
 
         // Initialize DataKache
-        require(DataKachePlugin.enableDataKache(mockPlugin, context)) {
+        require(DataKachePlugin.enableDataKache(plugin, context)) {
             "Failed to enable DataKache with MongoDB storage mode"
         }
-    }
 
-    override suspend fun beforeEach() {
         // Create registration and cache
         TestUtil.createRegistration(databaseName = databaseName).also {
             registration = it
-            cache = TestUtil.createTestPlayerDocCache(mockPlugin, it)
+            cache = TestUtil.createTestPlayerDocCache(plugin, it)
         }
     }
 
@@ -96,27 +101,35 @@ class MongoDataKacheTestContainer(
         // Reset cache and registration
         this.cache = null
         registration = null
+
+        // Shutdown DataKache
+        val server = requireNotNull(mockServer) {
+            "Server is not initialized. Ensure beforeEach is called."
+        }
+        val plugin = requireNotNull(mockPlugin) {
+            "Plugin is not initialized. Ensure beforeEach is called."
+        }
+        require(DataKachePlugin.disableDataKache(plugin)) {
+            "Failed to disable DataKache after test"
+        }
+
+        // Unmock MockBukkit (also shuts down plugin)
+        MockBukkit.unmock()
     }
 
     override suspend fun afterSpec() {
-        // Stop DataKache
-        val disabled = DataKachePlugin.disableDataKache(mockPlugin)
-        if (!disabled) {
-            System.err.println("Warning: DataKache was already disabled or failed to disable properly")
-        }
-
         // Stop container
         container.stop()
 
-        // Stop MockBukkit
+        // Double Check MockBukkit
         MockBukkit.unmock()
     }
 
     override fun getCache(): TestPlayerDocCache = requireNotNull(cache)
 
-    override fun getServer(): ServerMock = mockServer
+    override fun getServer(): ServerMock = requireNotNull(mockServer)
 
-    override fun getPlugin(): TestPlugin = mockPlugin
+    override fun getPlugin(): TestPlugin = requireNotNull(mockPlugin)
 
     override fun getRegistration(): DataKacheRegistration = requireNotNull(registration)
 
