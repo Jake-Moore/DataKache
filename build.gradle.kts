@@ -1,5 +1,3 @@
-@file:Suppress("deprecation")
-
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 

@@ -7,7 +7,6 @@ import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import org.mockbukkit.mockbukkit.entity.PlayerMock
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
 
@@ -51,8 +50,7 @@ class TestPlayerDocListener : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Simulate that the player joins later
-                val player = PlayerMock(server, username, uuid)
-                server.addPlayer(player)
+                val player = addPlayer(username, uuid)
 
                 // Verify that the database now contains the updated PlayerDoc
                 eventually(5.seconds) {

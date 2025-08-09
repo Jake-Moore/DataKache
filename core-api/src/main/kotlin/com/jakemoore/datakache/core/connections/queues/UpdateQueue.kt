@@ -172,12 +172,20 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
         try {
             for (request in updateChannel) {
+                // Decrement queued count as soon as the channel gives us a request
+                queueSize.decrementAndGet()
+
                 isProcessing.set(true)
                 lastActivityTime.set(System.currentTimeMillis())
 
                 try {
                     processUpdateRequest(request)
                 } catch (e: CancellationException) {
+                    request.deferred.completeExceptionally(
+                        CancellationException(
+                            "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}"
+                        )
+                    )
                     // rethrow for cooperative cancellation
                     throw e
                 } catch (e: Exception) {
@@ -188,8 +196,6 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                     request.deferred.completeExceptionally(e)
                 } finally {
                     isProcessing.set(false)
-                    // Decrement queue size after processing (whether success or failure)
-                    queueSize.decrementAndGet()
                 }
             }
         } catch (e: CancellationException) {

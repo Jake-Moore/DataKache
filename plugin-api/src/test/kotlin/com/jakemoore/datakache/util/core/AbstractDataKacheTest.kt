@@ -8,11 +8,14 @@ import com.jakemoore.datakache.util.TestPlugin
 import com.jakemoore.datakache.util.TestUtil
 import com.jakemoore.datakache.util.core.container.DataKacheTestContainer
 import com.jakemoore.datakache.util.doc.TestPlayerDocCache
+import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.core.spec.style.DescribeSpec
 import kotlinx.serialization.json.Json
 import org.bukkit.entity.Player
 import org.mockbukkit.mockbukkit.ServerMock
 import org.mockbukkit.mockbukkit.entity.PlayerMock
+import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Abstract base class for DataKache integration tests.
@@ -65,7 +68,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
     /**
      * The [ServerMock] instance for testing.
      */
-    val server: ServerMock
+    private val server: ServerMock
         get() = testContainer.server
 
     /**
@@ -80,7 +83,65 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param playerName The name of the player to add
      * @return The [PlayerMock] instance representing the added player
      */
-    protected fun addPlayer(playerName: String): PlayerMock = server.addPlayer(playerName)
+    protected suspend fun addPlayer(playerName: String): PlayerMock {
+        return eventually(5.seconds) {
+            server.addPlayer(playerName)
+            return@eventually checkMockPlayer(playerName)
+        }
+    }
+
+    /**
+     * Adds a player to the mock server.
+     *
+     * @param playerName The name of the player to add
+     * @return The [PlayerMock] instance representing the added player
+     */
+    protected suspend fun addPlayer(playerName: String, uuid: UUID): PlayerMock {
+        return addPlayer(makePlayer(playerName, uuid))
+    }
+
+    /**
+     * Adds a player to the mock server.
+     *
+     * @param player The [PlayerMock] instance to add
+     * @return The [PlayerMock] instance representing the added player
+     */
+    protected suspend fun addPlayer(player: PlayerMock): PlayerMock {
+        return eventually(5.seconds) {
+            server.addPlayer(player)
+            return@eventually checkMockPlayer(player.name)
+        }
+    }
+
+    private fun checkMockPlayer(playerName: String): PlayerMock {
+        // Ensure the login went through
+        val p2 = server.getPlayerExact(playerName)
+            ?: error("Player $playerName not found after adding")
+        require(p2.isOnline) {
+            "Player $playerName is not online after adding"
+        }
+        require(p2.isValid) {
+            "Player $playerName is not valid after adding"
+        }
+
+        return p2 as? PlayerMock ?: error("Player $playerName is not a PlayerMock")
+    }
+
+    /**
+     * Creates a new player with the given name and UUID.
+     *
+     * This player still needs to be added to the server using [addPlayer]
+     *
+     * @param playerName The name of the player to create
+     * @param uuid The UUID of the player (defaults to a random UUID)
+     * @return The [PlayerMock] instance representing the created player
+     */
+    protected fun makePlayer(
+        playerName: String,
+        uuid: UUID = UUID.randomUUID(),
+    ): PlayerMock {
+        return PlayerMock(server, playerName, uuid)
+    }
 
     /**
      * Gets a player by name from the mock server.
@@ -88,5 +149,5 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param playerName The name of the player to retrieve
      * @return The [Player] instance if found, or null if not found
      */
-    protected fun getPlayer(playerName: String): Player? = server.getPlayerExact(playerName)
+    protected fun getPlayerExact(playerName: String): Player? = server.getPlayerExact(playerName)
 }

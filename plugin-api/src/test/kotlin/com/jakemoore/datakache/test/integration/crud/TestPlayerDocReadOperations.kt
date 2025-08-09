@@ -17,7 +17,6 @@ import io.kotest.matchers.types.shouldNotBeInstanceOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import org.mockbukkit.mockbukkit.entity.PlayerMock
 import java.util.UUID
 
 @Suppress("unused")
@@ -351,8 +350,7 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
 
                 // Test with zero UUID
                 val zeroUUID = UUID(0L, 0L)
-                val player1 = PlayerMock(server, "TestPlayer22", zeroUUID)
-                server.addPlayer(player1)
+                val player1 = addPlayer("TestPlayer22", zeroUUID)
 
                 val result1 = cache.read(player1)
                 result1.shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -361,8 +359,7 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
 
                 // Test with all-ones UUID
                 val allOnesUUID = UUID(-1L, -1L)
-                val player2 = PlayerMock(server, "TestPlayer23", allOnesUUID)
-                server.addPlayer(player2)
+                val player2 = addPlayer("TestPlayer23", allOnesUUID)
 
                 val result2 = cache.read(player2)
                 result2.shouldBeInstanceOf<Success<TestPlayerDoc>>()
