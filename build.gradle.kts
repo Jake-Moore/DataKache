@@ -1,3 +1,5 @@
+@file:Suppress("RedundantSuppression")
+
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 
@@ -16,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.3.2"
+val VERSION = "0.3.3"
 
 ext {
     // KotlinX
@@ -113,6 +115,8 @@ allprojects {
 
     // Configure detekt
     val detektConfig = rootProject.layout.projectDirectory.file(".detekt/detekt.yml").asFile
+
+    @Suppress("deprecation")
     detekt {
         allRules = true
         autoCorrect = true

@@ -4,6 +4,7 @@ import com.jakemoore.datakache.plugin.command.api.AbstractCommand
 import com.jakemoore.datakache.plugin.command.sub.CmdCoroutines
 import com.jakemoore.datakache.plugin.command.sub.CmdDatabaseInfo
 import com.jakemoore.datakache.plugin.command.sub.CmdListDatabases
+import com.jakemoore.datakache.plugin.command.sub.CmdReadDocument
 import com.jakemoore.datakache.plugin.command.sub.CmdStatus
 import org.bukkit.command.Command
 import org.bukkit.command.CommandSender
@@ -22,6 +23,7 @@ internal class DataKacheCommand :
         subCommands.add(CmdListDatabases(this))
         subCommands.add(CmdCoroutines(this))
         subCommands.add(CmdDatabaseInfo(this))
+        subCommands.add(CmdReadDocument(this))
     }
 
     override fun onCommand(sender: CommandSender, cmd: Command, label: String, args: Array<String>): Boolean {

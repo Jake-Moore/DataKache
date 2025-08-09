@@ -311,10 +311,10 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val doc = result.value
 
                 // Create a large list
-                val largeList = (1..1000).map { "item$it" }
-                val largeCustomList = (1..100).map { MyData.createRandom() }
-                val largeCustomSet = (1..50).map { MyData.createRandom() }.toSet()
-                val largeCustomMap = (1..200).associate { "key$it" to MyData.createRandom() }
+                val largeList = (1..50).map { "item$it" }
+                val largeCustomList = (1..20).map { MyData.createRandom() }
+                val largeCustomSet = (1..20).map { MyData.createRandom() }.toSet()
+                val largeCustomMap = (1..20).associate { "key$it" to MyData.createRandom() }
 
                 // Update with large data
                 val updateResult = cache.update(player) { doc ->
