@@ -80,8 +80,8 @@ internal class UpdateQueueManager(
     }
 
     /**
-     * Gets an existing queue or creates a new one for the specified key.
-     * Uses double-checked locking pattern to avoid race conditions.
+     * Gets or creates an UpdateQueue for the specified document key.
+     * Returns a CompletableDeferred that will resolve to the updated document.
      */
     @Suppress("UNCHECKED_CAST")
     private suspend fun <K : Any, D : Doc<K, D>> getOrCreateQueue(
@@ -115,6 +115,44 @@ internal class UpdateQueueManager(
 
             return@withLock newQueue
         }
+    }
+
+    /**
+     * Gets the existing queue for the specified document key, or null if it doesn't exist.
+     * This method does not create a new queue if one doesn't exist.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun <K : Any, D : Doc<K, D>> getQueue(
+        docCache: DocCache<K, D>,
+        docKey: K,
+    ): UpdateQueue<K, D>? {
+        val queueKey = QueueKey(docCache.cacheName, docCache.keyToString(docKey))
+        return queues[queueKey] as? UpdateQueue<K, D>
+    }
+
+    /**
+     * Gets the queue size for the specified document key.
+     * Returns 0 if no queue exists for the given key.
+     */
+    @Suppress("unused")
+    fun <K : Any, D : Doc<K, D>> getQueueSize(
+        docCache: DocCache<K, D>,
+        docKey: K,
+    ): Long {
+        val queue = getQueue(docCache, docKey)
+        return queue?.getQueueSize() ?: 0L
+    }
+
+    /**
+     * Gets the total queue size (including currently processing item) for the specified document key.
+     * Returns 0 if no queue exists for the given key.
+     */
+    fun <K : Any, D : Doc<K, D>> getTotalQueueSize(
+        docCache: DocCache<K, D>,
+        docKey: K,
+    ): Long {
+        val queue = getQueue(docCache, docKey)
+        return queue?.getTotalQueueSize() ?: 0L
     }
 
     /**

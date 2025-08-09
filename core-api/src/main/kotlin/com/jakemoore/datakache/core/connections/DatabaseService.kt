@@ -22,7 +22,9 @@ import com.jakemoore.datakache.core.Service
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.connections.queues.UpdateQueueManager
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -49,6 +51,50 @@ internal abstract class DatabaseService : LoggerService, Service {
      * Manager for per-document update queues to eliminate database-level conflicts.
      */
     private val updateQueueManager by updateQueueManagerDelegate
+
+    /**
+     * Calculates an appropriate timeout for update operations based on database latency and actual queue depth.
+     *
+     * The timeout is designed to be generous enough to handle:
+     * - Database round-trip latency (using averagePingNanos)
+     * - Queue processing overhead
+     * - Actual queue depth for the specific document
+     * - Safety margin for network variability
+     *
+     * @param updateQueueManager The queue manager to get queue size information
+     * @param docCache The document cache being updated
+     * @param docKey The document key being updated
+     * @return Timeout duration in milliseconds
+     */
+    private fun <K : Any, D : Doc<K, D>> calculateUpdateTimeoutMs(
+        updateQueueManager: UpdateQueueManager,
+        docCache: DocCache<K, D>,
+        docKey: K,
+    ): Long {
+        // Base timeout: 3x the average ping time (converted to milliseconds)
+        // This accounts for the database round-trip plus processing overhead
+        val baseTimeoutMs = if (averagePingNanos > 0) {
+            (averagePingNanos * 3) / 1_000_000
+        } else {
+            // Fallback if ping is not available: 100ms
+            100L
+        }
+
+        // Get the actual queue size for this specific document
+        val queueSize = updateQueueManager.getTotalQueueSize(docCache, docKey)
+
+        // Calculate timeout based on actual queue depth
+        // Each queued item needs time to be processed
+        val queueDepthTimeoutMs = baseTimeoutMs * queueSize
+
+        // Add safety margin: 50% extra time for network variability
+        val safetyMarginMs = queueDepthTimeoutMs / 2
+
+        val totalTimeoutMs = queueDepthTimeoutMs + safetyMarginMs
+
+        // Ensure minimum and maximum bounds
+        return totalTimeoutMs.coerceIn(25L, 60_000L) // 25 ms to 1 min
+    }
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -100,13 +146,14 @@ internal abstract class DatabaseService : LoggerService, Service {
      * - [IllegalDocumentKeyModificationException]: if the update function modifies the document key.
      * - [IllegalDocumentVersionModificationException]: if the update function modifies the document version.
      * - [RejectUpdateException]: if the update is rejected by the update function.
+     * - [TimeoutCancellationException]: if the update operation times out waiting for queue processing.
      */
     @Throws(
         DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
         TransactionRetriesExceededException::class, DocumentUpdateException::class,
         InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
         IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
-        RejectUpdateException::class,
+        RejectUpdateException::class, TimeoutCancellationException::class,
     )
     suspend fun <K : Any, D : Doc<K, D>> update(
         docCache: DocCache<K, D>,
@@ -128,9 +175,11 @@ internal abstract class DatabaseService : LoggerService, Service {
                 bypassValidation = bypassValidation,
             )
 
-            // TODO should we add a timeout here? it has to be fairly high to allow the queue to process
-            //       the update, but we don't want to block indefinitely.
-            return deferred.await()
+            // Apply timeout to prevent indefinite blocking
+            val timeoutMs = calculateUpdateTimeoutMs(updateQueueManager, docCache, doc.key)
+            return withTimeout(timeoutMs) {
+                deferred.await()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
