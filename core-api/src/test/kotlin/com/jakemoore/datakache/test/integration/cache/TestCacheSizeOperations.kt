@@ -10,12 +10,10 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
         describe("Cache Size Operations") {
 
             it("should get cache size from empty cache") {
-                val cache = getCache()
                 cache.getCacheSize().shouldBe(0)
             }
 
             it("should get cache size with one document") {
-                val cache = getCache()
 
                 // Create one document
                 cache.create("cacheSizeKey1") { doc ->
@@ -26,7 +24,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should get cache size with multiple documents") {
-                val cache = getCache()
 
                 // Create multiple documents with unique names and balances
                 cache.create("cacheSizeKey1") { doc ->
@@ -53,7 +50,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size increases after creating documents") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 cache.getCacheSize().shouldBe(0)
@@ -81,7 +77,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size remains same after updating documents") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("cacheSizeUpdateKey") { doc ->
@@ -101,7 +96,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size decreases after deleting documents") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("cacheSizeDeleteKey1") { doc ->
@@ -133,7 +127,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size with documents having complex data") {
-                val cache = getCache()
 
                 // Create documents with complex data
                 cache.create("cacheSizeComplexKey1") { doc ->
@@ -162,7 +155,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size with documents having null values") {
-                val cache = getCache()
 
                 // Create document with null values
                 cache.create("cacheSizeNullKey") { doc ->
@@ -180,7 +172,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size with documents having empty string key") {
-                val cache = getCache()
 
                 // Create document with empty key
                 cache.create("") { doc ->
@@ -191,7 +182,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size with documents having special characters in key") {
-                val cache = getCache()
                 val specialKey = "cache-size-test-key_with.special@chars#123"
 
                 // Create document with special key
@@ -203,7 +193,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size consistency with readAll") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("cacheSizeConsistencyKey1") { doc ->
@@ -231,7 +220,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size consistency with getKeys") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("cacheSizeKeysConsistencyKey1") { doc ->
@@ -255,7 +243,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size after multiple operations sequence") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 cache.getCacheSize().shouldBe(0)
@@ -300,7 +287,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size with readOrCreate operations") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 cache.getCacheSize().shouldBe(0)
@@ -328,7 +314,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size with random key creation") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 cache.getCacheSize().shouldBe(0)
@@ -349,7 +334,6 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size after cache clear operations") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("clearKey1") { doc ->
@@ -371,6 +355,31 @@ class TestCacheSizeOperations : AbstractDataKacheTest() {
                 cache.delete("clearKey1").getOrThrow()
                 cache.delete("clearKey2").getOrThrow()
                 cache.delete("clearKey3").getOrThrow()
+
+                // Size should be 0
+                cache.getCacheSize().shouldBe(0)
+            }
+
+            it("should verify cache size after cache clear all") {
+
+                // Create multiple documents
+                cache.create("clearKey1") { doc ->
+                    doc.copy(name = "Clear Doc 1", balance = 100.0)
+                }.getOrThrow()
+
+                cache.create("clearKey2") { doc ->
+                    doc.copy(name = "Clear Doc 2", balance = 200.0)
+                }.getOrThrow()
+
+                cache.create("clearKey3") { doc ->
+                    doc.copy(name = "Clear Doc 3", balance = 300.0)
+                }.getOrThrow()
+
+                // Size should be 3
+                cache.getCacheSize().shouldBe(3)
+
+                // Delete all documents
+                cache.clearAllPermanently()
 
                 // Size should be 0
                 cache.getCacheSize().shouldBe(0)

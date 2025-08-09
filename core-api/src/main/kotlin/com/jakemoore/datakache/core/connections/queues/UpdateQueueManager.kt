@@ -59,7 +59,8 @@ internal class UpdateQueueManager(
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
-        updateExecutor: suspend (DocCache<K, D>, D, (D) -> D) -> D
+        updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D,
+        bypassValidation: Boolean,
     ): CompletableDeferred<D> {
         if (isShutdown.get()) {
             val deferred = CompletableDeferred<D>()
@@ -75,7 +76,7 @@ internal class UpdateQueueManager(
         val queue = getOrCreateQueue(queueKey, doc.key, docCache, updateExecutor)
 
         // Enqueue the update
-        return queue.enqueueUpdate(doc, updateFunction)
+        return queue.enqueueUpdate(doc, updateFunction, bypassValidation)
     }
 
     /**
@@ -87,7 +88,7 @@ internal class UpdateQueueManager(
         queueKey: QueueKey,
         documentKey: K,
         docCache: DocCache<K, D>,
-        updateExecutor: suspend (DocCache<K, D>, D, (D) -> D) -> D
+        updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D
     ): UpdateQueue<K, D> {
         // First check without lock (fast path)
         val existingQueue = queues[queueKey]

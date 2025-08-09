@@ -10,8 +10,11 @@ import com.jakemoore.datakache.api.logging.DefaultCacheLogger
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
+import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.CreateGenericDocResultHandler
 import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
+import com.jakemoore.datakache.api.result.handler.RejectableUpdateGenericDocResultHandler
+import com.jakemoore.datakache.api.result.handler.UpdateGenericDocResultHandler
 import java.util.UUID
 
 abstract class GenericDocCache<D : GenericDoc<D>>(
@@ -86,6 +89,20 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      */
     suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D> {
         return create(UUID.randomUUID().toString(), initializer)
+    }
+
+    // Regular update method (does not bypass validation)
+    override suspend fun update(key: String, updateFunction: (D) -> D): DefiniteResult<D> {
+        return UpdateGenericDocResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction, false)
+        }
+    }
+
+    // Regular update (rejectable) method (does not bypass validation)
+    override suspend fun updateRejectable(key: String, updateFunction: (D) -> D): RejectableResult<D> {
+        return RejectableUpdateGenericDocResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction, false)
+        }
     }
 
     /**

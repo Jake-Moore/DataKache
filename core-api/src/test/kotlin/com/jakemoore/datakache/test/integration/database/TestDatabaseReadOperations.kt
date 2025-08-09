@@ -17,8 +17,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
         describe("Database Read Operations") {
 
             it("should read document from database") {
-                val cache = getCache()
-
                 // Create a document in cache
                 val createdDoc = cache.create("dbReadKey") { doc ->
                     doc.copy(
@@ -41,7 +39,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should return Empty for non-existent document in database") {
-                val cache = getCache()
                 val result = cache.readFromDatabase("nonExistentDbKey")
 
                 result.shouldBeInstanceOf<Empty<TestGenericDoc>>()
@@ -50,7 +47,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read all documents from database") {
-                val cache = getCache()
 
                 // Create multiple documents with unique names and balances
                 cache.create("dbReadAllKey1") { doc ->
@@ -75,14 +71,12 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read all documents from empty database") {
-                val cache = getCache()
                 val allDocs = cache.readAllFromDatabase().getOrThrow().toList()
 
                 allDocs.shouldBe(emptyList())
             }
 
             it("should read keys from database") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("dbKeysKey1") { doc ->
@@ -105,14 +99,12 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from empty database") {
-                val cache = getCache()
                 val keys = cache.readKeysFromDatabase().getOrThrow().toList()
 
                 keys.shouldBe(emptySet())
             }
 
             it("should check if key exists in database") {
-                val cache = getCache()
 
                 // Check non-existent key
                 val result1 = cache.hasKeyInDatabase("nonExistentDbKey")
@@ -131,7 +123,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with complex data from database") {
-                val cache = getCache()
 
                 val createdDoc = cache.create("dbComplexKey") { doc ->
                     doc.copy(
@@ -158,7 +149,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with null values from database") {
-                val cache = getCache()
 
                 val createdDoc = cache.create("dbNullKey") { doc ->
                     doc.copy(
@@ -185,7 +175,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with empty string key from database") {
-                val cache = getCache()
 
                 val createdDoc = cache.create("") { doc ->
                     doc.copy(name = "Empty Key Database Doc", balance = 100.0)
@@ -201,7 +190,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with special characters in key from database") {
-                val cache = getCache()
                 val specialKey = "db-test-key_with.special@chars#123"
 
                 val createdDoc = cache.create(specialKey) { doc ->
@@ -218,7 +206,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should verify database read after cache update") {
-                val cache = getCache()
 
                 // Create document
                 val originalDoc = cache.create("dbUpdateReadKey") { doc ->
@@ -242,7 +229,6 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             }
 
             it("should verify database read after cache delete") {
-                val cache = getCache()
 
                 // Create document
                 cache.create("dbDeleteReadKey") { doc ->

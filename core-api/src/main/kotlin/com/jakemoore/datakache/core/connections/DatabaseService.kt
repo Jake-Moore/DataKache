@@ -107,6 +107,7 @@ internal abstract class DatabaseService : LoggerService, Service {
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): D {
         try {
             // METRICS
@@ -119,6 +120,7 @@ internal abstract class DatabaseService : LoggerService, Service {
                 doc = doc,
                 updateFunction = updateFunction,
                 updateExecutor = ::updateInternal,
+                bypassValidation = bypassValidation,
             )
 
             return deferred.await()
@@ -142,6 +144,7 @@ internal abstract class DatabaseService : LoggerService, Service {
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): D
 
     /**

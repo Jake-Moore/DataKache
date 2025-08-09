@@ -65,7 +65,8 @@ object MongoTransactions : CoroutineScope {
         collection: MongoCollection<D>,
         docCache: DocCache<K, D>,
         doc: D,
-        updateFunction: (D) -> D
+        updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): D {
         val startMS = System.currentTimeMillis()
 
@@ -76,7 +77,8 @@ object MongoTransactions : CoroutineScope {
             docCache,
             doc,
             updateFunction,
-            0
+            0,
+            bypassValidation,
         )
 
         val elapsedMS = System.currentTimeMillis() - startMS
@@ -102,7 +104,8 @@ object MongoTransactions : CoroutineScope {
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
-        attemptNum: Int
+        attemptNum: Int,
+        bypassValidation: Boolean,
     ): D {
         // Check max attempts (recursive base case)
         if (attemptNum >= MAX_TRANSACTION_ATTEMPTS) {
@@ -130,7 +133,14 @@ object MongoTransactions : CoroutineScope {
             var sessionResolved = false
             try {
                 // Fetch Version prior to updates
-                val result = getTransactionResult(session, collection, docCache, doc, updateFunction)
+                val result = getTransactionResult(
+                    session,
+                    collection,
+                    docCache,
+                    doc,
+                    updateFunction,
+                    bypassValidation
+                )
 
                 // Receiving a database document indicates failure
                 if (result.databaseDoc != null) {
@@ -147,7 +157,8 @@ object MongoTransactions : CoroutineScope {
                         docCache,
                         result.databaseDoc,
                         updateFunction,
-                        attemptNum + 1
+                        attemptNum + 1,
+                        bypassValidation,
                     )
                 }
 
@@ -174,7 +185,8 @@ object MongoTransactions : CoroutineScope {
                         docCache,
                         doc,
                         updateFunction,
-                        attemptNum + 1
+                        attemptNum + 1,
+                        bypassValidation,
                     )
                 }
                 throw mE
@@ -225,17 +237,18 @@ object MongoTransactions : CoroutineScope {
         session: ClientSession,
         collection: MongoCollection<D>,
         docCache: DocCache<K, D>,
-        doc: D,
+        originalDoc: D,
         updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): TransactionResult<K, D> {
-        val currentVersion: Long = doc.version
+        val currentVersion: Long = originalDoc.version
         val nextVersion = currentVersion + 1
-        val id: String = docCache.keyToString(doc.key)
-        val namespace = docCache.getKeyNamespace(doc.key)
+        val id: String = docCache.keyToString(originalDoc.key)
+        val namespace = docCache.getKeyNamespace(originalDoc.key)
 
         // Apply the Update Function
-        val rawUpdated: D = updateFunction(doc)
-        if (rawUpdated === doc) {
+        val rawUpdated: D = updateFunction(originalDoc)
+        if (rawUpdated === originalDoc) {
             throw UpdateFunctionReturnedSameInstanceException(namespace)
         }
 
@@ -259,6 +272,12 @@ object MongoTransactions : CoroutineScope {
                 message = "The copyHelper did not return a document with the expected version. " +
                     "Expected version: $nextVersion, but got: ${updatedDoc.version}."
             )
+        }
+
+        if (!bypassValidation) {
+            // Validate additional properties
+            // (throws DocumentUpdateException if validation fails)
+            docCache.isUpdateValidInternal(originalDoc, updatedDoc)
         }
 
         val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)

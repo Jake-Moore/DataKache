@@ -16,7 +16,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
         describe("Delete Operations") {
 
             it("should delete existing document") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("deleteKey") { doc ->
@@ -41,7 +40,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should return false when deleting non-existent document") {
-                val cache = getCache()
 
                 // Verify document doesn't exist
                 cache.isCached("nonExistentDeleteKey").shouldBe(false)
@@ -56,7 +54,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should delete document via document instance") {
-                val cache = getCache()
 
                 // Create a document
                 val doc = cache.create("docInstanceDeleteKey") { doc ->
@@ -79,7 +76,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should delete multiple documents") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("multiDeleteKey1") { doc ->
@@ -117,7 +113,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should delete document with complex data") {
-                val cache = getCache()
 
                 // Create document with complex data
                 cache.create("complexDeleteKey") { doc ->
@@ -149,7 +144,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should delete document with empty string key") {
-                val cache = getCache()
 
                 // Create document with empty key
                 cache.create("") { doc ->
@@ -172,7 +166,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should delete document with special characters in key") {
-                val cache = getCache()
                 val specialKey = "test-key_with.special@chars#123"
 
                 // Create document with special key
@@ -196,7 +189,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should handle delete after update") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("updateThenDeleteKey") { doc ->
@@ -228,7 +220,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should handle delete of document with null values") {
-                val cache = getCache()
 
                 // Create document with null values
                 cache.create("nullDeleteKey") { doc ->
@@ -258,7 +249,6 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should verify cache size after deletions") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("sizeTestKey1") { doc -> doc.copy(name = "Doc 1", balance = 1.0) }.getOrThrow()

@@ -23,8 +23,8 @@ class MongoDataKacheTestContainer(
 
     private lateinit var config: DataKacheConfig
     private lateinit var context: DataKacheContext
-    private var registration: DataKacheRegistration? = null
-    private var cache: TestGenericDocCache? = null
+    private var _registration: DataKacheRegistration? = null
+    private var _cache: TestGenericDocCache? = null
 
     override suspend fun beforeSpec() {
         // Start the MongoDB container
@@ -54,14 +54,14 @@ class MongoDataKacheTestContainer(
     override suspend fun beforeEach() {
         // Create registration and cache
         TestUtil.createRegistration(databaseName = databaseName).also {
-            registration = it
-            cache = TestUtil.createTestGenericDocCache(it)
+            _registration = it
+            _cache = TestUtil.createTestGenericDocCache(it)
         }
     }
 
     override suspend fun afterEach() {
         // Shut down registration and cache
-        val cache = requireNotNull(this.cache) {
+        val cache = requireNotNull(this._cache) {
             "Cache is not initialized. Ensure beforeEach is called."
         }
 
@@ -71,13 +71,13 @@ class MongoDataKacheTestContainer(
             "Cache should be empty after test, but found ${cache.readSizeFromDatabase().getOrThrow()} documents"
         }
 
-        requireNotNull(registration) {
+        requireNotNull(_registration) {
             "Registration is not initialized. Ensure beforeEach is called."
         }.shutdown() // SHOULD shut down the cache too
 
         // Reset cache and registration
-        this.cache = null
-        registration = null
+        this._cache = null
+        _registration = null
     }
 
     override suspend fun afterSpec() {
@@ -91,11 +91,14 @@ class MongoDataKacheTestContainer(
         container.stop()
     }
 
-    override fun getCache(): TestGenericDocCache = requireNotNull(cache)
+    override val cache: TestGenericDocCache
+        get() = requireNotNull(_cache) { "Cache is not initialized. Ensure beforeEach is called." }
 
-    override fun getRegistration(): DataKacheRegistration = requireNotNull(registration)
+    override val registration: DataKacheRegistration
+        get() = requireNotNull(_registration) { "Registration is not initialized. Ensure beforeEach is called." }
 
-    override fun getKacheConfig(): DataKacheConfig = config
+    override val kacheConfig: DataKacheConfig
+        get() = config
 
     companion object {
         /**

@@ -17,8 +17,10 @@ import kotlin.io.path.createTempDirectory
 class TestDataKacheContext(
     testContainer: DataKacheTestContainer,
 ) : DataKacheContext {
-    private val tempLogFolder = createTempDirectory(prefix = "datakache-test-logs-").toFile()
-    private val contextConfig = testContainer.getKacheConfig()
+    private val tempLogFolder = createTempDirectory(prefix = "datakache-test-logs-")
+        .toFile()
+        .apply { deleteOnExit() }
+    private val contextConfig = testContainer.kacheConfig
 
     override val logger: LoggerService = object : LoggerService {
         override val loggerName: String
@@ -30,10 +32,10 @@ class TestDataKacheContext(
             msg: String,
             level: LoggerService.LogLevel
         ) {
-            if (level == LoggerService.LogLevel.SEVERE) {
-                System.err.println("[$level] $msg")
-            } else {
-                println("[$level] $msg")
+            when (level) {
+                LoggerService.LogLevel.WARNING,
+                LoggerService.LogLevel.SEVERE -> System.err.println("[$level] $msg")
+                else -> println("[$level] $msg")
             }
         }
     }

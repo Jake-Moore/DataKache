@@ -1,5 +1,8 @@
 @file:Suppress("deprecation")
 
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
+
 plugins {
     // Java Build Plugins
     id("java")
@@ -15,11 +18,13 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.3.0"
+val VERSION = "0.3.1"
 
 ext {
     // KotlinX
-    set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    val coroutinesVer = "1.10.2"
+    set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVer")
+    set("kotlinx-coroutines-test", "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVer")
     val serializationVer = "1.9.0"
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
@@ -48,9 +53,6 @@ ext {
     //       This means it supports retryable writes and transactions automatically.
     set("testcontainers-mongodb", "org.testcontainers:mongodb:${testcontainersVer}")
     set("testcontainers-core", "org.testcontainers:testcontainers:${testcontainersVer}")
-
-    // Logback for testing
-    set("logback-test", "ch.qos.logback:logback-classic:1.5.18")
 }
 
 allprojects {
@@ -89,6 +91,19 @@ allprojects {
     tasks.withType<Javadoc> {
         options.encoding = Charsets.UTF_8.name()
         charset("UTF-8")
+    }
+
+    // Configure Kotest to run with JUnit Platform
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
+
+        testLogging {
+            showExceptions = true
+            showStackTraces = true
+
+            // log all event types
+            events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_ERROR)
+        }
     }
 
     // Register a cleaning task to remove libs outputs and detekt reports

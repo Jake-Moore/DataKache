@@ -20,7 +20,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
         describe("Error Handling") {
 
             it("should handle duplicate document key exception on create") {
-                val cache = getCache()
 
                 // Create first document
                 cache.create("duplicateKeyTest") { doc ->
@@ -45,7 +44,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle duplicate unique index exception on create") {
-                val cache = getCache()
 
                 // Create first document with unique name and balance
                 cache.create("uniqueIndexTest1") { doc ->
@@ -69,7 +67,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle document not found exception on update") {
-                val cache = getCache()
 
                 // Try to update non-existent document
                 val result = cache.update("nonExistentUpdateKey") { doc ->
@@ -83,7 +80,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle document not found exception on delete") {
-                val cache = getCache()
 
                 // Try to delete non-existent document
                 val result = cache.delete("nonExistentDeleteKey")
@@ -93,7 +89,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle rejectable update with RejectUpdateException") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("rejectableUpdateKey") { doc ->
@@ -115,7 +110,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle successful rejectable update") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("successfulRejectableKey") { doc ->
@@ -137,7 +131,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle document not found in rejectable update") {
-                val cache = getCache()
 
                 // Try to update non-existent document with rejectable update
                 val result = cache.updateRejectable("nonExistentRejectableKey") { doc ->
@@ -151,7 +144,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle duplicate key exception on update with unique constraints") {
-                val cache = getCache()
 
                 // Create two documents with different names
                 cache.create("updateDuplicateKey1") { doc ->
@@ -182,7 +174,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate with existing document") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("readOrCreateExistingKey") { doc ->
@@ -200,7 +191,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate with non-existent document") {
-                val cache = getCache()
 
                 // Try to readOrCreate non-existent document
                 val result = cache.readOrCreate("readOrCreateNewKey") { doc ->
@@ -213,7 +203,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle complex error scenarios with multiple operations") {
-                val cache = getCache()
 
                 // Create initial documents
                 cache.create("complexErrorKey1") { doc ->
@@ -258,7 +247,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle error scenarios with empty string keys") {
-                val cache = getCache()
 
                 // Create document with empty key
                 cache.create("") { doc ->
@@ -282,7 +270,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle error scenarios with special character keys") {
-                val cache = getCache()
                 val specialKey = "error-test-key_with.special@chars#123"
 
                 // Create document with special key
@@ -307,7 +294,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle error scenarios with null values") {
-                val cache = getCache()
 
                 // Create document with null values
                 cache.create("nullValueErrorKey") { doc ->
@@ -340,7 +326,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle error scenarios with complex data") {
-                val cache = getCache()
 
                 // Create document with complex data
                 cache.create("complexErrorKey") { doc ->
@@ -379,7 +364,6 @@ class TestErrorHandling : AbstractDataKacheTest() {
             }
 
             it("should handle error scenarios with random key creation") {
-                val cache = getCache()
 
                 // Create document with random key
                 val randomDoc = cache.createRandom { doc ->

@@ -15,7 +15,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
         describe("ReadOrCreate Operations") {
 
             it("should read existing document") {
-                val cache = getCache()
 
                 // Create a document first
                 val originalDoc = cache.create("readOrCreateExistingKey") { doc ->
@@ -44,7 +43,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document when it doesn't exist") {
-                val cache = getCache()
 
                 // Use readOrCreate on non-existent document
                 val result = cache.readOrCreate("readOrCreateNewKey") { doc ->
@@ -69,7 +67,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with default initializer when it doesn't exist") {
-                val cache = getCache()
 
                 // Use readOrCreate with default initializer
                 val result = cache.readOrCreate("readOrCreateDefaultKey")
@@ -89,7 +86,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with complex data when it doesn't exist") {
-                val cache = getCache()
 
                 // Use readOrCreate with complex initializer
                 val result = cache.readOrCreate("readOrCreateComplexKey") { doc ->
@@ -117,7 +113,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle multiple readOrCreate operations") {
-                val cache = getCache()
 
                 // Create multiple documents using readOrCreate
                 val doc1 = cache.readOrCreate("multiKey1") { doc ->
@@ -153,7 +148,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should read existing document after creation") {
-                val cache = getCache()
 
                 // Create document using readOrCreate
                 val createdDoc = cache.readOrCreate("readAfterCreateKey") { doc ->
@@ -175,7 +169,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate with empty string key") {
-                val cache = getCache()
 
                 // Use readOrCreate with empty key
                 val result = cache.readOrCreate("") { doc ->
@@ -194,7 +187,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate with special characters in key") {
-                val cache = getCache()
                 val specialKey = "test-key_with.special@chars#123"
 
                 // Use readOrCreate with special key
@@ -214,7 +206,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate with null values") {
-                val cache = getCache()
 
                 // Use readOrCreate with null values
                 val result = cache.readOrCreate("nullReadOrCreateKey") { doc ->
@@ -242,7 +233,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate after document update") {
-                val cache = getCache()
 
                 // Create document using readOrCreate
                 val originalDoc = cache.readOrCreate("updateReadOrCreateKey") { doc ->
@@ -269,7 +259,6 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle readOrCreate after document deletion") {
-                val cache = getCache()
 
                 // Create document using readOrCreate
                 cache.readOrCreate("deleteReadOrCreateKey") { doc ->

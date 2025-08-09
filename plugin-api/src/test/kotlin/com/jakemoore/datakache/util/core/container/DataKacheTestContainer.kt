@@ -1,6 +1,5 @@
 package com.jakemoore.datakache.util.core.container
 
-import com.jakemoore.datakache.DataKachePlugin
 import com.jakemoore.datakache.api.DataKacheConfig
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.util.TestPlugin
@@ -13,6 +12,7 @@ import org.mockbukkit.mockbukkit.ServerMock
  * This interface provides a database-agnostic way to manage test containers,
  * including setup, teardown, and access to test resources.
  */
+@Suppress("unused")
 interface DataKacheTestContainer {
 
     /**
@@ -44,37 +44,27 @@ interface DataKacheTestContainer {
     suspend fun afterEach()
 
     /**
-     * Gets the test cache instance.
-     *
-     * @return The TestPlayerDocCache instance for this test container
+     * The [TestPlayerDocCache] instance for testing.
      */
-    fun getCache(): TestPlayerDocCache
+    val cache: TestPlayerDocCache
 
     /**
-     * Gets the mock server instance for this test container.
-     *
-     * @return The [ServerMock] instance for this test container
+     * The [ServerMock] instance for testing.
      */
-    fun getServer(): ServerMock
+    val server: ServerMock
 
     /**
-     * Gets the mock plugin instance for this test container.
-     *
-     * @return The [DataKachePlugin] instance for this test container
+     * The [TestPlugin] instance for testing.
      */
-    fun getPlugin(): TestPlugin
+    val plugin: TestPlugin
 
     /**
-     * Gets the DataKache registration instance.
-     *
-     * @return The DataKacheRegistration instance for this test container
+     * The [DataKacheRegistration] instance for testing.
      */
-    fun getRegistration(): DataKacheRegistration
+    val registration: DataKacheRegistration
 
     /**
-     * Gets the DataKache configuration for this test container.
-     *
-     * @return The DataKacheConfig instance for this test container
+     * The [DataKacheConfig] instance for testing.
      */
-    fun getKacheConfig(): DataKacheConfig
+    val kacheConfig: DataKacheConfig
 }

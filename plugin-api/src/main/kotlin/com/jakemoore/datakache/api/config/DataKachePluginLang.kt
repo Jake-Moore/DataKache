@@ -1,12 +1,14 @@
 package com.jakemoore.datakache.api.config
 
 import org.bukkit.configuration.file.FileConfiguration
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 data class DataKachePluginLang(
     val joinDeniedDatabaseNotReady: String =
         "&cServer is starting up! Please try again in a few seconds.",
-    val preloadPlayerDocTimeoutMS: Int =
-        5_000,
+    val preloadPlayerDocTimeoutMS: Duration =
+        5_000.milliseconds,
     val joinDeniedPlayerDocTimeout: String =
         "&cOops! Profile failed to load in time. Please try again in a few seconds.",
     val joinDeniedPlayerDocException: String =
@@ -22,7 +24,7 @@ data class DataKachePluginLang(
                 joinDeniedDatabaseNotReady = config.getString("language.joinDenied.databaseNotReady")
                     ?: defaults.joinDeniedDatabaseNotReady,
                 preloadPlayerDocTimeoutMS = config.getInt("joinOptions.preloadPlayerDocTimeoutMS", -1)
-                    .takeIf { it > 0 } ?: defaults.preloadPlayerDocTimeoutMS,
+                    .takeIf { it > 0 }?.milliseconds ?: defaults.preloadPlayerDocTimeoutMS,
                 joinDeniedPlayerDocTimeout = config.getString("language.joinDenied.playerDocTimeout")
                     ?: defaults.joinDeniedPlayerDocTimeout,
                 joinDeniedPlayerDocException = config.getString("language.joinDenied.playerDocException")

@@ -1,4 +1,3 @@
-import org.gradle.api.tasks.testing.logging.TestLogEvent
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
@@ -48,8 +47,8 @@ dependencies {
     testImplementation(project.property("testcontainers-mongodb") as String)
     testImplementation(project.property("testcontainers-core") as String)
 
-    testImplementation(project.property("logback-test") as String)
-    testImplementation(project.property("kotlinx-coroutines-core") as String)
+    testImplementation(project.property("logback-classic") as String)
+    testImplementation(project.property("kotlinx-coroutines-test") as String)
 
     // MockBukkit
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.6")
@@ -70,19 +69,6 @@ tasks {
         filesMatching("plugin.yml") {
             expand(props)
         }
-    }
-}
-
-// Configure Kotest to run with JUnit Platform
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
-
-    testLogging {
-        showExceptions = true
-        showStackTraces = true
-
-        // log all event types
-        events("passed", "skipped", "failed", TestLogEvent.STANDARD_ERROR)
     }
 }
 

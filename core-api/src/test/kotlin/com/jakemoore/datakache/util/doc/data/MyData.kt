@@ -5,7 +5,6 @@ package com.jakemoore.datakache.util.doc.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// Random data class with 1 string, 1 int, 1 BigInteger, and one inner list
 @Suppress("PROVIDED_RUNTIME_TOO_LOW")
 @Serializable
 data class MyData(

@@ -29,7 +29,7 @@ import kotlin.coroutines.cancellation.CancellationException
 internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     private val key: K,
     private val docCache: DocCache<K, D>,
-    private val updateExecutor: suspend (DocCache<K, D>, D, (D) -> D) -> D
+    private val updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D
 ) : CoroutineScope {
 
     private val job = Job()
@@ -61,14 +61,15 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      */
     fun enqueueUpdate(
         doc: D,
-        updateFunction: (D) -> D
+        updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): CompletableDeferred<D> {
         require(doc.key == key) {
             "Enqueued doc key does not match UpdateQueue key"
         }
 
         val deferred = CompletableDeferred<D>()
-        val request = UpdateRequest(doc, updateFunction, deferred)
+        val request = UpdateRequest(doc, updateFunction, deferred, bypassValidation)
 
         if (isShutdown.get()) {
             deferred.completeExceptionally(
@@ -153,7 +154,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     private suspend fun processUpdateRequest(request: UpdateRequest<K, D>) {
         try {
             // Execute the actual database update
-            val updatedDoc = updateExecutor(docCache, request.doc, request.updateFunction)
+            val updatedDoc = updateExecutor(docCache, request.doc, request.updateFunction, request.bypassValidation)
 
             // Complete the deferred with success
             request.deferred.complete(updatedDoc)
@@ -228,5 +229,6 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 private data class UpdateRequest<K : Any, D : Doc<K, D>>(
     val doc: D,
     val updateFunction: (D) -> D,
-    val deferred: CompletableDeferred<D>
+    val deferred: CompletableDeferred<D>,
+    val bypassValidation: Boolean,
 )

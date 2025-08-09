@@ -6,7 +6,6 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
-import com.jakemoore.datakache.util.doc.TestGenericDocCache
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
@@ -18,7 +17,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
         describe("Unique Index Tests") {
 
             it("should read document by name index from cache") {
-                val cache = getCache()
 
                 // Create a document with a specific name
                 val createdDoc = cache.create("nameTestKey") { doc ->
@@ -29,7 +27,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by name index using companion object method
-                val readResult = TestGenericDocCache.readByName("Unique Name Test")
+                val readResult = cache.readByName("Unique Name Test")
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Empty<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -42,7 +40,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should read document by balance index from cache") {
-                val cache = getCache()
 
                 // Create a document with a specific balance
                 val createdDoc = cache.create("balanceTestKey") { doc ->
@@ -53,7 +50,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by balance index using companion object method
-                val readResult = TestGenericDocCache.readByBalance(250.75)
+                val readResult = cache.readByBalance(250.75)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Empty<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -66,7 +63,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should return Empty when reading by non-existent name") {
-                val cache = getCache()
 
                 // Create a document with a different name
                 cache.create("existingKey") { doc ->
@@ -74,14 +70,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Try to read by non-existent name
-                val readResult = TestGenericDocCache.readByName("Non Existent Name")
+                val readResult = cache.readByName("Non Existent Name")
                 readResult.shouldBeInstanceOf<Empty<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
             }
 
             it("should return Empty when reading by non-existent balance") {
-                val cache = getCache()
 
                 // Create a document with a different balance
                 cache.create("existingKey") { doc ->
@@ -89,28 +84,27 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Try to read by non-existent balance
-                val readResult = TestGenericDocCache.readByBalance(999.99)
+                val readResult = cache.readByBalance(999.99)
                 readResult.shouldBeInstanceOf<Empty<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
             }
 
             it("should return Empty when reading by null name") {
-                val readResult = TestGenericDocCache.readByName(null)
+                val readResult = cache.readByName(null)
                 readResult.shouldBeInstanceOf<Empty<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
             }
 
             it("should return Empty when reading by null balance") {
-                val readResult = TestGenericDocCache.readByBalance(null)
+                val readResult = cache.readByBalance(null)
                 readResult.shouldBeInstanceOf<Empty<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
             }
 
             it("should read document by name index from database") {
-                val cache = getCache()
 
                 // Create a document with a specific name
                 val createdDoc = cache.create("dbNameTestKey") { doc ->
@@ -137,7 +131,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should read document by balance index from database") {
-                val cache = getCache()
 
                 // Create a document with a specific balance
                 val createdDoc = cache.create("dbBalanceTestKey") { doc ->
@@ -164,7 +157,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should return Empty when reading by non-existent name from database") {
-                val cache = getCache()
 
                 // Create a document with a different name
                 cache.create("existingKey") { doc ->
@@ -182,7 +174,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should return Empty when reading by non-existent balance from database") {
-                val cache = getCache()
 
                 // Create a document with a different balance
                 cache.create("existingKey") { doc ->
@@ -200,7 +191,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle multiple documents with different names") {
-                val cache = getCache()
 
                 // Create multiple documents with different names
                 val doc1 = cache.create("key1") { doc ->
@@ -216,21 +206,20 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read each by name
-                val read1 = TestGenericDocCache.readByName("First Document")
+                val read1 = cache.readByName("First Document")
                 read1.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 read1.getOrThrow().key shouldBe "key1"
 
-                val read2 = TestGenericDocCache.readByName("Second Document")
+                val read2 = cache.readByName("Second Document")
                 read2.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 read2.getOrThrow().key shouldBe "key2"
 
-                val read3 = TestGenericDocCache.readByName("Third Document")
+                val read3 = cache.readByName("Third Document")
                 read3.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 read3.getOrThrow().key shouldBe "key3"
             }
 
             it("should handle multiple documents with different balances") {
-                val cache = getCache()
 
                 // Create multiple documents with different balances
                 val doc1 = cache.create("key1") { doc ->
@@ -246,21 +235,20 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read each by balance
-                val read1 = TestGenericDocCache.readByBalance(100.0)
+                val read1 = cache.readByBalance(100.0)
                 read1.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 read1.getOrThrow().key shouldBe "key1"
 
-                val read2 = TestGenericDocCache.readByBalance(200.0)
+                val read2 = cache.readByBalance(200.0)
                 read2.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 read2.getOrThrow().key shouldBe "key2"
 
-                val read3 = TestGenericDocCache.readByBalance(300.0)
+                val read3 = cache.readByBalance(300.0)
                 read3.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 read3.getOrThrow().key shouldBe "key3"
             }
 
             it("should handle documents with null name values") {
-                val cache = getCache()
 
                 // Create a document with null name
                 val createdDoc = cache.create("nullNameKey") { doc ->
@@ -271,12 +259,11 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Try to read by null name - should return Empty
-                val readResult = TestGenericDocCache.readByName(null)
+                val readResult = cache.readByName(null)
                 readResult.shouldBeInstanceOf<Empty<TestGenericDoc>>()
             }
 
             it("should handle documents with zero balance") {
-                val cache = getCache()
 
                 // Create a document with zero balance
                 val createdDoc = cache.create("zeroBalanceKey") { doc ->
@@ -287,14 +274,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by zero balance
-                val readResult = TestGenericDocCache.readByBalance(0.0)
+                val readResult = cache.readByBalance(0.0)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "zeroBalanceKey"
                 readResult.getOrThrow().balance shouldBe 0.0
             }
 
             it("should handle documents with negative balance") {
-                val cache = getCache()
 
                 // Create a document with negative balance
                 val createdDoc = cache.create("negativeBalanceKey") { doc ->
@@ -305,14 +291,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by negative balance
-                val readResult = TestGenericDocCache.readByBalance(-50.0)
+                val readResult = cache.readByBalance(-50.0)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "negativeBalanceKey"
                 readResult.getOrThrow().balance shouldBe -50.0
             }
 
             it("should handle documents with decimal balance precision") {
-                val cache = getCache()
 
                 // Create a document with precise decimal balance
                 val createdDoc = cache.create("preciseBalanceKey") { doc ->
@@ -323,14 +308,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by precise balance
-                val readResult = TestGenericDocCache.readByBalance(123.456789)
+                val readResult = cache.readByBalance(123.456789)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "preciseBalanceKey"
                 readResult.getOrThrow().balance shouldBe 123.456789
             }
 
             it("should handle documents with empty string name") {
-                val cache = getCache()
 
                 // Create a document with empty string name
                 val createdDoc = cache.create("emptyNameKey") { doc ->
@@ -341,14 +325,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by empty string name
-                val readResult = TestGenericDocCache.readByName("")
+                val readResult = cache.readByName("")
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "emptyNameKey"
                 readResult.getOrThrow().name shouldBe ""
             }
 
             it("should handle documents with special characters in name") {
-                val cache = getCache()
 
                 // Create a document with special characters in name
                 val specialName = "Test Document with Special Chars: !@#$%^&*()_+-=[]{}|;':\",./<>?"
@@ -360,14 +343,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by special name
-                val readResult = TestGenericDocCache.readByName(specialName)
+                val readResult = cache.readByName(specialName)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "specialNameKey"
                 readResult.getOrThrow().name shouldBe specialName
             }
 
             it("should handle documents with very large balance values") {
-                val cache = getCache()
 
                 // Create a document with very large balance
                 val largeBalance = Double.MAX_VALUE
@@ -379,14 +361,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by large balance
-                val readResult = TestGenericDocCache.readByBalance(largeBalance)
+                val readResult = cache.readByBalance(largeBalance)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "largeBalanceKey"
                 readResult.getOrThrow().balance shouldBe largeBalance
             }
 
             it("should handle documents with very small balance values") {
-                val cache = getCache()
 
                 // Create a document with very small balance
                 val smallBalance = Double.MIN_VALUE
@@ -398,14 +379,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by small balance
-                val readResult = TestGenericDocCache.readByBalance(smallBalance)
+                val readResult = cache.readByBalance(smallBalance)
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "smallBalanceKey"
                 readResult.getOrThrow().balance shouldBe smallBalance
             }
 
             it("should handle case-insensitive name matching") {
-                val cache = getCache()
 
                 // Create a document with a specific name
                 val createdDoc = cache.create("caseTestKey") { doc ->
@@ -416,14 +396,13 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by name with different case (should work due to case-insensitive matching)
-                val readResult = TestGenericDocCache.readByName("case sensitive test")
+                val readResult = cache.readByName("case sensitive test")
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readResult.getOrThrow().key shouldBe "caseTestKey"
                 readResult.getOrThrow().name shouldBe "Case Sensitive Test"
             }
 
             it("should handle documents with complex nested data and unique indexes") {
-                val cache = getCache()
 
                 val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
                 val createdDoc = cache.create("complexIndexKey") { doc ->
@@ -438,12 +417,12 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read by name index
-                val readByNameResult = TestGenericDocCache.readByName("Complex Index Document")
+                val readByNameResult = cache.readByName("Complex Index Document")
                 readByNameResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readByNameResult.getOrThrow().key shouldBe "complexIndexKey"
 
                 // Read by balance index
-                val readByBalanceResult = TestGenericDocCache.readByBalance(750.0)
+                val readByBalanceResult = cache.readByBalance(750.0)
                 readByBalanceResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 readByBalanceResult.getOrThrow().key shouldBe "complexIndexKey"
 
@@ -456,7 +435,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should throw DuplicateUniqueIndexException when creating document with duplicate name") {
-                val cache = getCache()
 
                 // Create first document with unique name
                 val firstDoc = cache.create("uniqueNameTest1") { doc ->
@@ -490,7 +468,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should throw DuplicateUniqueIndexException when creating document with duplicate balance") {
-                val cache = getCache()
 
                 // Create first document with unique balance
                 val firstDoc = cache.create("uniqueBalanceTest1") { doc ->
@@ -524,7 +501,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should throw DuplicateUniqueIndexException when updating document to match existing name") {
-                val cache = getCache()
 
                 // Create two documents with different names
                 val firstDoc = cache.create("updateDuplicateName1") { doc ->
@@ -563,7 +539,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should throw DuplicateUniqueIndexException when updating document to match existing balance") {
-                val cache = getCache()
 
                 // Create two documents with different balances
                 val firstDoc = cache.create("updateDuplicateBalance1") { doc ->
@@ -602,7 +577,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle case-insensitive duplicate name violations") {
-                val cache = getCache()
 
                 // Create first document with specific name
                 val firstDoc = cache.create("caseInsensitiveTest1") { doc ->
@@ -623,7 +597,8 @@ class TestUniqueIndex : AbstractDataKacheTest() {
                 readResult.getOrThrow().balance shouldBe 100.0
                 readResult.getOrThrow().version shouldBe firstDoc.version
 
-                // Verify the second document was not created
+                // Verify the second document was created and is distinct
+                // (case-insensitive read allowed, case-sensitive uniqueness)
                 val secondReadResult = cache.read("caseInsensitiveTest2")
                 secondReadResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 secondReadResult.getOrThrow().name shouldBe "case insensitive test"
@@ -631,7 +606,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle duplicate null name violations") {
-                val cache = getCache()
 
                 // Create first document with null name
                 val firstDoc = cache.create("nullNameTest1") { doc ->
@@ -664,7 +638,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle duplicate zero balance violations") {
-                val cache = getCache()
 
                 // Create first document with zero balance
                 val firstDoc = cache.create("zeroBalanceTest1") { doc ->
@@ -697,7 +670,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle complex data with duplicate unique index violations") {
-                val cache = getCache()
 
                 val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
 
@@ -747,7 +719,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle multiple unique index violations in sequence") {
-                val cache = getCache()
 
                 // Create first document
                 val firstDoc = cache.create("sequenceTest1") { doc ->
@@ -793,7 +764,6 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             }
 
             it("should handle unique index violations with special characters") {
-                val cache = getCache()
 
                 val specialName = "Special Chars Test: !@#$%^&*()_+-=[]{}|;':\",./<>?"
 

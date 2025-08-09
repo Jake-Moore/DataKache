@@ -9,7 +9,6 @@ import com.jakemoore.datakache.util.TestUtil
 import com.jakemoore.datakache.util.core.container.DataKacheTestContainer
 import com.jakemoore.datakache.util.doc.TestPlayerDocCache
 import io.kotest.core.spec.style.DescribeSpec
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.bukkit.entity.Player
 import org.mockbukkit.mockbukkit.ServerMock
@@ -32,48 +31,47 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
 
     init {
         beforeSpec {
-            runBlocking {
-                // TODO figure out a way to test all storage modes instead of just MongoDB
-                testContainer = TestUtil.createTestContainer(StorageMode.MONGODB)
-                testContainer.beforeSpec()
-            }
+            // TODO figure out a way to test all storage modes instead of just MongoDB
+            testContainer = TestUtil.createTestContainer(StorageMode.MONGODB)
+            testContainer.beforeSpec()
         }
 
         beforeEach {
-            runBlocking {
-                testContainer.beforeEach()
-            }
+            testContainer.beforeEach()
         }
 
         afterEach {
-            runBlocking {
-                testContainer.afterEach()
-            }
+            testContainer.afterEach()
         }
 
         afterSpec {
-            runBlocking {
-                testContainer.afterSpec()
-            }
+            testContainer.afterSpec()
         }
     }
 
     /**
-     * Gets the test cache instance.
-     *
-     * @return The TestPlayerDocCache instance for this test
+     * The [TestPlayerDocCache] instance for testing.
      */
-    protected fun getCache(): TestPlayerDocCache = testContainer.getCache()
+    val cache: TestPlayerDocCache
+        get() = testContainer.cache
 
     /**
-     * Gets the mock server instance.
+     * The [DataKacheRegistration] instance for testing.
      */
-    protected fun getServer(): ServerMock = testContainer.getServer()
+    val registration: DataKacheRegistration
+        get() = testContainer.registration
 
     /**
-     * Gets the mock plugin instance.
+     * The [ServerMock] instance for testing.
      */
-    protected fun getPlugin(): TestPlugin = testContainer.getPlugin()
+    val server: ServerMock
+        get() = testContainer.server
+
+    /**
+     * The [TestPlugin] instance for testing.
+     */
+    val plugin: TestPlugin
+        get() = testContainer.plugin
 
     /**
      * Adds a player to the mock server.
@@ -81,7 +79,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param playerName The name of the player to add
      * @return The PlayerMock instance representing the added player
      */
-    protected fun addPlayer(playerName: String): PlayerMock = getServer().addPlayer(playerName)
+    protected fun addPlayer(playerName: String): PlayerMock = server.addPlayer(playerName)
 
     /**
      * Gets a player by name from the mock server.
@@ -89,12 +87,5 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param playerName The name of the player to retrieve
      * @return The PlayerMock instance if found, or null if not found
      */
-    protected fun getPlayer(playerName: String): Player? = getServer().getPlayerExact(playerName)
-
-    /**
-     * Gets the DataKache registration instance.
-     *
-     * @return The DataKacheRegistration instance for this test
-     */
-    protected fun getRegistration(): DataKacheRegistration = testContainer.getRegistration()
+    protected fun getPlayer(playerName: String): Player? = server.getPlayerExact(playerName)
 }

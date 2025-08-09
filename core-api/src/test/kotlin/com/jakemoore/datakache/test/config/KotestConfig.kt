@@ -10,7 +10,7 @@ import io.kotest.core.spec.SpecExecutionOrder
  * - Spec execution order to use annotations for ordering
  */
 @Suppress("unused")
-class KotestConfig : AbstractProjectConfig() {
+object KotestConfig : AbstractProjectConfig() {
 
     override val specExecutionOrder = SpecExecutionOrder.Annotated
 }

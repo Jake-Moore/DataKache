@@ -1,6 +1,6 @@
 package com.jakemoore.datakache.api.result.handler
 
-import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.doc.GenericDoc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -11,8 +11,8 @@ import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 
-internal object RejectableUpdateResultHandler {
-    internal suspend fun <K : Any, D : Doc<K, D>> wrap(
+internal object RejectableUpdateGenericDocResultHandler {
+    internal suspend fun <D : GenericDoc<D>> wrap(
         // Work cannot return a null document.
         //   If the document is not found it should throw a [DocumentNotFoundException].
         work: suspend () -> D
@@ -22,7 +22,7 @@ internal object RejectableUpdateResultHandler {
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdate)
 
             val value = work()
-            return Success(requireNotNull(value))
+            return Success(value)
         } catch (e: DocumentNotFoundException) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateNotFoundFail)
@@ -31,7 +31,7 @@ internal object RejectableUpdateResultHandler {
             // (it was likely deleted by another thread or task before this operation could complete)
             return Failure(
                 ResultExceptionWrapper(
-                    message = "Update operation failed: Document not found",
+                    message = "Update operation failed: Generic Document not found",
                     exception = e,
                 )
             )

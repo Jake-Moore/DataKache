@@ -16,7 +16,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
         describe("PlayerDoc Operations") {
 
             it("should get online player correctly") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer1")
 
                 val result = cache.read(player)
@@ -31,7 +30,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should return null for offline player") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer2")
 
                 // Get the PlayerDoc first
@@ -47,7 +45,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle player state changes") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer3")
 
                 val result = cache.read(player)
@@ -67,7 +64,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle username updates via copyHelper") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer5")
 
                 val result = cache.read(player)
@@ -94,7 +90,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle player reconnection scenarios") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer6")
 
                 val result = cache.read(player)
@@ -119,7 +114,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle player name changes") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer7")
 
                 val result = cache.read(player)
@@ -137,7 +131,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle UUID consistency") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer8")
 
                 val result = cache.read(player)
@@ -155,7 +148,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle multiple player state transitions") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer9")
 
                 val result = cache.read(player)
@@ -180,7 +172,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
             }
 
             it("should handle edge cases with null and invalid players") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer10")
 
                 val result = cache.read(player)
@@ -189,7 +180,7 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
                 player.disconnect()
 
                 // Test isOnline and isTrulyOnline with a null player
-                val fakePlayer = object : PlayerMock(getServer(), player.name, player.uniqueId) {
+                val fakePlayer = object : PlayerMock(server, player.name, player.uniqueId) {
                     override fun isOnline(): Boolean = false
                     override fun isValid(): Boolean = false
                 }

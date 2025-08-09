@@ -8,6 +8,7 @@ import com.jakemoore.datakache.api.DataKacheAPI
 import com.jakemoore.datakache.api.cache.PlayerDocCache
 import com.jakemoore.datakache.api.doc.PlayerDoc
 import com.jakemoore.datakache.api.event.PlayerDocJoinEvent
+import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.Color
 import com.jakemoore.datakache.util.DataKacheFileLogger
@@ -29,7 +30,6 @@ import org.bukkit.event.player.PlayerLoginEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * This Bukkit listener manages [PlayerDoc] objects for joining bukkit [Player]s.
@@ -69,18 +69,18 @@ object PlayerDocListener : Listener {
         val msStart = System.currentTimeMillis()
 
         // Suspend player join while PlayerDoc's are loaded or created
-        val timeoutMS = lang.preloadPlayerDocTimeoutMS
+        val timeoutDuration = lang.preloadPlayerDocTimeoutMS
         val success = runBlocking {
             try {
-                withTimeout(timeoutMS.milliseconds) {
+                return@runBlocking withTimeout(timeoutDuration) {
                     // cache all PlayerDoc objects for this player in parallel
-                    cachePlayerDocs(uuid, username)
+                    return@withTimeout cachePlayerDocs(uuid, username)
                 }
-                return@runBlocking true
             } catch (_: TimeoutCancellationException) {
                 val message = lang.joinDeniedPlayerDocTimeout
                 DataKachePlugin.context.logger.warn(
-                    "PlayerDoc loading timed out for $username ($uuid) after ${timeoutMS}ms."
+                    "PlayerDoc loading timed out for $username ($uuid) " +
+                        "after ${timeoutDuration.inWholeMilliseconds}ms."
                 )
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, Color.t(message))
                 return@runBlocking false
@@ -95,6 +95,14 @@ object PlayerDocListener : Listener {
             }
         }
         if (!success) {
+            DataKachePlugin.context.logger.severe(
+                "Failed to load PlayerDoc for $username ($uuid) " +
+                    "after ${System.currentTimeMillis() - msStart}ms."
+            )
+            event.disallow(
+                AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                Color.t(lang.joinDeniedPlayerDocException)
+            )
             return // Join was denied, no need to continue
         }
 
@@ -158,13 +166,12 @@ object PlayerDocListener : Listener {
             .filterIsInstance(PlayerDocCache::class.java)
             .map { cache ->
                 CoroutineScope(Dispatchers.IO).async {
-                    val createResult = cache.readOrCreate(uuid) { doc ->
-                        doc.copyHelper(username = username)
-                    }
+                    val createResult = cache.readOrCreate(uuid)
                     // If not successful, return to the caller
                     if (createResult !is Success<PlayerDoc<*>>) {
                         return@async createResult
                     }
+
                     // If successful, double-check the username field
                     val doc = createResult.value
                     if (doc.username == username) {
@@ -173,15 +180,22 @@ object PlayerDocListener : Listener {
                     }
 
                     // If the username is not set correctly, update it
-                    return@async doc.update {
-                        it.copyHelper(username = username)
-                    }
+                    return@async cache.updateUsername(key = uuid, username)
                 }
             }
 
         // Wait for all loads to complete
         val results = loadsDeferred.awaitAll()
         // Check if all PlayerDoc objects were successfully loaded or created
+        results.forEach { result ->
+            if (result !is Failure<*>) return@forEach
+
+            DataKacheFileLogger.severe(
+                "Failed to load or create PlayerDoc for $username ($uuid): ${result.exception.message}",
+                result.exception
+            )
+        }
+
         return results.all { it is Success<*> }
     }
 }

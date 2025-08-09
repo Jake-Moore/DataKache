@@ -16,7 +16,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
         describe("Database Key Operations") {
 
             it("should read keys from empty database") {
-                val cache = getCache()
                 val keysResult = cache.readKeysFromDatabase()
 
                 keysResult.shouldBeInstanceOf<Success<kotlinx.coroutines.flow.Flow<String>>>()
@@ -29,7 +28,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with single document") {
-                val cache = getCache()
 
                 // Create one document
                 cache.create("singleKeyTest") { doc ->
@@ -46,7 +44,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with multiple documents") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("multiKey1") { doc ->
@@ -79,7 +76,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with documents having complex data") {
-                val cache = getCache()
 
                 val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
 
@@ -116,7 +112,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with empty string key") {
-                val cache = getCache()
 
                 // Create document with empty string key
                 cache.create("") { doc ->
@@ -133,7 +128,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with special character keys") {
-                val cache = getCache()
 
                 val specialKey1 = "special-key_with.dots@123"
                 val specialKey2 = "another_special_key#456"
@@ -162,11 +156,11 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with very long keys") {
-                val cache = getCache()
 
-                val longKey1 = "a".repeat(1000)
-                val longKey2 = "b".repeat(2000)
-                val longKey3 = "c".repeat(5000)
+                // Must stay under MongoDB’s 1024-byte limit for the implicit _id index
+                val longKey1 = "a".repeat(256)
+                val longKey2 = "b".repeat(512)
+                val longKey3 = "c".repeat(1000)
 
                 // Create documents with very long keys
                 cache.create(longKey1) { doc ->
@@ -191,7 +185,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with numeric string keys") {
-                val cache = getCache()
 
                 // Create documents with numeric string keys
                 cache.create("123") { doc ->
@@ -216,7 +209,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with unicode keys") {
-                val cache = getCache()
 
                 val unicodeKey1 = "key_with_unicode_éñç"
                 val unicodeKey2 = "key_with_emoji_🎉🎊🎈"
@@ -250,7 +242,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database after document deletion") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("deleteKey1") { doc ->
@@ -288,7 +279,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database after document updates") {
-                val cache = getCache()
 
                 // Create documents
                 cache.create("updateKey1") { doc ->
@@ -324,7 +314,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with documents having extreme balance values") {
-                val cache = getCache()
 
                 // Create documents with extreme balance values
                 cache.create("extremeKey1") { doc ->
@@ -353,7 +342,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with documents having very long names") {
-                val cache = getCache()
 
                 val longName = "a".repeat(10000)
 
@@ -376,7 +364,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with documents having all null values") {
-                val cache = getCache()
 
                 // Create documents with all null values
                 cache.create("allNullKey1") { doc ->
@@ -411,7 +398,6 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should read keys from database with documents having mixed data types") {
-                val cache = getCache()
 
                 val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
 

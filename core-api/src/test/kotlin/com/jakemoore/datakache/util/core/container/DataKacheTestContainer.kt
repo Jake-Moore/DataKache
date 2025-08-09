@@ -10,6 +10,7 @@ import com.jakemoore.datakache.util.doc.TestGenericDocCache
  * This interface provides a database-agnostic way to manage test containers,
  * including setup, teardown, and access to test resources.
  */
+@Suppress("unused")
 interface DataKacheTestContainer {
 
     /**
@@ -41,23 +42,17 @@ interface DataKacheTestContainer {
     suspend fun afterEach()
 
     /**
-     * Gets the test cache instance.
-     *
-     * @return The TestGenericDocCache instance for this test container
+     * The [TestGenericDocCache] instance for testing.
      */
-    fun getCache(): TestGenericDocCache
+    val cache: TestGenericDocCache
 
     /**
-     * Gets the DataKache registration instance.
-     *
-     * @return The DataKacheRegistration instance for this test container
+     * The [DataKacheRegistration] instance for testing.
      */
-    fun getRegistration(): DataKacheRegistration
+    val registration: DataKacheRegistration
 
     /**
-     * Gets the DataKache configuration for this test container.
-     *
-     * @return The DataKacheConfig instance for this test container
+     * The [DataKacheConfig] instance for testing.
      */
-    fun getKacheConfig(): DataKacheConfig
+    val kacheConfig: DataKacheConfig
 }

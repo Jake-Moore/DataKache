@@ -5,6 +5,7 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
@@ -16,7 +17,6 @@ class TestReadOperations : AbstractDataKacheTest() {
         describe("Read Operations") {
 
             it("should read existing document") {
-                val cache = getCache()
 
                 // Create a document first
                 val createdDoc = cache.create("readTestKey") { doc ->
@@ -40,7 +40,6 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should return Empty for non-existent document") {
-                val cache = getCache()
                 val result = cache.read("nonExistentKey")
 
                 result.shouldBeInstanceOf<Empty<TestGenericDoc>>()
@@ -49,14 +48,12 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read all documents from empty cache") {
-                val cache = getCache()
                 val allDocs = cache.readAll()
 
                 allDocs.shouldBe(emptyList())
             }
 
             it("should read all documents from populated cache") {
-                val cache = getCache()
 
                 // Create multiple documents
                 val doc1 = cache.create("key1") { doc ->
@@ -81,14 +78,12 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should get all keys from empty cache") {
-                val cache = getCache()
                 val keys = cache.getKeys()
 
                 keys.shouldBe(emptySet())
             }
 
             it("should get all keys from populated cache") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("key1") { doc -> doc.copy(name = "Document 1", balance = 1.0) }.getOrThrow()
@@ -102,7 +97,6 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should check if key is cached") {
-                val cache = getCache()
 
                 // Check non-existent key
                 cache.isCached("nonExistentKey").shouldBe(false)
@@ -117,7 +111,6 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should get cache size") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 cache.getCacheSize().shouldBe(0)
@@ -134,16 +127,15 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with complex data") {
-                val cache = getCache()
 
-                val createdDoc = cache.create("complexKey") { doc ->
+                cache.create("complexKey") { doc ->
                     doc.copy(
                         name = "Complex Document",
                         balance = 500.0,
                         list = listOf("item1", "item2", "item3"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("key1" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createSample()),
+                        customSet = setOf(MyData.createSample()),
+                        customMap = mapOf("key1" to MyData.createSample())
                     )
                 }.getOrThrow()
 
@@ -161,9 +153,8 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with null values") {
-                val cache = getCache()
 
-                val createdDoc = cache.create("nullKey") { doc ->
+                cache.create("nullKey") { doc ->
                     doc.copy(
                         name = null,
                         balance = 0.0,
@@ -188,9 +179,8 @@ class TestReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read document with empty string key") {
-                val cache = getCache()
 
-                val createdDoc = cache.create("") { doc ->
+                cache.create("") { doc ->
                     doc.copy(name = "Empty Key Document")
                 }.getOrThrow()
 

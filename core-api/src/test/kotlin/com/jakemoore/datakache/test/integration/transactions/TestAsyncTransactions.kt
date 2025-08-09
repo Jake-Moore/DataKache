@@ -18,11 +18,10 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
     init {
         describe("Async Transactions") {
             it("should handle concurrent transactions atomically") {
-                val cache = getCache()
                 val doc = cache.createRandom {
                     it.copy(
                         balance = 0.0,
-                        list = mutableListOf("Initial entry")
+                        list = listOf("Initial entry")
                     )
                 }.getOrThrow()
 
@@ -31,7 +30,9 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                 val atomicCount = AtomicInteger(0)
                 val deferred = (1..THREAD_COUNT).map { i ->
                     async {
-                        delay(i * 20L) // add delay in order to have coroutines processed in order
+                        // coroutine scheduler will break FIFO unless we deliberately delay each enough
+                        //  to ensure they are processed in the order we want
+                        delay(i * 30L)
                         val r = cache.update(doc.key) {
                             it.copy(
                                 list = it.list + "Thread $i started"
@@ -47,8 +48,7 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                 val msEnd = System.currentTimeMillis()
 
                 // Verify that all transactions were successful
-                val successCount = results.count { it is Success<TestGenericDoc> }
-                successCount.shouldBe(THREAD_COUNT)
+                results.all { it is Success<TestGenericDoc> } shouldBe true
 
                 // Verify the final state of the document
                 val finalResult = cache.read(doc.key)
@@ -67,11 +67,8 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                 finalDoc.list.toSet() shouldBe fullList.toSet()
 
                 // Check if they are in the expected order
-                if (fullList == finalDoc.list) {
-                    System.err.println("Entries are in the expected order.")
-                } else {
-                    System.err.println("! Entries are NOT in the expected order.")
-                }
+                finalDoc.list shouldBe fullList
+                System.err.println("Entries are in the expected order.")
 
                 System.err.println(
                     "All async transactions completed. Total time: ${msEnd - msStart}ms"

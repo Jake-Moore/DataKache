@@ -29,8 +29,8 @@ class MongoDataKacheTestContainer(
     private lateinit var config: DataKacheConfig
     private var mockServer: ServerMock? = null
     private var mockPlugin: TestPlugin? = null
-    private var registration: DataKacheRegistration? = null
-    private var cache: TestPlayerDocCache? = null
+    private var _registration: DataKacheRegistration? = null
+    private var _cache: TestPlayerDocCache? = null
 
     override suspend fun beforeSpec() {
         // Start the MongoDB container
@@ -77,14 +77,14 @@ class MongoDataKacheTestContainer(
 
         // Create registration and cache
         TestUtil.createRegistration(databaseName = databaseName).also {
-            registration = it
-            cache = TestUtil.createTestPlayerDocCache(plugin, it)
+            _registration = it
+            _cache = TestUtil.createTestPlayerDocCache(plugin, it)
         }
     }
 
     override suspend fun afterEach() {
         // Shut down registration and cache
-        val cache = requireNotNull(this.cache) {
+        val cache = requireNotNull(this._cache) {
             "Cache is not initialized. Ensure beforeEach is called."
         }
 
@@ -94,13 +94,13 @@ class MongoDataKacheTestContainer(
             "Cache should be empty after test, but found ${cache.readSizeFromDatabase().getOrThrow()} documents"
         }
 
-        requireNotNull(registration) {
+        requireNotNull(_registration) {
             "Registration is not initialized. Ensure beforeEach is called."
         }.shutdown() // SHOULD shut down the cache too
 
         // Reset cache and registration
-        this.cache = null
-        registration = null
+        this._cache = null
+        _registration = null
 
         // Shutdown DataKache
         val server = requireNotNull(mockServer) {
@@ -125,15 +125,20 @@ class MongoDataKacheTestContainer(
         MockBukkit.unmock()
     }
 
-    override fun getCache(): TestPlayerDocCache = requireNotNull(cache)
+    override val cache: TestPlayerDocCache
+        get() = requireNotNull(_cache) { "Cache is not initialized. Ensure beforeEach is called." }
 
-    override fun getServer(): ServerMock = requireNotNull(mockServer)
+    override val registration: DataKacheRegistration
+        get() = requireNotNull(_registration) { "Registration is not initialized. Ensure beforeEach is called." }
 
-    override fun getPlugin(): TestPlugin = requireNotNull(mockPlugin)
+    override val kacheConfig: DataKacheConfig
+        get() = config
 
-    override fun getRegistration(): DataKacheRegistration = requireNotNull(registration)
+    override val server: ServerMock
+        get() = requireNotNull(mockServer) { "Server is not initialized. Ensure beforeEach is called." }
 
-    override fun getKacheConfig(): DataKacheConfig = config
+    override val plugin: TestPlugin
+        get() = requireNotNull(mockPlugin) { "Plugin is not initialized. Ensure beforeEach is called." }
 
     companion object {
         /**

@@ -24,17 +24,8 @@ class TestPlayerDocCache internal constructor(
 ),
     DataKacheScope {
 
-    init {
-        instance = this
-    }
-
     override fun getKSerializer(): KSerializer<TestPlayerDoc> = TestPlayerDoc.serializer()
     override fun getKeyKProperty(): KProperty<UUID> = TestPlayerDoc::key
     override fun getVersionKProperty(): KProperty<Long> = TestPlayerDoc::version
     override fun getUsernameKProperty(): KProperty<String?> = TestPlayerDoc::username
-
-    companion object {
-        private lateinit var instance: TestPlayerDocCache
-        fun get(): TestPlayerDocCache = instance
-    }
 }

@@ -13,7 +13,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
         describe("Database Size Operations") {
 
             it("should read size from empty database") {
-                val cache = getCache()
                 val sizeResult = cache.readSizeFromDatabase()
 
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -21,7 +20,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should read size from database with one document") {
-                val cache = getCache()
 
                 // Create one document
                 cache.create("sizeTestKey1") { doc ->
@@ -34,7 +32,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should read size from database with multiple documents") {
-                val cache = getCache()
 
                 // Create multiple documents with unique names and balances
                 cache.create("sizeTestKey1") { doc ->
@@ -63,7 +60,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size increases after creating documents") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 var sizeResult = cache.readSizeFromDatabase()
@@ -96,7 +92,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size remains same after updating documents") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("sizeUpdateKey") { doc ->
@@ -118,7 +113,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size decreases after deleting documents") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("sizeDeleteKey1") { doc ->
@@ -154,7 +148,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size with documents having complex data") {
-                val cache = getCache()
 
                 // Create documents with complex data
                 cache.create("sizeComplexKey1") { doc ->
@@ -185,7 +178,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size with documents having null values") {
-                val cache = getCache()
 
                 // Create document with null values
                 cache.create("sizeNullKey") { doc ->
@@ -205,7 +197,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size with documents having empty string key") {
-                val cache = getCache()
 
                 // Create document with empty key
                 cache.create("") { doc ->
@@ -218,7 +209,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size with documents having special characters in key") {
-                val cache = getCache()
                 val specialKey = "size-test-key_with.special@chars#123"
 
                 // Create document with special key
@@ -232,7 +222,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size consistency with readAllFromDatabase") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("sizeConsistencyKey1") { doc ->
@@ -262,7 +251,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size consistency with readKeysFromDatabase") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("sizeKeysConsistencyKey1") { doc ->
@@ -288,7 +276,6 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             }
 
             it("should verify size after multiple operations sequence") {
-                val cache = getCache()
 
                 // Initial size should be 0
                 var sizeResult = cache.readSizeFromDatabase()

@@ -308,6 +308,7 @@ internal class MongoDatabaseService : DatabaseService() {
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
+        bypassValidation: Boolean,
     ): D = withContext(Dispatchers.IO) {
         val client = requireNotNull(mongoClient) {
             "MongoClient is not initialized! Could not update Doc in MongoDB!"
@@ -320,6 +321,7 @@ internal class MongoDatabaseService : DatabaseService() {
             docCache,
             doc,
             updateFunction,
+            bypassValidation,
         )
     }
 
@@ -500,6 +502,9 @@ internal class MongoDatabaseService : DatabaseService() {
                     operation = "replace",
                 )
             }
+        } catch (e: DocumentNotFoundException) {
+            // don't log, this is fine, promote to caller
+            throw e
         } catch (me: MongoException) {
             docCache.getLoggerInternal().info(
                 throwable = me,

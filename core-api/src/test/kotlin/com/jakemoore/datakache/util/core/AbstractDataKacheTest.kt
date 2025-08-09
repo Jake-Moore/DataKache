@@ -8,7 +8,6 @@ import com.jakemoore.datakache.util.TestUtil
 import com.jakemoore.datakache.util.core.container.DataKacheTestContainer
 import com.jakemoore.datakache.util.doc.TestGenericDocCache
 import io.kotest.core.spec.style.DescribeSpec
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 
 /**
@@ -28,43 +27,33 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
 
     init {
         beforeSpec {
-            runBlocking {
-                // TODO figure out a way to test all storage modes instead of just MongoDB
-                testContainer = TestUtil.createTestContainer(StorageMode.MONGODB)
-                testContainer.beforeSpec()
-            }
+            // TODO figure out a way to test all storage modes instead of just MongoDB
+            testContainer = TestUtil.createTestContainer(StorageMode.MONGODB)
+            testContainer.beforeSpec()
         }
 
         beforeEach {
-            runBlocking {
-                testContainer.beforeEach()
-            }
+            testContainer.beforeEach()
         }
 
         afterEach {
-            runBlocking {
-                testContainer.afterEach()
-            }
+            testContainer.afterEach()
         }
 
         afterSpec {
-            runBlocking {
-                testContainer.afterSpec()
-            }
+            testContainer.afterSpec()
         }
     }
 
     /**
-     * Gets the test cache instance.
-     *
-     * @return The TestGenericDocCache instance for this test
+     * The [TestGenericDocCache] instance for testing.
      */
-    protected fun getCache(): TestGenericDocCache = testContainer.getCache()
+    val cache: TestGenericDocCache
+        get() = testContainer.cache
 
     /**
-     * Gets the DataKache registration instance.
-     *
-     * @return The DataKacheRegistration instance for this test
+     * The [DataKacheRegistration] instance for testing.
      */
-    protected fun getRegistration(): DataKacheRegistration = testContainer.getRegistration()
+    val registration: DataKacheRegistration
+        get() = testContainer.registration
 }

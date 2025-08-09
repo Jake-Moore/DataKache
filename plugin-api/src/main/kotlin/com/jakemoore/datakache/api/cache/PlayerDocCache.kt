@@ -21,6 +21,8 @@ import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.handler.ClearPlayerDocResultHandler
 import com.jakemoore.datakache.api.result.handler.CreatePlayerDocResultHandler
+import com.jakemoore.datakache.api.result.handler.RejectableUpdatePlayerDocResultHandler
+import com.jakemoore.datakache.api.result.handler.UpdatePlayerDocResultHandler
 import com.jakemoore.datakache.util.DataKacheFileLogger
 import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.coroutines.runBlocking
@@ -159,6 +161,20 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
             }
     }
 
+    // Regular update method (does not bypass validation)
+    override suspend fun update(key: UUID, updateFunction: (D) -> D): DefiniteResult<D> {
+        return UpdatePlayerDocResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction, false)
+        }
+    }
+
+    // Regular update (rejectable) method (does not bypass validation)
+    override suspend fun updateRejectable(key: UUID, updateFunction: (D) -> D): RejectableResult<D> {
+        return RejectableUpdatePlayerDocResultHandler.wrap {
+            return@wrap updateInternal(key, updateFunction, false)
+        }
+    }
+
     /**
      * Modify the document associated with the provided [Player] (both cache and database will be updated).
      *
@@ -174,6 +190,30 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
             )
         }
         return this.update(player.uniqueId, updateFunction)
+    }
+
+    /**
+     * Update the username of the [PlayerDoc] associated with the provided [Player].
+     *
+     * This method is intended for internal use only, as it modifies the username directly.
+     *
+     * API users cannot modify the username of a [PlayerDoc] during creation or updates, that will throw:
+     * - [IllegalDocumentUsernameModificationException] if attempted.
+     */
+    @ApiStatus.Internal
+    internal suspend fun updateUsername(
+        key: UUID,
+        username: String,
+    ): DefiniteResult<D> {
+        return UpdatePlayerDocResultHandler.wrap {
+            return@wrap updateInternal(
+                key = key,
+                updateFunction = {
+                    it.copyHelper(username = username)
+                },
+                bypassValidation = true, // Bypass validation to allow username modification
+            )
+        }
     }
 
     /**
@@ -328,6 +368,21 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                 docNamespace = namespace,
                 foundUsername = foundUsername,
                 expectedUsername = expectedUsername,
+            )
+        }
+    }
+
+    override fun isUpdateValidInternal(originalDoc: D, updatedDoc: D) {
+        val namespace = this.getKeyNamespace(originalDoc.key)
+
+        // Enforce Username immutability and internal modification ONLY
+        val originalUsername = originalDoc.username
+        val updatedUsername = updatedDoc.username
+        if (originalUsername != updatedUsername) {
+            throw IllegalDocumentUsernameModificationException(
+                docNamespace = namespace,
+                expectedUsername = originalUsername,
+                foundUsername = updatedUsername,
             )
         }
     }

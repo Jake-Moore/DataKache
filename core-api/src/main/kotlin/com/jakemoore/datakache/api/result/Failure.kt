@@ -41,7 +41,5 @@ class Failure<T>(
     /**
      * Throws the exception wrapped in this failure.
      */
-    override fun getOrThrow(): T {
-        throw exception
-    }
+    override fun getOrThrow(): T = throw exception
 }

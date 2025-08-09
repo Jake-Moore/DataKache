@@ -6,6 +6,7 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.doc.Doc.Status
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
@@ -407,4 +408,23 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
 
     @ApiStatus.Internal
     fun getLoggerInternal(): LoggerService
+
+    /**
+     * Throws an exception if the update is not valid according to the cache's rules.
+     *
+     * If this method returns successfully, the update is valid and can be applied.
+     *
+     * @param originalDoc The original document before the update.
+     * @param updatedDoc The document after the update.
+     *
+     * @throws DocumentUpdateException if the update breaks a document update rule.
+     */
+    @ApiStatus.Internal
+    @Throws(DocumentUpdateException::class)
+    fun isUpdateValidInternal(
+        originalDoc: D,
+        updatedDoc: D,
+    ) {
+        // no default implementation, subclasses can override this method
+    }
 }

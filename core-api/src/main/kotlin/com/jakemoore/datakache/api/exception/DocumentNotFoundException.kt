@@ -9,5 +9,6 @@ class DocumentNotFoundException(
     val docCache: DocCache<*, *>,
     val operation: String,
 ) : DataKacheException(
-    "No document found with key '$keyString' in DocCache '${docCache.cacheName}'."
+    "No document found with key '$keyString' in DocCache '${docCache.cacheName}'" +
+        " during operation '$operation'."
 )

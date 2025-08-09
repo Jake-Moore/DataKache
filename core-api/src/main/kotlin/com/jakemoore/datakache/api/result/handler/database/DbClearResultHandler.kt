@@ -7,7 +7,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 
 internal object DbClearResultHandler {
     internal suspend fun wrap(
-        // Work returns either success or failure (true or false) no other state is allowed.
+        // Work returns a nonnull Long value on success, or throws an exception on failure.
         work: suspend () -> Long
     ): DefiniteResult<Long> {
         try {

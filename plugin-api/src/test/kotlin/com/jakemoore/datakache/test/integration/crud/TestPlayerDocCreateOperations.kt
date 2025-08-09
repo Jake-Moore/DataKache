@@ -19,7 +19,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
         describe("PlayerDocCache Create Operations") {
 
             it("should create PlayerDoc with valid UUID") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -40,7 +39,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create PlayerDoc with custom data") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -71,7 +69,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create PlayerDoc with complex data structures") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -117,7 +114,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create PlayerDoc with null values") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -145,7 +141,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should return failure when modifying username") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -158,7 +153,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should return failure when modifying key") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
                 val differentUuid = UUID.randomUUID()
 
@@ -172,7 +166,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should return failure when modifying version") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -185,7 +178,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle duplicate UUID creation attempts") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 // First creation should succeed
@@ -209,7 +201,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle concurrent creation requests") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 // Perform multiple concurrent creation attempts
@@ -237,7 +228,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle creation with empty initializer") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -254,7 +244,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should handle creation with complex initializer logic") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -276,7 +265,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should persist created PlayerDoc to database") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->
@@ -307,7 +295,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create PlayerDoc with special characters in name") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
                 val specialName = "Player_With_Special_Chars_123!@#$%^&*()"
 
@@ -324,7 +311,6 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create PlayerDoc with extreme values") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 val result = cache.create(uuid) { doc ->

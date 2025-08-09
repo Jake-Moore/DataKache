@@ -10,14 +10,12 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
         describe("Cache Key Operations") {
 
             it("should get keys from empty cache") {
-                val cache = getCache()
                 val keys = cache.getKeys()
 
                 keys.shouldBe(emptySet())
             }
 
             it("should get keys from cache with one document") {
-                val cache = getCache()
 
                 // Create one document
                 cache.create("cacheKeysKey1") { doc ->
@@ -30,7 +28,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should get keys from cache with multiple documents") {
-                val cache = getCache()
 
                 // Create multiple documents with unique names and balances
                 cache.create("cacheKeysKey1") { doc ->
@@ -59,13 +56,11 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should check if key is cached for non-existent key") {
-                val cache = getCache()
 
                 cache.isCached("nonExistentCacheKey").shouldBe(false)
             }
 
             it("should check if key is cached for existing key") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("cachedKeyTest") { doc ->
@@ -76,7 +71,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should check if key is cached for multiple keys") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("multiKey1") { doc ->
@@ -101,7 +95,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys after creating documents") {
-                val cache = getCache()
 
                 // Initial keys should be empty
                 cache.getKeys().shouldBe(emptySet())
@@ -135,7 +128,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys remain same after updating documents") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("keysAfterUpdateKey") { doc ->
@@ -157,7 +149,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys decrease after deleting documents") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("keysAfterDeleteKey1") { doc ->
@@ -197,7 +188,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys with documents having complex data") {
-                val cache = getCache()
 
                 // Create documents with complex data
                 cache.create("keysComplexKey1") { doc ->
@@ -228,7 +218,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys with documents having null values") {
-                val cache = getCache()
 
                 // Create document with null values
                 cache.create("keysNullKey") { doc ->
@@ -248,7 +237,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys with documents having empty string key") {
-                val cache = getCache()
 
                 // Create document with empty key
                 cache.create("") { doc ->
@@ -261,7 +249,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys with documents having special characters in key") {
-                val cache = getCache()
                 val specialKey = "keys-test-key_with.special@chars#123"
 
                 // Create document with special key
@@ -275,7 +262,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys consistency with getCacheSize") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("keysConsistencyKey1") { doc ->
@@ -303,7 +289,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys consistency with readAll") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("keysReadAllConsistencyKey1") { doc ->
@@ -328,7 +313,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys after multiple operations sequence") {
-                val cache = getCache()
 
                 // Initial keys should be empty
                 cache.getKeys().shouldBe(emptySet())
@@ -381,7 +365,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys with readOrCreate operations") {
-                val cache = getCache()
 
                 // Initial keys should be empty
                 cache.getKeys().shouldBe(emptySet())
@@ -415,7 +398,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys with random key creation") {
-                val cache = getCache()
 
                 // Initial keys should be empty
                 cache.getKeys().shouldBe(emptySet())
@@ -440,7 +422,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify isCached behavior after operations") {
-                val cache = getCache()
 
                 // Check non-existent key
                 cache.isCached("nonExistentKey").shouldBe(false)
@@ -469,7 +450,6 @@ class TestCacheKeyOperations : AbstractDataKacheTest() {
             }
 
             it("should verify keys after cache clear operations") {
-                val cache = getCache()
 
                 // Create multiple documents
                 cache.create("clearKeysKey1") { doc ->

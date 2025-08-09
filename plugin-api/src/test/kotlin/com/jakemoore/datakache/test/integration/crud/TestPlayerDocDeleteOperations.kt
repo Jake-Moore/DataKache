@@ -17,7 +17,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
         describe("PlayerDocCache Delete Operations") {
 
             it("should clear PlayerDoc with UUID") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 // Create a PlayerDoc with custom data
@@ -59,7 +58,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should clear PlayerDoc with Player object") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer1")
 
                 // First, verify the player document exists
@@ -101,7 +99,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should handle clearing non-existent PlayerDoc with UUID") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 // Try to clear a PlayerDoc that doesn't exist
@@ -115,7 +112,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should handle clearing offline player") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer2")
 
                 // Disconnect the player
@@ -128,7 +124,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should preserve username when clearing PlayerDoc") {
-                val cache = getCache()
                 val player = addPlayer("PreserveUsername")
 
                 // Create a PlayerDoc with a specific username
@@ -152,7 +147,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should handle multiple clear operations on same PlayerDoc") {
-                val cache = getCache()
                 val player = addPlayer("MultiClearPlayer")
 
                 cache.read(player).shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -191,7 +185,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should handle clearing PlayerDoc with null username") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 // Create a PlayerDoc with null username
@@ -217,7 +210,6 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
             }
 
             it("should persist cleared PlayerDoc to database") {
-                val cache = getCache()
                 val uuid = UUID.randomUUID()
 
                 // Create a PlayerDoc with custom data

@@ -1,9 +1,9 @@
-@file:Suppress("CanBeParameter")
-
 package com.jakemoore.datakache.api.exception.update
 
+import com.jakemoore.datakache.api.exception.DataKacheException
+
 // DocumentUpdateExceptions.kt
-open class DocumentUpdateException(message: String) : RuntimeException(message)
+open class DocumentUpdateException(message: String) : DataKacheException(message)
 
 /** Thrown when the update function returns the _same_ instance. */
 class UpdateFunctionReturnedSameInstanceException(

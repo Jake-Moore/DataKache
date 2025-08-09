@@ -24,7 +24,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
         describe("Update Operations") {
 
             it("should update existing document") {
-                val cache = getCache()
 
                 // Create a document
                 val originalDoc = cache.create("updateKey") { doc ->
@@ -56,7 +55,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should fail when updating non-existent document") {
-                val cache = getCache()
 
                 val updateResult = cache.update("nonExistentKey") { doc ->
                     doc.copy(name = "This should fail")
@@ -71,7 +69,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should update document with complex transformation") {
-                val cache = getCache()
 
                 // Create a document with simple data
                 val originalDoc = cache.create("complexUpdateKey") { doc ->
@@ -110,7 +107,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should update document via document instance") {
-                val cache = getCache()
 
                 // Create a document
                 val originalDoc = cache.create("docInstanceKey") { doc ->
@@ -132,7 +128,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should reject update with RejectUpdateException") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("rejectKey") { doc ->
@@ -150,7 +145,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should successfully update with rejectable update") {
-                val cache = getCache()
 
                 // Create a document
                 val originalDoc = cache.create("rejectableKey") { doc ->
@@ -174,7 +168,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should fail rejectable update for non-existent document") {
-                val cache = getCache()
 
                 val updateResult = cache.updateRejectable("nonExistentRejectKey") { doc ->
                     doc.copy(name = "This should fail")
@@ -190,7 +183,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should update document multiple times") {
-                val cache = getCache()
 
                 // Create initial document
                 val doc1 = cache.create("multiUpdateKey") { doc ->
@@ -225,7 +217,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should update document with null values") {
-                val cache = getCache()
 
                 // Create document with data
                 val originalDoc = cache.create("nullUpdateKey") { doc ->
@@ -258,7 +249,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should update document with empty string key") {
-                val cache = getCache()
 
                 // Create document with empty key
                 val originalDoc = cache.create("") { doc ->
@@ -279,7 +269,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should update document with special characters in key") {
-                val cache = getCache()
                 val specialKey = "test-key_with.special@chars#123"
 
                 // Create document with special key
@@ -301,7 +290,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should fail when update function returns same instance") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("sameInstanceKey") { doc ->
@@ -322,7 +310,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should fail when update function modifies document key") {
-                val cache = getCache()
 
                 // Create a document
                 cache.create("keyModificationKey") { doc ->
@@ -345,7 +332,6 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             }
 
             it("should fail when update function modifies document version") {
-                val cache = getCache()
 
                 // Create a document
                 val originalDoc = cache.create("versionModificationKey") { doc ->

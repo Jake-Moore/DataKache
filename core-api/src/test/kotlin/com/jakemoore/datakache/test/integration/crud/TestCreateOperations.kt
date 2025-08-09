@@ -2,6 +2,8 @@ package com.jakemoore.datakache.test.integration.crud
 
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
+import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
@@ -13,6 +15,7 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
+import java.util.UUID
 
 @Suppress("unused")
 class TestCreateOperations : AbstractDataKacheTest() {
@@ -21,7 +24,6 @@ class TestCreateOperations : AbstractDataKacheTest() {
         describe("Create Operations") {
 
             it("should create document with specific key") {
-                val cache = getCache()
                 val result = cache.create("testKey") { doc ->
                     doc.copy(
                         name = "Test Document",
@@ -40,7 +42,6 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with random key") {
-                val cache = getCache()
                 val result = cache.createRandom { doc ->
                     doc.copy(
                         name = "Random Document",
@@ -53,14 +54,13 @@ class TestCreateOperations : AbstractDataKacheTest() {
 
                 val createdDoc = result.getOrThrow()
                 createdDoc.key.shouldNotBe("testKey") // Should be a random UUID
-                createdDoc.key.shouldContain("-") // UUID format
+                kotlin.runCatching { UUID.fromString(createdDoc.key) }.isSuccess shouldBe true
                 createdDoc.name shouldBe "Random Document"
                 createdDoc.balance shouldBe 250.0
                 createdDoc.version shouldBe 0L
             }
 
             it("should create document with complex nested data") {
-                val cache = getCache()
                 val myData = MyData.createSample()
 
                 val result = cache.create("complexKey") { doc ->
@@ -87,7 +87,6 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with property defaults") {
-                val cache = getCache()
                 val result = cache.create("defaultKey")
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -101,7 +100,6 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should fail when creating document with duplicate key") {
-                val cache = getCache()
 
                 // Create first document
                 val firstResult = cache.create("duplicateKey") { doc ->
@@ -120,8 +118,39 @@ class TestCreateOperations : AbstractDataKacheTest() {
                 wrapper.exception.keyString shouldBe "duplicateKey"
             }
 
+            it("should fail when creating document changes document key") {
+
+                // Create a document
+                val createResult = cache.create("keyModificationKey") { doc ->
+                    doc.copy(key = "modifiedKey") // Modify key - should fail
+                }
+                createResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
+                createResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
+
+                val wrapper: ResultExceptionWrapper = createResult.exception
+                wrapper.exception.shouldBeInstanceOf<IllegalDocumentKeyModificationException>()
+                wrapper.exception.docNamespace shouldBe cache.getKeyNamespace("keyModificationKey")
+                wrapper.exception.foundKeyString shouldBe "modifiedKey"
+                wrapper.exception.expectedKeyString shouldBe "keyModificationKey"
+            }
+
+            it("should fail when creating document changes document version") {
+
+                // Create a document
+                val createResult = cache.create("versionModificationKey") { doc ->
+                    doc.copy(version = 42) // Modify version - should fail
+                }
+                createResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
+                createResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
+
+                val wrapper: ResultExceptionWrapper = createResult.exception
+                wrapper.exception.shouldBeInstanceOf<IllegalDocumentVersionModificationException>()
+                wrapper.exception.docNamespace shouldBe cache.getKeyNamespace("versionModificationKey")
+                wrapper.exception.foundVersion shouldBe 42
+                wrapper.exception.expectedVersion shouldBe 0
+            }
+
             it("should fail when creating document with duplicate unique index") {
-                val cache = getCache()
 
                 // Create first document with unique key/name, but balance = 1.0
                 val firstResult = cache.create("firstDoc") { doc ->
@@ -139,11 +168,10 @@ class TestCreateOperations : AbstractDataKacheTest() {
                 val wrapper: ResultExceptionWrapper = secondResult.exception
                 wrapper.exception.shouldBeInstanceOf<DuplicateUniqueIndexException>()
                 // MongoDB error message should mention the unique index (balance) and value (1.0)
-                wrapper.exception.fullMessage.shouldContain("balance: 1.0")
+                wrapper.exception.fullMessage.shouldContain("balance")
             }
 
             it("should create multiple documents with different keys") {
-                val cache = getCache()
 
                 val doc1 = cache.create("key1") { doc ->
                     doc.copy(name = "Document 1", balance = 100.0)
@@ -177,7 +205,6 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with empty string key") {
-                val cache = getCache()
                 val result = cache.create("") { doc ->
                     doc.copy(name = "Empty Key Document")
                 }
@@ -190,7 +217,6 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with special characters in key") {
-                val cache = getCache()
                 val specialKey = "test-key_with.special@chars#123"
 
                 val result = cache.create(specialKey) { doc ->

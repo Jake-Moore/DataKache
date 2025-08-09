@@ -21,11 +21,8 @@ import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
-import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.handler.ReadResultHandler
 import com.jakemoore.datakache.api.result.handler.ReadUniqueIndexResultHandler
-import com.jakemoore.datakache.api.result.handler.RejectableUpdateResultHandler
-import com.jakemoore.datakache.api.result.handler.UpdateResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbClearResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbHasKeyResultHandler
 import com.jakemoore.datakache.api.result.handler.database.DbReadAllResultHandler
@@ -188,18 +185,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
     }
 
-    override suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D> {
-        return UpdateResultHandler.wrap {
-            return@wrap updateInternal(key, updateFunction)
-        }
-    }
-
-    override suspend fun updateRejectable(key: K, updateFunction: (D) -> D): RejectableResult<D> {
-        return RejectableUpdateResultHandler.wrap {
-            return@wrap updateInternal(key, updateFunction)
-        }
-    }
-
     @Throws(
         DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
         TransactionRetriesExceededException::class, DocumentUpdateException::class,
@@ -207,7 +192,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
         RejectUpdateException::class,
     )
-    private suspend fun updateInternal(key: K, updateFunction: (D) -> D): D {
+    protected suspend fun updateInternal(key: K, updateFunction: (D) -> D, bypassValidation: Boolean): D {
         // Read from the database because having a false negative cache hit is worse than waiting for the database read.
         val doc: D = this.readFromDatabase(key).getOrNull() ?: run {
             // METRICS
@@ -220,7 +205,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 operation = "update"
             )
         }
-        return DataKache.storageMode.databaseService.update(this, doc, updateFunction)
+        return DataKache.storageMode.databaseService.update(this, doc, updateFunction, bypassValidation)
+            .also { cacheInternal(it) }
     }
 
     override fun readAll(): Collection<D> {
@@ -471,8 +457,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 val removed = uncacheInternal(key)
                 if (removed) {
                     getLoggerInternal().debug("Uncached Document From DELETE: $key")
-                } else {
-                    getLoggerInternal().warn("Attempted to delete non-cached document: $key")
                 }
             }
 

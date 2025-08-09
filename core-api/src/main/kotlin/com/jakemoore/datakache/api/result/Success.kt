@@ -39,7 +39,5 @@ class Success<T>(
     /**
      * @return the [value] that was successfully retrieved.
      */
-    override fun getOrThrow(): T {
-        return value
-    }
+    override fun getOrThrow(): T = value
 }

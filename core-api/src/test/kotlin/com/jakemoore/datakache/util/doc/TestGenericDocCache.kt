@@ -4,7 +4,6 @@ package com.jakemoore.datakache.util.doc
 
 import com.jakemoore.datakache.api.cache.GenericDocCache
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
-import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.Empty
 import com.jakemoore.datakache.api.result.OptionalResult
@@ -23,14 +22,10 @@ class TestGenericDocCache internal constructor(
     instantiator = ::TestGenericDoc,
 ),
     DataKacheScope {
-    internal val nameField: DocUniqueIndex<String, TestGenericDoc, String>
-    internal val balanceField: DocUniqueIndex<String, TestGenericDoc, Double>
+    internal val nameField = NameIndex(this@TestGenericDocCache)
+    internal val balanceField = BalanceIndex(this@TestGenericDocCache)
 
     init {
-        instance = this
-        nameField = NameIndex(this@TestGenericDocCache)
-        balanceField = BalanceIndex(this@TestGenericDocCache)
-
         // Register indexes
         runBlocking {
             registerUniqueIndex(nameField).exceptionOrNull()?.let {
@@ -46,18 +41,13 @@ class TestGenericDocCache internal constructor(
     override fun getKeyKProperty(): KProperty<String> = TestGenericDoc::key
     override fun getVersionKProperty(): KProperty<Long> = TestGenericDoc::version
 
-    companion object {
-        private lateinit var instance: TestGenericDocCache
-        fun get(): TestGenericDocCache = instance
+    fun readByName(name: String?): OptionalResult<TestGenericDoc> {
+        if (name == null) return Empty()
+        return this.readByUniqueIndex(this.nameField, name)
+    }
 
-        fun readByName(name: String?): OptionalResult<TestGenericDoc> {
-            if (name == null) return Empty()
-            return instance.readByUniqueIndex(instance.nameField, name)
-        }
-
-        fun readByBalance(balance: Double?): OptionalResult<TestGenericDoc> {
-            if (balance == null) return Empty()
-            return instance.readByUniqueIndex(instance.balanceField, balance)
-        }
+    fun readByBalance(balance: Double?): OptionalResult<TestGenericDoc> {
+        if (balance == null) return Empty()
+        return this.readByUniqueIndex(this.balanceField, balance)
     }
 }

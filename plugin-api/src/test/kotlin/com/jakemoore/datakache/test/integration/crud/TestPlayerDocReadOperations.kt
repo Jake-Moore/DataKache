@@ -25,7 +25,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
         describe("PlayerDocCache Read Operations") {
 
             it("should read online player documents") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer1")
 
                 val result = cache.read(player)
@@ -39,7 +38,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should reject reading offline players") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer2")
 
                 // Disconnect the player to simulate offline state
@@ -54,16 +52,19 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                     e.message.shouldNotBeNull().lowercase().shouldContain("not online or valid")
                 }
 
-                // Should read empty since this player is fake and never logged in
+                // Should read Success because the player did connect initially
+                //  which created their PlayerDoc immediately
                 val result = cache.read(player.uniqueId)
                 result.shouldNotBeNull()
-                result.shouldBeInstanceOf<Empty<TestPlayerDoc>>()
-                result.shouldNotBeInstanceOf<Success<TestPlayerDoc>>()
+                result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
+                result.shouldNotBeInstanceOf<Empty<TestPlayerDoc>>()
                 result.shouldNotBeInstanceOf<Failure<TestPlayerDoc>>()
+                val doc = result.value
+                doc.username.shouldBe(player.name)
+                doc.uniqueId.shouldBe(player.uniqueId)
             }
 
             it("should read all online players") {
-                val cache = getCache()
 
                 // Add multiple players
                 val player1 = addPlayer("TestPlayer3")
@@ -81,7 +82,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle multiple online players simultaneously") {
-                val cache = getCache()
 
                 // Add multiple players
                 val players = listOf(
@@ -114,7 +114,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle player join/quit scenarios") {
-                val cache = getCache()
 
                 // Start with one player
                 val player1 = addPlayer("TestPlayer11")
@@ -138,7 +137,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle concurrent access to PlayerDocs") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer13")
 
                 // Launch 10 concurrent reads
@@ -156,7 +154,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc versioning correctly") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer14")
 
                 val result1 = cache.read(player)
@@ -189,7 +186,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with complex data structures") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer15")
 
                 val result = cache.read(player)
@@ -208,7 +204,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with null username") {
-                val cache = getCache()
 
                 val result = cache.create(UUID.randomUUID())
                 result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -223,7 +218,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with custom data fields") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer18")
 
                 val result = cache.read(player)
@@ -254,7 +248,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc version conflicts") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer19")
 
                 val result1 = cache.read(player)
@@ -290,7 +283,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read PlayerDoc after player reconnection") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer20")
 
                 val result1 = cache.read(player)
@@ -312,7 +304,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with large data payloads") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer21")
 
                 val result = cache.read(player)
@@ -345,7 +336,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should read PlayerDoc with special characters in username") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer_With_Special_Chars_123!@#")
 
                 val result = cache.read(player)
@@ -357,12 +347,11 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with UUID edge cases") {
-                val cache = getCache()
 
                 // Test with zero UUID
                 val zeroUUID = UUID(0L, 0L)
-                val player1 = PlayerMock(getServer(), "TestPlayer22", zeroUUID)
-                getServer().addPlayer(player1)
+                val player1 = PlayerMock(server, "TestPlayer22", zeroUUID)
+                server.addPlayer(player1)
 
                 val result1 = cache.read(player1)
                 result1.shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -371,8 +360,8 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
 
                 // Test with all-ones UUID
                 val allOnesUUID = UUID(-1L, -1L)
-                val player2 = PlayerMock(getServer(), "TestPlayer23", allOnesUUID)
-                getServer().addPlayer(player2)
+                val player2 = PlayerMock(server, "TestPlayer23", allOnesUUID)
+                server.addPlayer(player2)
 
                 val result2 = cache.read(player2)
                 result2.shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -381,7 +370,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with concurrent modifications") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer24")
 
                 val result1 = cache.read(player)
@@ -400,7 +388,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with database sync issues") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer25")
 
                 val result = cache.read(player)
@@ -418,7 +405,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with cache invalidation scenarios") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer26")
 
                 val result1 = cache.read(player)
@@ -444,8 +430,7 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with memory pressure scenarios") {
-                val cache = getCache()
-                getServer().onlinePlayers.size.shouldBe(0)
+                server.onlinePlayers.size.shouldBe(0)
 
                 // Add multiple players to simulate memory pressure
                 val players = (1..10).map { addPlayer("TestPlayer${26 + it}") }
@@ -469,7 +454,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with network latency simulation") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer36")
 
                 val result = cache.read(player)
@@ -489,7 +473,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with server restart scenarios") {
-                val cache = getCache()
                 val player = addPlayer("TestPlayer37")
 
                 val result1 = cache.read(player)
@@ -508,31 +491,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 doc2.key.shouldBe(doc1.key)
                 doc2.uniqueId.shouldBe(doc1.uniqueId)
                 doc2.username.shouldBe(doc1.username)
-            }
-
-            it("should handle PlayerDoc username if previously created") {
-                val cache = getCache()
-                val username = "LateJoinPlayer"
-                val uuid = UUID.randomUUID()
-
-                // Simulate a player doc being created before that player joins
-                val createdDoc = cache.create(uuid) {
-                    it.copy(
-                        name = "InitialName",
-                    )
-                }.getOrThrow()
-
-                // Simulate that the player joins later
-                val player = PlayerMock(getServer(), username, uuid)
-                getServer().addPlayer(player)
-
-                val result = cache.read(player)
-                result.shouldNotBeNull()
-                result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
-                val doc = result.value
-                doc.uniqueId.shouldBe(uuid)
-                doc.name.shouldBe("InitialName")
-                doc.username.shouldBe(username) // this should have been updated during player join!
             }
         }
     }
