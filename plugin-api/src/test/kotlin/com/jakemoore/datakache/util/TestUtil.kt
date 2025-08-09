@@ -13,7 +13,7 @@ import org.bukkit.plugin.java.JavaPlugin
 object TestUtil {
 
     /**
-     * Returns the SINGLETON test container for the specified database type.
+     * Returns a test container for the specified database type.
      *
      * @param storageMode The type of database to use for testing
      * @param databaseName The name of the test database

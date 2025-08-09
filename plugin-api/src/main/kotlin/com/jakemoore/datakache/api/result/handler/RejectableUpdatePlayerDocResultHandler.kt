@@ -10,6 +10,7 @@ import com.jakemoore.datakache.api.result.Reject
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
+import kotlinx.coroutines.CancellationException
 
 internal object RejectableUpdatePlayerDocResultHandler {
     internal suspend fun <D : PlayerDoc<D>> wrap(
@@ -23,6 +24,9 @@ internal object RejectableUpdatePlayerDocResultHandler {
 
             val value = work()
             return Success(value)
+        } catch (e: CancellationException) {
+            // propagate cancellation exceptions
+            throw e
         } catch (e: DocumentNotFoundException) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateNotFoundFail)
@@ -35,30 +39,16 @@ internal object RejectableUpdatePlayerDocResultHandler {
                     exception = e,
                 )
             )
+        } catch (e: RejectUpdateException) {
+            // METRICS
+            DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateRejected)
+
+            return Reject(e)
         } catch (e: Exception) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocRejectableUpdateFail)
 
-            val rejectException = getRejectException(e)
-            return if (rejectException != null) {
-                Reject(rejectException)
-            } else {
-                Failure(ResultExceptionWrapper("Update operation failed.", e))
-            }
+            return Failure(ResultExceptionWrapper("Rejectable Update operation failed.", e))
         }
-    }
-
-    private fun getRejectException(exception: Throwable): RejectUpdateException? {
-        val cause = exception.cause
-        return exception as? RejectUpdateException
-            ?: (
-                cause as? RejectUpdateException
-                    ?: if (cause != null && cause.cause is RejectUpdateException) {
-                        // If its more than 2 levels deep, I feel like that's an issue with the user's code
-                        cause.cause as RejectUpdateException
-                    } else {
-                        null
-                    }
-                )
     }
 }

@@ -21,7 +21,7 @@ class IllegalDocumentKeyModificationException(
     "[$docNamespace] Updated doc key mismatch! Found: $foundKeyString, Expected: $expectedKeyString"
 )
 
-/** Thrown when the version on the updated document isn’t the next optimistic version. */
+/** Thrown when the version on the updated document isn’t the expected version. */
 class IllegalDocumentVersionModificationException(
     val docNamespace: String,
     val foundVersion: Long,

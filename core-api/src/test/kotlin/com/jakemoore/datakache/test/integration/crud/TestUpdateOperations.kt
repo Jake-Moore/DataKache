@@ -79,7 +79,7 @@ class TestUpdateOperations : AbstractDataKacheTest() {
                     )
                 }.getOrThrow()
 
-                val myData = MyData.createSample()
+                val myData = MyData.createRandom()
 
                 // Update with complex data
                 val updateResult = cache.update("complexUpdateKey") { doc ->

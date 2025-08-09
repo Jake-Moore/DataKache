@@ -8,6 +8,7 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
 import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
@@ -20,6 +21,7 @@ import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.core.connections.DatabaseService
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
+import com.jakemoore.datakache.core.connections.mongo.MongoTransactions.checkDuplicateKeyExceptions
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
@@ -259,28 +261,7 @@ internal class MongoDatabaseService : DatabaseService() {
                 }
 
                 // Transform certain MongoWrite exceptions into standard DataKache exceptions
-                if (e.error.code == DUPLICATE_KEY_VIOLATION_CODE) {
-                    val errorMessage = e.message ?: ""
-                    when {
-                        errorMessage.contains("index: _id") -> {
-                            // Primary key violation (duplicate _id)
-                            throw DuplicateDocumentKeyException(
-                                docCache = docCache,
-                                docCache.keyToString(doc.key),
-                                fullMessage = errorMessage,
-                                operation = "create",
-                            )
-                        }
-                        errorMessage.contains("index:") -> {
-                            // Unique index violation (duplicate value in a unique index)
-                            throw DuplicateUniqueIndexException(
-                                docCache = docCache,
-                                fullMessage = errorMessage,
-                                operation = "create",
-                            )
-                        }
-                    }
-                }
+                checkDuplicateKeyExceptions(e, docCache, doc, Operation.CREATE)
 
                 // Any Other WriteException -> Promote to caller (no additional logging needed)
                 throw e
@@ -499,7 +480,7 @@ internal class MongoDatabaseService : DatabaseService() {
                 throw DocumentNotFoundException(
                     keyString = keyString,
                     docCache = docCache,
-                    operation = "replace",
+                    operation = Operation.REPLACE,
                 )
             }
         } catch (e: DocumentNotFoundException) {

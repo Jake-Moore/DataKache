@@ -46,8 +46,13 @@ class MongoDataKacheTestContainer(
         context = TestDataKacheContext(this)
 
         // Initialize DataKache
-        require(DataKache.onEnable(context)) {
-            "Failed to enable DataKache with MongoDB storage mode"
+        try {
+            require(DataKache.onEnable(context)) {
+                "Failed to enable DataKache with MongoDB storage mode"
+            }
+        } catch (e: IllegalArgumentException) {
+            runCatching { container.stop() }
+            throw e
         }
     }
 
@@ -66,8 +71,9 @@ class MongoDataKacheTestContainer(
         }
 
         // Clear this collection entirely, preparing for the next test
-        cache.clearAllPermanently()
-        assert(cache.readSizeFromDatabase().getOrThrow() == 0L) {
+        cache.clearDocsFromDatabasePermanently().getOrThrow()
+        val remaining = cache.readSizeFromDatabase().getOrThrow()
+        require(remaining == 0L) {
             "Cache should be empty after test, but found ${cache.readSizeFromDatabase().getOrThrow()} documents"
         }
 
@@ -97,7 +103,7 @@ class MongoDataKacheTestContainer(
     override val registration: DataKacheRegistration
         get() = requireNotNull(_registration) { "Registration is not initialized. Ensure beforeEach is called." }
 
-    override val kacheConfig: DataKacheConfig
+    override val dataKacheConfig: DataKacheConfig
         get() = config
 
     companion object {
@@ -108,7 +114,7 @@ class MongoDataKacheTestContainer(
          * @return A new MongoDataKacheTestContainer instance
          */
         fun create(databaseName: String = "TestDatabase"): MongoDataKacheTestContainer {
-            // Use only one docker container instance for all tests
+            // Create a fresh MongoDB container on each test run (prevent reuse)
             val container = MongoDBContainer(DockerImageName.parse("mongo:8.0"))
                 .withReuse(false)
             return MongoDataKacheTestContainer(container, databaseName)

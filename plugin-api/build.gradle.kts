@@ -7,7 +7,7 @@ plugins {
 }
 
 repositories {
-    maven("https://repo.papermc.io/repository/maven-public/")
+    maven(url = "https://repo.papermc.io/repository/maven-public/")
 }
 
 // Unique module dependencies
@@ -46,9 +46,9 @@ dependencies {
     testImplementation(project.property("testcontainers-junit-jupiter") as String)
     testImplementation(project.property("testcontainers-mongodb") as String)
     testImplementation(project.property("testcontainers-core") as String)
-
-    testImplementation(project.property("logback-classic") as String)
     testImplementation(project.property("kotlinx-coroutines-test") as String)
+
+    testRuntimeOnly(project.property("logback-classic") as String)
 
     // MockBukkit
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.6")

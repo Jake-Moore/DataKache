@@ -3,14 +3,14 @@
 package com.jakemoore.datakache.api.exception
 
 import com.jakemoore.datakache.api.cache.DocCache
+import com.jakemoore.datakache.api.exception.data.Operation
 
 class DuplicateDocumentKeyException(
     val docCache: DocCache<*, *>,
     val keyString: String,
     val fullMessage: String,
-    val operation: String? = null,
+    val operation: Operation,
 ) : DataKacheException(
-    "Duplicate Document Key '$keyString'" +
-        (operation?.let { " during '$it'" } ?: "") +
-        ": " + fullMessage.ifBlank { "Operation Failed." }
+    "Duplicate Document Key '$keyString' during '${operation.name}':" +
+        fullMessage.ifBlank { "Operation Failed." }
 )

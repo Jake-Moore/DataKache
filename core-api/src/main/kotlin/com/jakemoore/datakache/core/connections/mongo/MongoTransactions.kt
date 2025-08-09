@@ -6,6 +6,7 @@ import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
 import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
@@ -30,9 +31,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import java.util.Random
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.pow
+import kotlin.random.Random
 
 @Suppress("MemberVisibilityCanBePrivate")
 object MongoTransactions : CoroutineScope {
@@ -54,7 +55,8 @@ object MongoTransactions : CoroutineScope {
      * Retries here are mainly for handling network issues or MongoDB internal conflicts.
      */
     @Throws(
-        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        DocumentNotFoundException::class,
+        DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class,
         TransactionRetriesExceededException::class, DocumentUpdateException::class,
         InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
         IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
@@ -92,7 +94,8 @@ object MongoTransactions : CoroutineScope {
 
     // If no error is thrown, this method succeeded
     @Throws(
-        DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
+        DocumentNotFoundException::class,
+        DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class,
         TransactionRetriesExceededException::class, DocumentUpdateException::class,
         InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
         IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
@@ -192,28 +195,7 @@ object MongoTransactions : CoroutineScope {
                 throw mE
             } catch (e: MongoWriteException) {
                 // Handle duplicate unique index exceptions
-                if (e.error.code == DUPLICATE_KEY_VIOLATION_CODE) {
-                    val errorMessage = e.message ?: ""
-                    when {
-                        errorMessage.contains("index: _id") -> {
-                            // Primary key violation (duplicate _id)
-                            throw DuplicateDocumentKeyException(
-                                docCache = docCache,
-                                docCache.keyToString(doc.key),
-                                fullMessage = errorMessage,
-                                operation = "update",
-                            )
-                        }
-                        errorMessage.contains("index:") -> {
-                            // Unique index violation (duplicate value in a unique index)
-                            throw DuplicateUniqueIndexException(
-                                docCache = docCache,
-                                fullMessage = errorMessage,
-                                operation = "update",
-                            )
-                        }
-                    }
-                }
+                checkDuplicateKeyExceptions(e, docCache, doc, Operation.UPDATE)
                 throw e
             } finally {
                 if (!sessionResolved && session.hasActiveTransaction()) {
@@ -222,6 +204,70 @@ object MongoTransactions : CoroutineScope {
                 }
             }
         }
+    }
+
+    @Throws(
+        DuplicateDocumentKeyException::class,
+        DuplicateUniqueIndexException::class,
+    )
+    internal fun <D : Doc<K, D>, K : Any> checkDuplicateKeyExceptions(
+        e: MongoWriteException,
+        docCache: DocCache<K, D>,
+        doc: D,
+        operation: Operation,
+    ) {
+        // We only handle duplicate key violations here
+        if (e.error.code != DUPLICATE_KEY_VIOLATION_CODE) {
+            return
+        }
+
+        val errorMessage = e.message ?: ""
+        val index = extractIndexNameFromError(errorMessage)?.lowercase() ?: run {
+            DataKacheFileLogger.warn(
+                "Failed to extract index name from MongoDB error message: '$errorMessage'. " +
+                    "This may indicate a new or unexpected error format. Please report this issue.",
+                e,
+            )
+            return
+        }
+
+        when {
+            index == "_id" || index == "_id_" -> {
+                // Primary key violation (duplicate _id)
+                throw DuplicateDocumentKeyException(
+                    docCache = docCache,
+                    docCache.keyToString(doc.key),
+                    fullMessage = errorMessage,
+                    operation = operation,
+                )
+            }
+            else -> {
+                // Unique index violation (duplicate value in a unique index)
+                throw DuplicateUniqueIndexException(
+                    docCache = docCache,
+                    fullMessage = errorMessage,
+                    operation = operation,
+                    index = index,
+                )
+            }
+        }
+    }
+
+    @Suppress("RegExpSimplifiable", "RegExpRedundantEscape")
+    private fun extractIndexNameFromError(errorMessage: String): String? {
+        // More robust regex patterns for different error message formats
+        val patterns = listOf(
+            Regex("""index:\s*([^\s]+)"""), // Standard format
+            Regex("""index\s+"([^"]+)""""), // Quoted index names
+            Regex("""dup key:\s*\{\s*:\s*([^}]+)\}""") // Alternative format
+        )
+
+        for (pattern in patterns) {
+            pattern.find(errorMessage)?.let { match ->
+                return match.groupValues[1].trim()
+            }
+        }
+        return null
     }
 
     @Throws(
@@ -308,7 +354,7 @@ object MongoTransactions : CoroutineScope {
                 throw DocumentNotFoundException(
                     keyString = id,
                     docCache = docCache,
-                    operation = "update",
+                    operation = Operation.UPDATE,
                 )
             }
 
@@ -321,14 +367,13 @@ object MongoTransactions : CoroutineScope {
     }
 
     // Applies optimized backoff for the queue-based system where conflicts should be rare
-    private val random = Random()
     private fun calculateBackoffMS(attempt: Int): Long {
         // Since we're using per-document queues, conflicts should be extremely rare
         // Most retries will be due to network issues or MongoDB internal conflicts
         // Use much shorter delays since version conflicts are eliminated by queuing
         if (attempt <= 2) {
             // For the first few attempts, use minimal backoff (likely network hiccups)
-            val jitter = random.nextLong(10, 31) // 10-30ms jitter
+            val jitter = Random.nextLong(10, 31) // 10-30ms jitter
             return MIN_BACKOFF_MS + jitter
         }
 
@@ -341,7 +386,7 @@ object MongoTransactions : CoroutineScope {
         val backoffMs = basePingMs * (1.2).pow(attempt - 2).toLong()
 
         // Add jitter (±20%)
-        val jitter = random.nextLong(-backoffMs / 5, backoffMs / 5)
+        val jitter = Random.nextLong(-backoffMs / 5, backoffMs / 5)
 
         return (backoffMs + jitter).coerceIn(MIN_BACKOFF_MS, MAX_BACKOFF_MS)
     }

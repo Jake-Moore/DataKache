@@ -28,6 +28,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
     init {
         beforeSpec {
             // TODO figure out a way to test all storage modes instead of just MongoDB
+            //  probably by using an environment variable or system property to set the mode
             testContainer = TestUtil.createTestContainer(StorageMode.MONGODB)
             testContainer.beforeSpec()
         }

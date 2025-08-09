@@ -82,6 +82,8 @@ open class MetricsReceiverPartial : MetricsReceiver {
 
     override fun onDocUpdateNotFoundFail() {}
 
+    override fun onDocRejectableUpdateRejected() {}
+
     override fun onDocRejectableUpdateFail() {}
 
     override fun onDocRejectableUpdateNotFoundFail() {}

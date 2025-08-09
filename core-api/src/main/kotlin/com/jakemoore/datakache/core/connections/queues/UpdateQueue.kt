@@ -6,9 +6,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,12 +30,14 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     private val key: K,
     private val docCache: DocCache<K, D>,
     private val updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D
-) : CoroutineScope {
+) {
 
-    private val job = Job()
-    override val coroutineContext = Dispatchers.IO + job
+    // Separate job for the processing coroutine
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val processingJob: Job
 
     // Channel for queuing update requests
+    // TODO need to set a limit (like Change Streams) and handle backpressure + rejection
     private val updateChannel = Channel<UpdateRequest<K, D>>(Channel.UNLIMITED)
 
     // Metrics and state tracking
@@ -49,8 +51,8 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     private val shutdownMutex = Mutex()
 
     init {
-        // Start the processing coroutine
-        launch {
+        // Start the processing coroutine with its own job
+        processingJob = scope.launch {
             processUpdates()
         }
     }
@@ -100,33 +102,18 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         docCache.getLoggerInternal().debug("Started UpdateQueue processing for key: ${docCache.keyToString(key)}")
 
         try {
-            while (isActive) {
-                val request = updateChannel.receiveCatching()
-                if (request.isClosed) {
-                    // Channel is closed, we're done processing
-                    break
-                }
-
-                val updateRequest = request.getOrNull() ?: continue
-
-                // Check if we're shutting down but still process pending updates
-                if (!isActive && !isShutdown.get()) {
-                    // Only cancel if the coroutine was cancelled for reasons other than graceful shutdown
-                    updateRequest.deferred.cancel()
-                    continue
-                }
-
+            for (request in updateChannel) {
                 isProcessing.set(true)
                 lastActivityTime.set(System.currentTimeMillis())
 
                 try {
-                    processUpdateRequest(updateRequest)
+                    processUpdateRequest(request)
                 } catch (e: Exception) {
                     docCache.getLoggerInternal().error(
                         e,
                         "Unexpected error processing update request for key: ${docCache.keyToString(key)}"
                     )
-                    updateRequest.deferred.completeExceptionally(e)
+                    request.deferred.completeExceptionally(e)
                 } finally {
                     isProcessing.set(false)
                 }
@@ -134,7 +121,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         } catch (_: CancellationException) {
             // Don't log cancellation exceptions as errors during shutdown
             if (!isShutdown.get()) {
-                docCache.getLoggerInternal().debug(
+                docCache.getLoggerInternal().severe(
                     "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}"
                 )
             }
@@ -188,10 +175,8 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
             // with a timeout for emergency situations
             try {
                 withTimeout(timeoutMs) {
-                    // Cancel the job to signal the processing coroutine to stop
-                    // The processing coroutine will complete all pending updates before stopping
-                    job.cancel()
-                    job.join()
+                    // Give some time for processing to finish
+                    processingJob.join()
                 }
                 docCache.getLoggerInternal().debug(
                     "UpdateQueue graceful shutdown complete for key: ${docCache.keyToString(key)}"
@@ -202,8 +187,8 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                         "forcing cancellation"
                 )
                 // Force cancellation if timeout exceeded
-                job.cancel()
-                job.join()
+                processingJob.cancel()
+                runCatching { processingJob.join() }
             }
         }
     }

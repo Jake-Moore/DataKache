@@ -61,7 +61,7 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with complex nested data") {
-                val myData = MyData.createSample()
+                val myData = MyData.createRandom()
 
                 val result = cache.create("complexKey") { doc ->
                     doc.copy(

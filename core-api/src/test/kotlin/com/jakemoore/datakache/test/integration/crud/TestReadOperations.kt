@@ -133,9 +133,9 @@ class TestReadOperations : AbstractDataKacheTest() {
                         name = "Complex Document",
                         balance = 500.0,
                         list = listOf("item1", "item2", "item3"),
-                        customList = listOf(MyData.createSample()),
-                        customSet = setOf(MyData.createSample()),
-                        customMap = mapOf("key1" to MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("key1" to MyData.createRandom())
                     )
                 }.getOrThrow()
 

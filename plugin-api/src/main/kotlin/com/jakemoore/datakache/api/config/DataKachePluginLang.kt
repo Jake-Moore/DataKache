@@ -7,7 +7,7 @@ import kotlin.time.Duration.Companion.milliseconds
 data class DataKachePluginLang(
     val joinDeniedDatabaseNotReady: String =
         "&cServer is starting up! Please try again in a few seconds.",
-    val preloadPlayerDocTimeoutMS: Duration =
+    val preloadPlayerDocTimeout: Duration =
         5_000.milliseconds,
     val joinDeniedPlayerDocTimeout: String =
         "&cOops! Profile failed to load in time. Please try again in a few seconds.",
@@ -23,8 +23,8 @@ data class DataKachePluginLang(
             return DataKachePluginLang(
                 joinDeniedDatabaseNotReady = config.getString("language.joinDenied.databaseNotReady")
                     ?: defaults.joinDeniedDatabaseNotReady,
-                preloadPlayerDocTimeoutMS = config.getInt("joinOptions.preloadPlayerDocTimeoutMS", -1)
-                    .takeIf { it > 0 }?.milliseconds ?: defaults.preloadPlayerDocTimeoutMS,
+                preloadPlayerDocTimeout = config.getInt("joinOptions.preloadPlayerDocTimeoutMS", -1)
+                    .takeIf { it > 0 }?.milliseconds ?: defaults.preloadPlayerDocTimeout,
                 joinDeniedPlayerDocTimeout = config.getString("language.joinDenied.playerDocTimeout")
                     ?: defaults.joinDeniedPlayerDocTimeout,
                 joinDeniedPlayerDocException = config.getString("language.joinDenied.playerDocException")

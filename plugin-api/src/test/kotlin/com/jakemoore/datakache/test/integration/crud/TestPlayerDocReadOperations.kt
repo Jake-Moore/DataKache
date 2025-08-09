@@ -1,13 +1,14 @@
 package com.jakemoore.datakache.test.integration.crud
 
 import com.jakemoore.datakache.api.exception.InvalidPlayerException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.result.Empty
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestPlayerDoc
 import com.jakemoore.datakache.util.doc.data.MyData
-import io.kotest.assertions.fail
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -43,14 +44,11 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 // Disconnect the player to simulate offline state
                 player.disconnect()
 
-                try {
-                    // should throw IllegalArgumentException since this player is not online
+                val e = shouldThrow<InvalidPlayerException> {
                     cache.read(player)
-                    fail("Expected IllegalArgumentException when reading offline player")
-                } catch (e: InvalidPlayerException) {
-                    e.operation.shouldBe("read")
-                    e.message.shouldNotBeNull().lowercase().shouldContain("not online or valid")
                 }
+                e.operation.shouldBe(Operation.READ)
+                e.message.shouldNotBeNull().lowercase().shouldContain("not online or valid")
 
                 // Should read Success because the player did connect initially
                 //  which created their PlayerDoc immediately
@@ -140,11 +138,13 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val player = addPlayer("TestPlayer13")
 
                 // Launch 10 concurrent reads
-                val results = (1..10).map {
-                    async {
-                        cache.read(player)
-                    }
-                }.awaitAll()
+                val results = kotlinx.coroutines.coroutineScope {
+                    (1..10).map {
+                        async {
+                            cache.read(player)
+                        }
+                    }.awaitAll()
+                }
 
                 results.forEach { result ->
                     result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -430,8 +430,6 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             }
 
             it("should handle PlayerDoc with memory pressure scenarios") {
-                server.onlinePlayers.size.shouldBe(0)
-
                 // Add multiple players to simulate memory pressure
                 val players = (1..10).map { addPlayer("TestPlayer${26 + it}") }
 

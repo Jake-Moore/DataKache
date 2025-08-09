@@ -1,12 +1,12 @@
 package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.DataKache
-import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.exception.doc.InvalidDocCopyHelperException
 import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
@@ -51,7 +51,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      */
     private val loggerInstantiator: (String) -> LoggerService,
 
-    override val config: DocCacheConfig<K, D> = DocCacheConfig.default(),
 ) : DocCache<K, D> {
 
     override val databaseName: String
@@ -202,11 +201,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             throw DocumentNotFoundException(
                 keyString = keyString,
                 docCache = this,
-                operation = "update"
+                operation = Operation.UPDATE,
             )
         }
         return DataKache.storageMode.databaseService.update(this, doc, updateFunction, bypassValidation)
-            .also { cacheInternal(it) }
+            .also { cacheInternal(it, force = true) }
     }
 
     override fun readAll(): Collection<D> {
@@ -225,7 +224,12 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         return cacheMap.size
     }
 
-    override suspend fun clearAllPermanently(): DefiniteResult<Long> {
+    override suspend fun clearDocsFromDatabasePermanently(): DefiniteResult<Long> {
+        check(config.enableMassDestructiveOps) {
+            "Cannot clear documents from database permanently when " +
+                "enableMassDestructiveOps is set to false in cache config."
+        }
+
         return DbClearResultHandler.wrap {
             // Clear the database collection
             val cleared = DataKache.storageMode.databaseService.clear(this)

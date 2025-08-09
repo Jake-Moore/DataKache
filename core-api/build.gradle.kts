@@ -27,9 +27,9 @@ dependencies {
     testImplementation(project.property("testcontainers-junit-jupiter") as String)
     testImplementation(project.property("testcontainers-mongodb") as String)
     testImplementation(project.property("testcontainers-core") as String)
-
-    testImplementation(project.property("logback-classic") as String)
     testImplementation(project.property("kotlinx-coroutines-test") as String)
+
+    testRuntimeOnly(project.property("logback-classic") as String)
 }
 
 tasks {

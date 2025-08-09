@@ -1,6 +1,7 @@
 package com.jakemoore.datakache.test.integration.crud
 
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentUsernameModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
@@ -8,8 +9,12 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestPlayerDoc
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import java.util.UUID
 
 @Suppress("unused")
@@ -47,7 +52,7 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                         balance = 500.0,
                         list = listOf("item1", "item2", "item3"),
                         customList = listOf(
-                            com.jakemoore.datakache.util.doc.data.MyData(
+                            MyData(
                                 name = "CustomData",
                                 age = 25,
                                 list = listOf("custom")
@@ -77,21 +82,21 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                         balance = 1000.0,
                         list = (1..50).map { "item$it" },
                         customList = (1..25).map { index ->
-                            com.jakemoore.datakache.util.doc.data.MyData(
+                            MyData(
                                 name = "ListData$index",
                                 age = index,
                                 list = listOf("list$index")
                             )
                         },
                         customSet = (1..10).map { index ->
-                            com.jakemoore.datakache.util.doc.data.MyData(
+                            MyData(
                                 name = "SetData$index",
                                 age = index + 100,
                                 list = listOf("set$index")
                             )
                         }.toSet(),
                         customMap = (1..15).associate { index ->
-                            "key$index" to com.jakemoore.datakache.util.doc.data.MyData(
+                            "key$index" to MyData(
                                 name = "MapData$index",
                                 age = index + 200,
                                 list = listOf("map$index")
@@ -196,7 +201,7 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                 val wrapper = result2.exception
                 val exception = wrapper.exception
                 exception.shouldBeInstanceOf<DuplicateDocumentKeyException>()
-                exception.operation.shouldBe("create")
+                exception.operation.shouldBe(Operation.CREATE)
                 exception.keyString.shouldBe(cache.keyToString(uuid))
             }
 
@@ -204,10 +209,13 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                 val uuid = UUID.randomUUID()
 
                 // Perform multiple concurrent creation attempts
-                val results = (1..5).map { index ->
-                    cache.create(uuid) { doc ->
-                        doc.copy(name = "ConcurrentPlayer$index")
-                    }
+                val results = kotlinx.coroutines.coroutineScope {
+                    (1..5).map { index ->
+                        async {
+                            delay(index * 30L) // concurrent, but they need to arrive in a specific order
+                            cache.create(uuid) { it.copy(name = "ConcurrentPlayer$index") }
+                        }
+                    }.awaitAll()
                 }
 
                 // Only the first should succeed
@@ -222,7 +230,7 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                     val wrapper = result.exception
                     val exception = wrapper.exception
                     exception.shouldBeInstanceOf<DuplicateDocumentKeyException>()
-                    exception.operation.shouldBe("create")
+                    exception.operation.shouldBe(Operation.CREATE)
                     exception.keyString.shouldBe(cache.keyToString(uuid))
                 }
             }
@@ -319,7 +327,7 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                         balance = Double.MAX_VALUE,
                         list = (1..1000).map { "item$it" }, // Large list
                         customList = (1..500).map { index ->
-                            com.jakemoore.datakache.util.doc.data.MyData(
+                            MyData(
                                 name = "ExtremeData$index",
                                 age = index,
                                 list = (1..100).map { "nested$it" }

@@ -3,6 +3,7 @@
 package com.jakemoore.datakache.util.doc
 
 import com.jakemoore.datakache.api.cache.GenericDocCache
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.Empty
@@ -20,6 +21,7 @@ class TestGenericDocCache internal constructor(
     cacheName = "TestGenericDocs",
     docClass = TestGenericDoc::class.java,
     instantiator = ::TestGenericDoc,
+    config = DocCacheConfig(optimisticCaching = true, enableMassDestructiveOps = true),
 ),
     DataKacheScope {
     internal val nameField = NameIndex(this@TestGenericDocCache)
@@ -27,13 +29,16 @@ class TestGenericDocCache internal constructor(
 
     init {
         // Register indexes
-        runBlocking {
+        val exception = runBlocking {
             registerUniqueIndex(nameField).exceptionOrNull()?.let {
-                throw it
+                return@runBlocking it
             }
             registerUniqueIndex(balanceField).exceptionOrNull()?.let {
-                throw it
+                return@runBlocking it
             }
+        }
+        exception?.let {
+            throw RuntimeException("Failed to register indexes for TestGenericDocCache", it)
         }
     }
 
@@ -42,12 +47,10 @@ class TestGenericDocCache internal constructor(
     override fun getVersionKProperty(): KProperty<Long> = TestGenericDoc::version
 
     fun readByName(name: String?): OptionalResult<TestGenericDoc> {
-        if (name == null) return Empty()
-        return this.readByUniqueIndex(this.nameField, name)
+        return name?.let { readByUniqueIndex(this.nameField, it) } ?: Empty()
     }
 
     fun readByBalance(balance: Double?): OptionalResult<TestGenericDoc> {
-        if (balance == null) return Empty()
-        return this.readByUniqueIndex(this.balanceField, balance)
+        return balance?.let { readByUniqueIndex(this.balanceField, it) } ?: Empty()
     }
 }

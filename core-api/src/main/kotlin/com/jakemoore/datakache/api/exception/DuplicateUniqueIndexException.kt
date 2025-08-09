@@ -3,9 +3,15 @@
 package com.jakemoore.datakache.api.exception
 
 import com.jakemoore.datakache.api.cache.DocCache
+import com.jakemoore.datakache.api.exception.data.Operation
 
 class DuplicateUniqueIndexException(
     val docCache: DocCache<*, *>,
     val fullMessage: String,
-    val operation: String? = null,
-) : DataKacheException("Duplicate Unique Index Exception: Operation Failed.")
+    val index: String,
+    val operation: Operation,
+) : DataKacheException(
+    "Duplicate Unique Index Exception: ${operation.name} operation failed " +
+        "on ${docCache.cacheName} collection. " +
+        "Unique index '$index' constraint violated. MongoDB error: $fullMessage"
+)

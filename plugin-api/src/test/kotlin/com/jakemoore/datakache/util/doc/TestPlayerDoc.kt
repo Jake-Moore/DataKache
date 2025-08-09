@@ -7,7 +7,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-@Suppress("PROVIDED_RUNTIME_TOO_LOW", "MemberVisibilityCanBePrivate")
 @Serializable
 data class TestPlayerDoc(
     // Parent Properties

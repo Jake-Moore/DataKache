@@ -8,6 +8,7 @@ import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
+import kotlinx.coroutines.CancellationException
 
 internal object UpdateGenericDocResultHandler {
     internal suspend fun <D : GenericDoc<D>> wrap(
@@ -21,6 +22,9 @@ internal object UpdateGenericDocResultHandler {
 
             val value = work()
             return Success(value)
+        } catch (e: CancellationException) {
+            // propagate cancellation exceptions
+            throw e
         } catch (e: DocumentNotFoundException) {
             // METRICS
             DataKacheMetrics.getReceiversInternal().forEach(MetricsReceiver::onDocUpdateNotFoundFail)

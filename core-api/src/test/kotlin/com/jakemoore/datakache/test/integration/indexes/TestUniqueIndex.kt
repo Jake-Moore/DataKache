@@ -1,11 +1,13 @@
 package com.jakemoore.datakache.test.integration.indexes
 
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.result.Empty
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
@@ -404,7 +406,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
             it("should handle documents with complex nested data and unique indexes") {
 
-                val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
+                val myData = MyData.createRandom()
                 val createdDoc = cache.create("complexIndexKey") { doc ->
                     doc.copy(
                         name = "Complex Index Document",
@@ -452,7 +454,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "create"
+                duplicateException.operation shouldBe Operation.CREATE
 
                 // Verify the original document still exists and is unchanged
                 val readResult = cache.read("uniqueNameTest1")
@@ -485,7 +487,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "create"
+                duplicateException.operation shouldBe Operation.CREATE
 
                 // Verify the original document still exists and is unchanged
                 val readResult = cache.read("uniqueBalanceTest1")
@@ -522,7 +524,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "update"
+                duplicateException.operation shouldBe Operation.UPDATE
 
                 // Verify both documents still exist and are unchanged
                 val readResult1 = cache.read("updateDuplicateName1")
@@ -560,7 +562,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "update"
+                duplicateException.operation shouldBe Operation.UPDATE
 
                 // Verify both documents still exist and are unchanged
                 val readResult1 = cache.read("updateDuplicateBalance1")
@@ -623,7 +625,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "create"
+                duplicateException.operation shouldBe Operation.CREATE
 
                 // Verify the original document still exists and is unchanged
                 val readResult = cache.read("nullNameTest1")
@@ -655,7 +657,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "create"
+                duplicateException.operation shouldBe Operation.CREATE
 
                 // Verify the original document still exists and is unchanged
                 val readResult = cache.read("zeroBalanceTest1")
@@ -671,7 +673,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
             it("should handle complex data with duplicate unique index violations") {
 
-                val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
+                val myData = MyData.createRandom()
 
                 // Create first document with complex data and unique name
                 val firstDoc = cache.create("complexDuplicateTest1") { doc ->
@@ -703,7 +705,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "create"
+                duplicateException.operation shouldBe Operation.CREATE
 
                 // Verify the original document still exists and is unchanged
                 val readResult = cache.read("complexDuplicateTest1")
@@ -783,7 +785,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
 
                 val duplicateException = wrapper.exception
                 duplicateException.docCache shouldBe cache
-                duplicateException.operation shouldBe "create"
+                duplicateException.operation shouldBe Operation.CREATE
 
                 // Verify the original document still exists and is unchanged
                 val readResult = cache.read("specialCharsTest1")

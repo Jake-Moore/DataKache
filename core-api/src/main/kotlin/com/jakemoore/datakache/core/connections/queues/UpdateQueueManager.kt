@@ -6,7 +6,7 @@ import com.jakemoore.datakache.api.logging.LoggerService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -27,7 +27,7 @@ internal class UpdateQueueManager(
     private val loggerService: LoggerService,
 ) : CoroutineScope {
 
-    private val job = Job()
+    private val job = SupervisorJob()
     override val coroutineContext = Dispatchers.IO + job
 
     // Map of document keys to their respective queues
@@ -202,11 +202,10 @@ internal class UpdateQueueManager(
         queues.clear()
 
         activeQueues.forEach { queue ->
-            try {
-                queue.shutdown(1_500)
-            } catch (e: Exception) {
-                loggerService.error(e, "Error shutting down queue during manager shutdown")
-            }
+            runCatching { queue.shutdown() }
+                .onFailure { e ->
+                    loggerService.error(e, "Error shutting down queue during manager shutdown")
+                }
         }
 
         // Wait for the cleanup job to complete

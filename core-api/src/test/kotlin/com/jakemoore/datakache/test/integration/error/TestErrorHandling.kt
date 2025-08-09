@@ -10,6 +10,7 @@ import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 
@@ -333,9 +334,9 @@ class TestErrorHandling : AbstractDataKacheTest() {
                         name = "Complex Error Doc",
                         balance = 100.0,
                         list = listOf("item1", "item2"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("key1" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("key1" to MyData.createRandom())
                     )
                 }.getOrThrow()
 
@@ -345,9 +346,9 @@ class TestErrorHandling : AbstractDataKacheTest() {
                         name = "Updated Complex Error Doc",
                         balance = 200.0,
                         list = listOf("item3", "item4"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("key2" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("key2" to MyData.createRandom())
                     )
                 }
 

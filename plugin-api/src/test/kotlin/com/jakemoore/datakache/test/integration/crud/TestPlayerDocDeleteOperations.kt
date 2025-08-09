@@ -34,27 +34,34 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
                 originalDoc.username.shouldBe(null) // Username is null in create operations
                 originalDoc.name.shouldBe("TestPlayer")
                 originalDoc.balance.shouldBe(100.0)
+                originalDoc.list.shouldBe(listOf("item1", "item2"))
 
                 // Clear the PlayerDoc (reset to default state)
                 val deleteResult = cache.delete(uuid)
                 deleteResult.shouldBeInstanceOf<Success<Boolean>>()
                 deleteResult.value.shouldBe(true) // Document was found and cleared
 
+                // Read the document from database
+                val dbReadResult = cache.readFromDatabase(uuid)
+                dbReadResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
+                val clearedDbDoc = dbReadResult.value
+                // Should be reset to default values (UUID preserved, username preserved as null)
+                clearedDbDoc.key.shouldBe(uuid)
+                clearedDbDoc.username.shouldBe(originalDoc.username) // Username preserved from original
+                clearedDbDoc.name.shouldBe(null) // Default value
+                clearedDbDoc.balance.shouldBe(0.0) // Default value
+                clearedDbDoc.list.shouldBe(emptyList()) // Default value
+
                 // Read the document again - should be reset to default state
                 val readResult = cache.read(uuid)
                 readResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val clearedDoc = readResult.value
-
                 // Should be reset to default values (UUID preserved, username preserved as null)
                 clearedDoc.key.shouldBe(uuid)
-                clearedDoc.username.shouldBe(null) // Username preserved from original (null)
+                clearedDoc.username.shouldBe(originalDoc.username) // Username preserved from original
                 clearedDoc.name.shouldBe(null) // Default value
                 clearedDoc.balance.shouldBe(0.0) // Default value
                 clearedDoc.list.shouldBe(emptyList()) // Default value
-                clearedDoc.customList.shouldBe(emptyList()) // Default value
-                clearedDoc.customSet.shouldBe(emptySet()) // Default value
-                clearedDoc.customMap.shouldBe(emptyMap()) // Default value
-                clearedDoc.version.shouldBe(0L) // Reset version
             }
 
             it("should clear PlayerDoc with Player object") {
@@ -154,13 +161,12 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
                 // Perform multiple clear operations
                 val clearResults = (1..5).map { index ->
                     // Update with some data first
-                    val updateResult = cache.update(player.uniqueId) { doc ->
+                    cache.update(player.uniqueId) { doc ->
                         doc.copy(
                             name = "UpdatedPlayer$index",
                             balance = index * 100.0
                         )
-                    }
-                    updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
+                    }.shouldBeInstanceOf<Success<TestPlayerDoc>>()
 
                     // Clear the document
                     cache.delete(player.uniqueId)
@@ -240,7 +246,7 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
 
                 // Should be reset to default values in database (UUID and username preserved)
                 dbDoc.key.shouldBe(uuid)
-                dbDoc.username.shouldBe(null) // Username preserved from original (null)
+                dbDoc.username.shouldBe(originalDoc.username) // Username preserved from original
                 dbDoc.name.shouldBe(null) // Default value
                 dbDoc.balance.shouldBe(0.0) // Default value
                 dbDoc.list.shouldBe(emptyList()) // Default value

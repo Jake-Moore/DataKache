@@ -5,10 +5,12 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.toSet
 
 @Suppress("unused")
 class TestDatabaseReadOperations : AbstractDataKacheTest() {
@@ -92,14 +94,14 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Read keys from database
-                val keys = cache.readKeysFromDatabase().getOrThrow().toList()
+                val keys = cache.readKeysFromDatabase().getOrThrow().toSet()
 
                 keys.size shouldBe 3
                 keys shouldBe setOf("dbKeysKey1", "dbKeysKey2", "dbKeysKey3")
             }
 
             it("should read keys from empty database") {
-                val keys = cache.readKeysFromDatabase().getOrThrow().toList()
+                val keys = cache.readKeysFromDatabase().getOrThrow().toSet()
 
                 keys.shouldBe(emptySet())
             }
@@ -129,9 +131,9 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
                         name = "Complex Database Doc",
                         balance = 750.0,
                         list = listOf("db_item1", "db_item2", "db_item3"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("db_key1" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("db_key1" to MyData.createRandom())
                     )
                 }.getOrThrow()
 

@@ -12,8 +12,6 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.Color
 import com.jakemoore.datakache.util.DataKacheFileLogger
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -69,7 +67,7 @@ object PlayerDocListener : Listener {
         val msStart = System.currentTimeMillis()
 
         // Suspend player join while PlayerDoc's are loaded or created
-        val timeoutDuration = lang.preloadPlayerDocTimeoutMS
+        val timeoutDuration = lang.preloadPlayerDocTimeout
         val success = runBlocking {
             try {
                 return@runBlocking withTimeout(timeoutDuration) {
@@ -95,14 +93,16 @@ object PlayerDocListener : Listener {
             }
         }
         if (!success) {
-            DataKachePlugin.context.logger.severe(
-                "Failed to load PlayerDoc for $username ($uuid) " +
-                    "after ${System.currentTimeMillis() - msStart}ms."
-            )
-            event.disallow(
-                AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                Color.t(lang.joinDeniedPlayerDocException)
-            )
+            if (event.loginResult == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+                DataKachePlugin.context.logger.severe(
+                    "Failed to load PlayerDoc for $username ($uuid) " +
+                        "after ${System.currentTimeMillis() - msStart}ms."
+                )
+                event.disallow(
+                    AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Color.t(lang.joinDeniedPlayerDocException)
+                )
+            }
             return // Join was denied, no need to continue
         }
 
@@ -161,31 +161,33 @@ object PlayerDocListener : Listener {
         username: String,
     ): Boolean {
         // Wrap each readOrCreate call in an async block to allow parallel loading
-        val loadsDeferred = DataKacheAPI.listRegistrations()
-            .flatMap { it.getDocCaches() }
-            .filterIsInstance(PlayerDocCache::class.java)
-            .map { cache ->
-                CoroutineScope(Dispatchers.IO).async {
-                    val createResult = cache.readOrCreate(uuid)
-                    // If not successful, return to the caller
-                    if (createResult !is Success<PlayerDoc<*>>) {
-                        return@async createResult
-                    }
+        val loadsDeferred = kotlinx.coroutines.coroutineScope {
+            DataKacheAPI.listRegistrations()
+                .flatMap { it.getDocCaches() }
+                .filterIsInstance<PlayerDocCache<*>>()
+                .map { cache ->
+                    async {
+                        val createResult = cache.readOrCreate(uuid)
+                        // If not successful, return to the caller
+                        if (createResult !is Success<PlayerDoc<*>>) {
+                            return@async createResult
+                        }
 
-                    // If successful, double-check the username field
-                    val doc = createResult.value
-                    if (doc.username == username) {
-                        // username matches, return the normal result
-                        return@async createResult
-                    }
+                        // If successful, double-check the username field
+                        val doc = createResult.value
+                        if (doc.username == username) {
+                            // username matches, return the normal result
+                            return@async createResult
+                        }
 
-                    // If the username is not set correctly, update it
-                    return@async cache.updateUsername(key = uuid, username)
+                        // If the username is not set correctly, update it
+                        return@async cache.updateUsername(key = uuid, username)
+                    }
                 }
-            }
-
+        }
         // Wait for all loads to complete
         val results = loadsDeferred.awaitAll()
+
         // Check if all PlayerDoc objects were successfully loaded or created
         results.forEach { result ->
             if (result !is Failure<*>) return@forEach

@@ -20,7 +20,12 @@ class TestDataKacheContext(
     private val tempLogFolder = createTempDirectory(prefix = "datakache-test-logs-")
         .toFile()
         .apply { deleteOnExit() }
-    private val contextConfig = testContainer.kacheConfig
+    private val contextConfig = testContainer.dataKacheConfig
+
+    init {
+        // Ensure logs folder is fully cleaned up (recursively) at JVM exit
+        Runtime.getRuntime().addShutdownHook(Thread { tempLogFolder.deleteRecursively() })
+    }
 
     override val logger: LoggerService = object : LoggerService {
         override val loggerName: String
@@ -34,8 +39,8 @@ class TestDataKacheContext(
         ) {
             when (level) {
                 LoggerService.LogLevel.WARNING,
-                LoggerService.LogLevel.SEVERE -> System.err.println("[$level] $msg")
-                else -> println("[$level] $msg")
+                LoggerService.LogLevel.SEVERE -> System.err.println("[$loggerName] [$level] $msg")
+                else -> println("[$loggerName] [$level] $msg")
             }
         }
     }

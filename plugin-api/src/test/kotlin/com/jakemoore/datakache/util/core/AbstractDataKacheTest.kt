@@ -32,6 +32,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
     init {
         beforeSpec {
             // TODO figure out a way to test all storage modes instead of just MongoDB
+            //  probably by using an environment variable or system property to set the mode
             testContainer = TestUtil.createTestContainer(StorageMode.MONGODB)
             testContainer.beforeSpec()
         }
@@ -77,7 +78,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * Adds a player to the mock server.
      *
      * @param playerName The name of the player to add
-     * @return The PlayerMock instance representing the added player
+     * @return The [PlayerMock] instance representing the added player
      */
     protected fun addPlayer(playerName: String): PlayerMock = server.addPlayer(playerName)
 
@@ -85,7 +86,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * Gets a player by name from the mock server.
      *
      * @param playerName The name of the player to retrieve
-     * @return The PlayerMock instance if found, or null if not found
+     * @return The [Player] instance if found, or null if not found
      */
     protected fun getPlayer(playerName: String): Player? = server.getPlayerExact(playerName)
 }

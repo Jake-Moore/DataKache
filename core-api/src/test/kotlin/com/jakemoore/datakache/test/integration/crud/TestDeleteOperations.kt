@@ -5,6 +5,7 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
@@ -120,9 +121,9 @@ class TestDeleteOperations : AbstractDataKacheTest() {
                         name = "Complex Document",
                         balance = 500.0,
                         list = listOf("item1", "item2", "item3"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("key1" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("key1" to MyData.createRandom())
                     )
                 }.getOrThrow()
 

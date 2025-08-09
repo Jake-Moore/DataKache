@@ -5,7 +5,6 @@ import com.jakemoore.datakache.util.doc.data.MyData
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Suppress("PROVIDED_RUNTIME_TOO_LOW", "MemberVisibilityCanBePrivate")
 @Serializable
 data class TestGenericDoc(
     // Parent Properties

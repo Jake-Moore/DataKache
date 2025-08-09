@@ -19,6 +19,7 @@ interface DocCacheReceiver {
     fun onDocDeleteFail()
     fun onDocUpdateFail()
     fun onDocUpdateNotFoundFail()
+    fun onDocRejectableUpdateRejected()
     fun onDocRejectableUpdateFail()
     fun onDocRejectableUpdateNotFoundFail()
 }

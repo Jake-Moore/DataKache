@@ -40,10 +40,15 @@ internal abstract class DatabaseService : LoggerService, Service {
      */
     abstract val serverPingMap: Cache<String, Long>
 
+    private val updateQueueManagerDelegate = lazy {
+        // This is a delegate to ensure the UpdateQueueManager is only initialized when needed
+        UpdateQueueManager(this)
+    }
+
     /**
      * Manager for per-document update queues to eliminate database-level conflicts.
      */
-    private val updateQueueManager by lazy { UpdateQueueManager(this) }
+    private val updateQueueManager by updateQueueManagerDelegate
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -123,6 +128,8 @@ internal abstract class DatabaseService : LoggerService, Service {
                 bypassValidation = bypassValidation,
             )
 
+            // TODO should we add a timeout here? it has to be fairly high to allow the queue to process
+            //       the update, but we don't want to block indefinitely.
             return deferred.await()
         } catch (e: CancellationException) {
             throw e
@@ -434,10 +441,12 @@ internal abstract class DatabaseService : LoggerService, Service {
      */
     override suspend fun shutdown(): Boolean {
         try {
-            updateQueueManager.shutdown()
+            if (updateQueueManagerDelegate.isInitialized()) {
+                updateQueueManager.shutdown()
+            }
             return true
         } catch (e: Exception) {
-            error(e, "Failed to shutdown UpdateQueueManager")
+            this.severe(throwable = e, msg = "Failed to shutdown UpdateQueueManager")
             return false
         }
     }
@@ -445,5 +454,11 @@ internal abstract class DatabaseService : LoggerService, Service {
     /**
      * Returns the number of active update queues for monitoring purposes.
      */
-    fun getActiveUpdateQueuesCount(): Int = updateQueueManager.getActiveQueuesCount()
+    fun getActiveUpdateQueuesCount(): Int {
+        if (!updateQueueManagerDelegate.isInitialized()) {
+            // Queue system not online yet, then we have 0 active queues
+            return 0
+        }
+        return updateQueueManager.getActiveQueuesCount()
+    }
 }

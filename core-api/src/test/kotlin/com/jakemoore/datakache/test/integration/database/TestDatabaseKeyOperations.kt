@@ -4,6 +4,7 @@ import com.jakemoore.datakache.api.result.Empty
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
@@ -77,7 +78,7 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
 
             it("should read keys from database with documents having complex data") {
 
-                val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
+                val myData = MyData.createRandom()
 
                 // Create documents with complex data
                 cache.create("complexKey1") { doc ->
@@ -399,7 +400,7 @@ class TestDatabaseKeyOperations : AbstractDataKacheTest() {
 
             it("should read keys from database with documents having mixed data types") {
 
-                val myData = com.jakemoore.datakache.util.doc.data.MyData.createSample()
+                val myData = MyData.createRandom()
 
                 // Create documents with mixed data types
                 cache.create("mixedDataKey1") { doc ->

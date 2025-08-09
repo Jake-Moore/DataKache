@@ -1,11 +1,8 @@
-@file:Suppress("unused")
-
 package com.jakemoore.datakache.util.doc.data
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Suppress("PROVIDED_RUNTIME_TOO_LOW")
 @Serializable
 data class MyData(
     val name: String? = null,
@@ -15,16 +12,18 @@ data class MyData(
 ) {
 
     companion object {
-        private const val SAMPLE_NAME = "John"
-        private const val SAMPLE_AGE = 25
-        private val SAMPLE_LIST: List<String> = listOf("a", "b", "c")
-
-        fun createSample(): MyData {
+        fun createRandom(): MyData {
             return MyData(
-                SAMPLE_NAME,
-                SAMPLE_AGE,
-                SAMPLE_LIST
+                name = randomString(16),
+                age = (1..1000).random(),
+                list = List(10) { randomString(10) }.shuffled()
             )
+        }
+
+        private fun randomString(length: Int = 10): String {
+            return (1..length)
+                .map { ('a'..'z').random() }
+                .joinToString("")
         }
     }
 }

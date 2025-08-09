@@ -2,11 +2,13 @@
 
 package com.jakemoore.datakache.api.cache
 
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.doc.PlayerDoc
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.DuplicateDocumentKeyException
 import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
 import com.jakemoore.datakache.api.exception.InvalidPlayerException
+import com.jakemoore.datakache.api.exception.data.Operation
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentUsernameModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
@@ -58,6 +60,8 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     val defaultInitializer: (D) -> D,
 
+    override val config: DocCacheConfig<UUID, D> = DocCacheConfig.default(),
+
 ) : DocCacheImpl<UUID, D>(cacheName, registration, docClass, logger) {
     // ------------------------------------------------------------ //
     //                     Kotlin Reflect Access                    //
@@ -88,7 +92,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
                 player = player,
-                operation = "read",
+                operation = Operation.READ,
             )
         }
 
@@ -186,7 +190,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
                 player = player,
-                operation = "update",
+                operation = Operation.UPDATE,
             )
         }
         return this.update(player.uniqueId, updateFunction)
@@ -235,7 +239,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
                 player = player,
-                operation = "updateRejectable",
+                operation = Operation.UPDATE_REJECTABLE,
             )
         }
         return this.updateRejectable(player.uniqueId, updateFunction)
@@ -279,7 +283,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
                 player = player,
-                operation = "delete",
+                operation = Operation.DELETE,
             )
         }
         return this.delete(player.uniqueId)
@@ -299,7 +303,13 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     //                        Internal Methods                      //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
+    @Throws(
+        DuplicateDocumentKeyException::class,
+        DuplicateUniqueIndexException::class,
+        IllegalDocumentKeyModificationException::class,
+        IllegalDocumentVersionModificationException::class,
+        IllegalDocumentUsernameModificationException::class,
+    )
     private suspend fun createAndInsertNewPlayerDoc(
         uuid: UUID,
         username: String? = null,
@@ -312,6 +322,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         return this.insertDocumentInternal(doc, force = true)
     }
 
+    @Throws(
+        IllegalDocumentKeyModificationException::class,
+        IllegalDocumentVersionModificationException::class,
+        IllegalDocumentUsernameModificationException::class,
+    )
     private fun constructNewPlayerDoc(
         uuid: UUID,
         username: String?,
@@ -335,7 +350,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         return doc
     }
 
-    @Throws(IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class)
+    @Throws(
+        IllegalDocumentKeyModificationException::class,
+        IllegalDocumentVersionModificationException::class,
+        IllegalDocumentUsernameModificationException::class,
+    )
     @Suppress("SameParameterValue")
     private fun validateInitializer(
         namespace: String,
@@ -372,6 +391,8 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         }
     }
 
+    // PlayerDoc requires extra validation for the username property
+    // the key and version properties are already validated in create/update methods
     override fun isUpdateValidInternal(originalDoc: D, updatedDoc: D) {
         val namespace = this.getKeyNamespace(originalDoc.key)
 

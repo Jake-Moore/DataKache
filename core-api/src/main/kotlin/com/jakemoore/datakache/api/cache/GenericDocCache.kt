@@ -3,6 +3,7 @@
 package com.jakemoore.datakache.api.cache
 
 import com.jakemoore.datakache.DataKache
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.doc.GenericDoc
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentKeyModificationException
 import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModificationException
@@ -28,6 +29,8 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      * @param Long the version of the document.
      */
     val instantiator: (String, Long) -> D,
+
+    override val config: DocCacheConfig<String, D> = DocCacheConfig.default(),
 
 ) : DocCacheImpl<String, D>(cacheName, registration, docClass, logger) {
 
@@ -132,5 +135,13 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
     }
     override fun keyToString(key: String): String {
         return key
+    }
+
+    // ------------------------------------------------------------ //
+    //                        Internal Methods                      //
+    // ------------------------------------------------------------ //
+    override fun isUpdateValidInternal(originalDoc: D, updatedDoc: D) {
+        // no extra validation needed for GenericDocCache
+        // the key and version are already validated in create/update methods
     }
 }

@@ -3,6 +3,7 @@
 package com.jakemoore.datakache.util.doc
 
 import com.jakemoore.datakache.api.cache.PlayerDocCache
+import com.jakemoore.datakache.api.cache.config.DocCacheConfig
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import kotlinx.serialization.KSerializer
@@ -19,8 +20,8 @@ class TestPlayerDocCache internal constructor(
     cacheName = "TestPlayerDocs",
     docClass = TestPlayerDoc::class.java,
     instantiator = ::TestPlayerDoc,
-
     defaultInitializer = { it },
+    config = DocCacheConfig(optimisticCaching = true, enableMassDestructiveOps = true),
 ),
     DataKacheScope {
 

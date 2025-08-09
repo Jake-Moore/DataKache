@@ -17,7 +17,6 @@ class DataKachePluginContext : DataKacheContext {
     override val logFolder: File
     val lang: DataKachePluginLang
 
-    // Primary constructor - only plugin (default)
     constructor(plugin: JavaPlugin) : this(
         plugin = plugin,
         fileConfiguration = DataKachePluginConfig.loadFileConfiguration(
@@ -32,12 +31,11 @@ class DataKachePluginContext : DataKacheContext {
         lang = DataKachePluginLang.loadFromFileConfiguration(fileConfiguration)
     )
 
-    // Secondary constructor - plugin + config
     constructor(plugin: JavaPlugin, config: DataKacheConfig, lang: DataKachePluginLang) {
         this.plugin = plugin
         this.logger = PluginLoggerService(plugin)
         this.config = config
-        this.logFolder = plugin.dataFolder
+        this.logFolder = plugin.dataFolder.also { it.mkdirs() }
         this.lang = lang
     }
 }

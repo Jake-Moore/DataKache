@@ -32,7 +32,7 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                     async {
                         // coroutine scheduler will break FIFO unless we deliberately delay each enough
                         //  to ensure they are processed in the order we want
-                        delay(i * 30L)
+                        delay(i * DELAY_MS_PER_JOB)
                         val r = cache.update(doc.key) {
                             it.copy(
                                 list = it.list + "Thread $i started"
@@ -40,7 +40,7 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                         }
                         val finished = atomicCount.addAndGet(1)
                         val elapsed = System.currentTimeMillis() - msStart
-                        System.err.println("Async Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsed}ms)")
+                        System.err.println("Async Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsed}ms")
                         return@async r
                     }
                 }
@@ -56,9 +56,10 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                 val finalDoc = finalResult.value
                 finalDoc.list.size shouldBe THREAD_COUNT + 1 // +1 for the initial entry
 
-                val jsonString = json.encodeToString(TestGenericDoc.serializer(), finalDoc)
-                System.err.println("Final Document JSON:")
-                System.err.println(jsonString)
+                // Uncomment for debugging
+                // val jsonString = json.encodeToString(TestGenericDoc.serializer(), finalDoc)
+                // System.err.println("Final Document JSON:")
+                // System.err.println(jsonString)
 
                 // Check that all entries are present
                 val fullList = mutableListOf("Initial entry")
@@ -68,16 +69,12 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
 
                 // Check if they are in the expected order
                 finalDoc.list shouldBe fullList
-                System.err.println("Entries are in the expected order.")
-
-                System.err.println(
-                    "All async transactions completed. Total time: ${msEnd - msStart}ms"
-                )
             }
         }
     }
 
     companion object {
         private const val THREAD_COUNT: Int = 50
+        private const val DELAY_MS_PER_JOB: Long = 30L
     }
 }

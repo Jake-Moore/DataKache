@@ -85,14 +85,6 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     val isOnline: Boolean
         get() = getPlayer()?.isOnline ?: false
 
-    @ApiStatus.Internal
-    fun initializePlayerInternal(player: Player) {
-        require(player.uniqueId == this.uniqueId) {
-            "Player UUID does not match PlayerDoc UUID: ${player.uniqueId} != ${this.uniqueId}"
-        }
-        this._player = player
-    }
-
     // ------------------------------------------------------------ //
     //                      Internal API Methods                    //
     // ------------------------------------------------------------ //

@@ -54,5 +54,5 @@ interface DataKacheTestContainer {
     /**
      * The [DataKacheConfig] instance for testing.
      */
-    val kacheConfig: DataKacheConfig
+    val dataKacheConfig: DataKacheConfig
 }

@@ -2,6 +2,7 @@ package com.jakemoore.datakache.test.integration.database
 
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
+import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import kotlinx.coroutines.flow.toList
@@ -155,9 +156,9 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
                         name = "Complex Size Doc 1",
                         balance = 100.0,
                         list = listOf("item1", "item2"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("key1" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("key1" to MyData.createRandom())
                     )
                 }.getOrThrow()
 
@@ -166,9 +167,9 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
                         name = "Complex Size Doc 2",
                         balance = 200.0,
                         list = listOf("item3", "item4", "item5"),
-                        customList = listOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customSet = setOf(com.jakemoore.datakache.util.doc.data.MyData.createSample()),
-                        customMap = mapOf("key2" to com.jakemoore.datakache.util.doc.data.MyData.createSample())
+                        customList = listOf(MyData.createRandom()),
+                        customSet = setOf(MyData.createRandom()),
+                        customMap = mapOf("key2" to MyData.createRandom())
                     )
                 }.getOrThrow()
 

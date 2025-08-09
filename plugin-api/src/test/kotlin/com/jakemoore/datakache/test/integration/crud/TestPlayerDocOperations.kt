@@ -7,7 +7,6 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import org.mockbukkit.mockbukkit.entity.PlayerMock
 
 @Suppress("unused")
 class TestPlayerDocOperations : AbstractDataKacheTest() {
@@ -155,7 +154,7 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
                 val doc = result.value
 
                 // Test multiple online/offline cycles
-                for (i in 1..3) {
+                repeat(3) {
                     // Disconnect player
                     player.disconnect()
                     doc.getPlayer().shouldBeNull()
@@ -169,24 +168,6 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
                     doc.isOnline.shouldBe(true)
                     doc.isTrulyOnline.shouldBe(true)
                 }
-            }
-
-            it("should handle edge cases with null and invalid players") {
-                val player = addPlayer("TestPlayer10")
-
-                val result = cache.read(player)
-                result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
-                val doc = result.value
-                player.disconnect()
-
-                // Test isOnline and isTrulyOnline with a null player
-                val fakePlayer = object : PlayerMock(server, player.name, player.uniqueId) {
-                    override fun isOnline(): Boolean = false
-                    override fun isValid(): Boolean = false
-                }
-                doc.initializePlayerInternal(fakePlayer)
-                doc.isOnline.shouldBe(false)
-                doc.isTrulyOnline.shouldBe(false)
             }
         }
     }

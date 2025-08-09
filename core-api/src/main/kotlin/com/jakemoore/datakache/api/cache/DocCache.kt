@@ -225,12 +225,12 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * DATA IS NOT RECOVERABLE AFTER THIS OPERATION.
      *
-     * This method is intended for use in testing or when you want to completely reset the cache and database.
+     * REQUIRES [DocCacheConfig.enableMassDestructiveOps] to be true, otherwise it will throw [IllegalStateException]
      *
      * @return A [DefiniteResult] indicating success or failure of the operation.
      * (long value indicates number of documents deleted)
      */
-    suspend fun clearAllPermanently(): DefiniteResult<Long>
+    suspend fun clearDocsFromDatabasePermanently(): DefiniteResult<Long>
 
     // ------------------------------------------------------------ //
     //                     CRUD Database Methods                    //
@@ -424,7 +424,5 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     fun isUpdateValidInternal(
         originalDoc: D,
         updatedDoc: D,
-    ) {
-        // no default implementation, subclasses can override this method
-    }
+    )
 }
