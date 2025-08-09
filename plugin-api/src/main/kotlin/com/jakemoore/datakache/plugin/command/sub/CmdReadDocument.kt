@@ -125,8 +125,8 @@ internal class CmdReadDocument(
         sender: CommandSender,
         docCache: DocCache<K, D>,
         key: K,
-        cacheDoc: Doc<K, D>?,
-        dbDoc: Doc<K, D>?
+        cacheDoc: D?,
+        dbDoc: D?
     ) {
         require(Bukkit.isPrimaryThread()) {
             "This method must be called on the main server thread."
@@ -140,7 +140,7 @@ internal class CmdReadDocument(
         if (cacheDoc != null) {
             sender.sendMessage(Color.t("&7Document in Cache: &aFound"))
             sender.sendMessage("&8(&7See console for full document data.&8)")
-            val jsonStr = json.encodeToString(cacheDoc)
+            val jsonStr = json.encodeToString(docCache.getKSerializer(), cacheDoc)
             requireNotNull(DataKachePlugin.getController()).logger.info(
                 "Read Cache Document: ${namespace}\n" + jsonStr
             )
@@ -151,7 +151,7 @@ internal class CmdReadDocument(
         if (dbDoc != null) {
             sender.sendMessage(Color.t("&7Document in Database: &aFound"))
             sender.sendMessage("&8(&7See console for full document data.&8)")
-            val jsonStr = json.encodeToString(dbDoc)
+            val jsonStr = json.encodeToString(docCache.getKSerializer(), dbDoc)
             requireNotNull(DataKachePlugin.getController()).logger.info(
                 "Read Database Document: ${namespace}\n" + jsonStr
             )
@@ -161,18 +161,26 @@ internal class CmdReadDocument(
     }
 
     override fun processTabComplete(sender: CommandSender, args: Array<String>): List<String> {
-        // Provide tab completion for database names
-        if (args.size > 1) {
-            // no tab completions for 2nd+ arguments
-            return emptyList()
+        if (args.size <= 1) {
+            // Provide tab completion for database names
+            return DataKacheAPI.listRegistrations()
+                .map { it.databaseName }
+                .filter { it.startsWith(args.firstOrNull() ?: "", ignoreCase = true) }
+                .sorted()
+                .take(20)
+        } else if (args.size == 2) {
+            // Provide tab completion for cache names in the specified database
+            val dbName = args[0]
+            val registration = getRegistrationFromDatabase(dbName)
+                ?: return emptyList() // No database found, no cache names to complete
+            return registration.getDocCaches()
+                .map { it.cacheName }
+                .filter { it.startsWith(args[1], ignoreCase = true) }
+                .sorted()
+                .take(20)
         }
-
-        val stem: String? = if (args.isEmpty()) null else args.first()
-        return DataKacheAPI.listRegistrations()
-            .map { it.databaseName }
-            .filter { it.startsWith(stem ?: "", ignoreCase = true) }
-            .sorted()
-            .take(20)
+        // Otherwise, return empty list for further arguments
+        return emptyList()
     }
 
     private fun getRegistrationFromDatabase(

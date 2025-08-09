@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.3.3"
+val VERSION = "0.3.4"
 
 ext {
     // KotlinX
@@ -35,7 +35,7 @@ ext {
     val mongoVer = "5.5.1"
     set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
     set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
-    set("logback-classic", "ch.qos.logback:logback-classic:1.5.18") // Logging for MongoDB
+    set("slf4j-nop", "org.slf4j:slf4j-nop:2.0.17") // Logging for MongoDB (silent, no-op)
 
     // Google Guava (for CacheBuilder)
     set("guava", "com.google.guava:guava:33.4.8-jre")
@@ -132,6 +132,16 @@ allprojects {
 
         // Use the detekt.yml file from the classpath
         config.setFrom(detektConfig)
+    }
+}
+
+subprojects {
+    // Ensure tests run before publishing in each subproject
+    tasks.withType<PublishToMavenRepository>().configureEach {
+        dependsOn(
+            ":core-api:test",
+            ":plugin-api:test"
+        )
     }
 }
 

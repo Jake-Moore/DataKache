@@ -1,3 +1,5 @@
+@file:Suppress("RedundantSuppression")
+
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 
@@ -32,7 +34,7 @@ dependencies {
     // MongoDB
     api(project.property("mongodb-driver-kotlin-coroutine") as String)
     api(project.property("bson-kotlinx") as String)
-    api(project.property("logback-classic") as String)
+    api(project.property("slf4j-nop") as String)
 
     // Guava
     api(project.property("guava") as String) // brings org.jspecify annotations
@@ -48,9 +50,10 @@ dependencies {
     testImplementation(project.property("testcontainers-core") as String)
     testImplementation(project.property("kotlinx-coroutines-test") as String)
 
-    testRuntimeOnly(project.property("logback-classic") as String)
+    testRuntimeOnly(project.property("slf4j-nop") as String)
 
     // MockBukkit
+    @Suppress("VulnerableLibrariesLocal")
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.6")
 }
 

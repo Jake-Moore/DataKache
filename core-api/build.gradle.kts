@@ -14,7 +14,7 @@ dependencies {
     // MongoDB
     api(project.property("mongodb-driver-kotlin-coroutine") as String)
     api(project.property("bson-kotlinx") as String)
-    api(project.property("logback-classic") as String)
+    api(project.property("slf4j-nop") as String)
 
     api(project.property("guava") as String)
 
@@ -29,7 +29,7 @@ dependencies {
     testImplementation(project.property("testcontainers-core") as String)
     testImplementation(project.property("kotlinx-coroutines-test") as String)
 
-    testRuntimeOnly(project.property("logback-classic") as String)
+    testRuntimeOnly(project.property("slf4j-nop") as String)
 }
 
 tasks {
