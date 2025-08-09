@@ -212,6 +212,7 @@ internal class MongoDatabaseService : DatabaseService() {
             this.mongoConnected = false
             this.databases.clear()
             this.collections.clear()
+            this.rawCollections.clear()
             this.info("&aDisconnected from MongoDB successfully.")
             return true
         } catch (e: Exception) {

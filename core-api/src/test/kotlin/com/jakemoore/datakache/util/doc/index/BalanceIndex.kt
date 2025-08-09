@@ -10,12 +10,7 @@ class BalanceIndex(
     docCache = cache,
     kProperty = TestGenericDoc::balance,
 ) {
-    override fun equals(a: Double?, b: Double?): Boolean {
-        if (a == null || b == null) {
-            return a == null && b == null
-        }
-        return a == b
-    }
+    override fun equals(a: Double?, b: Double?): Boolean = a == b
 
     override fun extractValue(doc: TestGenericDoc): Double {
         return doc.balance

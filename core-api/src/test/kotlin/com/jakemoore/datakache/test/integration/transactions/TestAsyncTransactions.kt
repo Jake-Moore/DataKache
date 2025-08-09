@@ -10,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.time.TimeSource
 
 @Order(1)
 @Suppress("unused")
@@ -26,7 +27,7 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                 }.getOrThrow()
 
                 // Queue multiple transactions to modify the same document concurrently
-                val msStart = System.currentTimeMillis()
+                val startMark = TimeSource.Monotonic.markNow()
                 val atomicCount = AtomicInteger(0)
                 val deferred = (1..THREAD_COUNT).map { i ->
                     async {
@@ -39,13 +40,14 @@ class TestAsyncTransactions : AbstractDataKacheTest() {
                             )
                         }
                         val finished = atomicCount.addAndGet(1)
-                        val elapsed = System.currentTimeMillis() - msStart
-                        System.err.println("Async Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsed}ms")
+                        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+                        System.err.println(
+                            "Async Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsedMillis}ms"
+                        )
                         return@async r
                     }
                 }
                 val results = deferred.awaitAll()
-                val msEnd = System.currentTimeMillis()
 
                 // Verify that all transactions were successful
                 results.all { it is Success<TestGenericDoc> } shouldBe true

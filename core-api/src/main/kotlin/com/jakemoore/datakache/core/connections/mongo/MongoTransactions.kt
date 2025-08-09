@@ -35,6 +35,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.math.pow
 import kotlin.math.roundToLong
 import kotlin.random.Random
+import kotlin.time.TimeSource
 
 @Suppress("MemberVisibilityCanBePrivate")
 object MongoTransactions : CoroutineScope {
@@ -71,7 +72,7 @@ object MongoTransactions : CoroutineScope {
         updateFunction: (D) -> D,
         bypassValidation: Boolean = false,
     ): D {
-        val startMS = System.currentTimeMillis()
+        val startMark = TimeSource.Monotonic.markNow()
 
         // retryExecutionHelper may throw an exception, which is handled by the caller
         val updatedDoc: D = recursiveRetryUpdate(
@@ -84,9 +85,9 @@ object MongoTransactions : CoroutineScope {
             bypassValidation,
         )
 
-        val elapsedMS = System.currentTimeMillis() - startMS
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
         // METRICS
-        DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionSuccess(elapsedMS) }
+        DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionSuccess(elapsedMillis) }
 
         // Update cache
         docCache.cacheInternal(updatedDoc)
@@ -127,7 +128,7 @@ object MongoTransactions : CoroutineScope {
         }
 
         // METRICS
-        val startMS = System.currentTimeMillis()
+        val startMark = TimeSource.Monotonic.markNow()
         DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateTransactionAttemptStart)
 
         // Use a transaction for the update operation to ensure atomicity and consistency
@@ -152,7 +153,7 @@ object MongoTransactions : CoroutineScope {
                     session.abortTransaction()
 
                     // METRICS
-                    logAttemptTimeMetric(startMS)
+                    logAttemptTimeMetric(startMark)
 
                     // Retry with the doc from database (hopefully optimistic versioning works this time)
                     return recursiveRetryUpdate(
@@ -170,7 +171,7 @@ object MongoTransactions : CoroutineScope {
                 sessionResolved = true
 
                 // METRICS
-                logAttemptTimeMetric(startMS)
+                logAttemptTimeMetric(startMark)
                 DataKacheMetrics.receivers.forEach {
                     it.onDatabaseUpdateTransactionAttemptsRequired(attemptNum + 1)
                 }
@@ -237,9 +238,9 @@ object MongoTransactions : CoroutineScope {
                 // Primary key violation (duplicate _id)
                 throw DuplicateDocumentKeyException(
                     docCache = docCache,
-                    docCache.keyToString(doc.key),
-                    fullMessage = errorMessage,
+                    keyString = docCache.keyToString(doc.key),
                     operation = operation,
+                    fullMessage = errorMessage,
                     cause = e,
                 )
             }
@@ -247,9 +248,9 @@ object MongoTransactions : CoroutineScope {
                 // Unique index violation (duplicate value in a unique index)
                 throw DuplicateUniqueIndexException(
                     docCache = docCache,
-                    fullMessage = errorMessage,
-                    operation = operation,
                     index = index,
+                    operation = operation,
+                    fullMessage = errorMessage,
                     cause = e,
                 )
             }
@@ -422,8 +423,8 @@ object MongoTransactions : CoroutineScope {
         }
     }
 
-    private fun logAttemptTimeMetric(startMS: Long) {
-        val elapsedMS = System.currentTimeMillis() - startMS
-        DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionAttemptTime(elapsedMS) }
+    private fun logAttemptTimeMetric(startMark: TimeSource.Monotonic.ValueTimeMark) {
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+        DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionAttemptTime(elapsedMillis) }
     }
 }

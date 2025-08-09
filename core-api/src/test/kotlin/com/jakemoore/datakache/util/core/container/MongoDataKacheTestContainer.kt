@@ -44,7 +44,9 @@ class MongoDataKacheTestContainer(
             mongoURI = container.connectionString
         )
         context = TestDataKacheContext(this)
+    }
 
+    override suspend fun beforeEach() {
         // Initialize DataKache
         try {
             require(DataKache.onEnable(context)) {
@@ -54,9 +56,7 @@ class MongoDataKacheTestContainer(
             runCatching { container.stop() }
             throw e
         }
-    }
 
-    override suspend fun beforeEach() {
         // Create registration and cache
         TestUtil.createRegistration(databaseName = databaseName).also {
             _registration = it
@@ -85,16 +85,15 @@ class MongoDataKacheTestContainer(
             // Reset cache and registration
             this._cache = null
             _registration = null
+
+            // Stop DataKache
+            require(DataKache.onDisable()) {
+                "Failed to disable DataKache after test"
+            }
         }
     }
 
     override suspend fun afterSpec() {
-        // Stop DataKache
-        val disabled = DataKache.onDisable()
-        if (!disabled) {
-            System.err.println("Warning: DataKache was already disabled or failed to disable properly")
-        }
-
         // Stop container
         container.stop()
     }

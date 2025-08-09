@@ -268,7 +268,7 @@ class TestUniqueIndex : AbstractDataKacheTest() {
             it("should handle documents with zero balance") {
 
                 // Create a document with zero balance
-                val createdDoc = cache.create("zeroBalanceKey") { doc ->
+                cache.create("zeroBalanceKey") { doc ->
                     doc.copy(
                         name = "Zero Balance Document",
                         balance = 0.0

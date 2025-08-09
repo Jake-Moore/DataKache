@@ -38,10 +38,10 @@ interface DataKacheScope : CoroutineScope {
 internal object GlobalDataKacheScope : CoroutineScope {
 
     // SupervisorJob ensures that a child coroutine failure won't cancel the parent job or other child coroutines.
-    private val supervisorJob = SupervisorJob()
+    private var supervisorJob = SupervisorJob()
 
     // CoroutineExceptionHandler to log errors
-    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+    private var exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         if (EXCEPTION_CONSUMERS.isEmpty()) {
             DataKache.logger.severe("Unhandled coroutine error: $throwable")
             throwable.printStackTrace()
@@ -54,8 +54,25 @@ internal object GlobalDataKacheScope : CoroutineScope {
     override val coroutineContext: CoroutineContext
         get() = Dispatchers.IO + supervisorJob + exceptionHandler
 
+    internal fun restart() {
+        // Cancel any existing job if still active
+        if (supervisorJob.isActive) {
+            supervisorJob.cancel()
+        }
+        // Create a fresh job and handler
+        supervisorJob = SupervisorJob()
+        exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+            if (EXCEPTION_CONSUMERS.isEmpty()) {
+                DataKache.logger.severe("Unhandled coroutine error: $throwable")
+                throwable.printStackTrace()
+            } else {
+                EXCEPTION_CONSUMERS.forEach { it.accept(throwable) }
+            }
+        }
+    }
+
     // Terminate all scopes and coroutines
-    internal fun cancelAll() {
+    internal fun shutdown() {
         supervisorJob.cancel()
     }
 

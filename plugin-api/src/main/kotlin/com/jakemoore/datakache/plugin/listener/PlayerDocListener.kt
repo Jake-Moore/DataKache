@@ -29,6 +29,7 @@ import org.bukkit.event.player.PlayerLoginEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.time.TimeSource
 
 /**
  * This Bukkit listener manages [PlayerDoc] objects for joining bukkit [Player]s.
@@ -43,19 +44,19 @@ object PlayerDocListener : Listener {
      * Without a permit, the player will be denied join.
      * Permits are granted at the end of PreLogin when all PlayerDoc objects are loaded.
      */
-    private val loginPermits: Cache<UUID, Long> = CacheBuilder.newBuilder()
+    private val loginPermits: Cache<UUID, Boolean> = CacheBuilder.newBuilder()
         .expireAfterWrite(15, TimeUnit.SECONDS)
         .build()
 
     @EventHandler(priority = EventPriority.LOW)
     fun onPreLogin(event: AsyncPlayerPreLoginEvent) {
-        val lang = DataKachePlugin.context.lang
+        val lang = requireNotNull(DataKachePlugin.context).lang
         val username = event.name
         val uuid = event.uniqueId
 
         // Deny joins if the database service is not ready to create docs
         if (!DataKache.storageMode.isDatabaseReadyForWrites()) {
-            DataKachePlugin.context.logger.warn(
+            requireNotNull(DataKachePlugin.context).logger.warn(
                 "DatabaseService is not ready to write PlayerDocs, denying join for $username ($uuid)."
             )
             event.disallow(
@@ -65,7 +66,7 @@ object PlayerDocListener : Listener {
             return
         }
 
-        val msStart = System.currentTimeMillis()
+        val startMark = TimeSource.Monotonic.markNow()
 
         // Suspend player join while PlayerDoc's are loaded or created
         val timeoutDuration = lang.preloadPlayerDocTimeout
@@ -77,7 +78,7 @@ object PlayerDocListener : Listener {
                 }
             } catch (_: TimeoutCancellationException) {
                 val message = lang.joinDeniedPlayerDocTimeout
-                DataKachePlugin.context.logger.warn(
+                requireNotNull(DataKachePlugin.context).logger.warn(
                     "PlayerDoc loading timed out for $username ($uuid) " +
                         "after ${timeoutDuration.inWholeMilliseconds}ms."
                 )
@@ -93,11 +94,12 @@ object PlayerDocListener : Listener {
                 return@runBlocking false
             }
         }
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
         if (!success) {
             if (event.loginResult == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-                DataKachePlugin.context.logger.severe(
+                requireNotNull(DataKachePlugin.context).logger.severe(
                     "Failed to load PlayerDoc for $username ($uuid) " +
-                        "after ${System.currentTimeMillis() - msStart}ms."
+                        "after ${elapsedMillis}ms."
                 )
                 event.disallow(
                     AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
@@ -108,10 +110,10 @@ object PlayerDocListener : Listener {
         }
 
         // Success!
-        DataKachePlugin.context.logger.debug(
-            "PlayerDoc for $username ($uuid) loaded in ${System.currentTimeMillis() - msStart}ms."
+        requireNotNull(DataKachePlugin.context).logger.debug(
+            "PlayerDoc for $username ($uuid) loaded in ${elapsedMillis}ms."
         )
-        loginPermits.put(uuid, System.currentTimeMillis()) // Grant the player a login permit
+        loginPermits.put(uuid, true) // Grant the player a login permit
     }
 
     @EventHandler(priority = EventPriority.LOW)
@@ -124,10 +126,10 @@ object PlayerDocListener : Listener {
         //  is not allowed to join (because their PlayerDocs may not have been created yet).
 
         if (!loginPermits.asMap().containsKey(uuid)) {
-            DataKachePlugin.context.logger.warn(
+            requireNotNull(DataKachePlugin.context).logger.warn(
                 "Player $username ($uuid) connected too early, denying join!"
             )
-            val message = DataKachePlugin.context.lang.joinDeniedEarlyJoin
+            val message = requireNotNull(DataKachePlugin.context).lang.joinDeniedEarlyJoin
             event.disallow(PlayerLoginEvent.Result.KICK_OTHER, Color.t(message))
         }
 

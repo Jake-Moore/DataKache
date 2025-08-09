@@ -18,7 +18,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
 
 /**
  * A FIFO queue for processing document updates to ensure ordered execution and eliminate database-level conflicts.
@@ -50,7 +52,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     private val queueSize = AtomicLong(0)
 
     // Cleanup tracking
-    private val lastActivityTime = AtomicLong(System.currentTimeMillis())
+    private val lastActivityTime = AtomicReference(TimeSource.Monotonic.markNow())
 
     // Mutex for coordinating shutdown
     private val shutdownMutex = Mutex()
@@ -91,7 +93,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         }
 
         // Update activity time
-        lastActivityTime.set(System.currentTimeMillis())
+        lastActivityTime.set(TimeSource.Monotonic.markNow())
 
         // Attempt to send to channel with backpressure handling
         val sendResult = updateChannel.trySend(request)
@@ -176,7 +178,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 queueSize.decrementAndGet()
 
                 isProcessing.set(true)
-                lastActivityTime.set(System.currentTimeMillis())
+                lastActivityTime.set(TimeSource.Monotonic.markNow())
 
                 try {
                     processUpdateRequest(request)
@@ -300,8 +302,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      * @return true if this queue has been idle for the specified duration
      */
     fun isIdleForDuration(durationMs: Long): Boolean {
-        return !isProcessing.get() &&
-            (System.currentTimeMillis() - lastActivityTime.get()) > durationMs
+        return !isProcessing.get() && lastActivityTime.get().elapsedNow().inWholeMilliseconds > durationMs
     }
 
     /**

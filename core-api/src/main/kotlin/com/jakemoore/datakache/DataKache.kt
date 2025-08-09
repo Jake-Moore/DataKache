@@ -8,15 +8,12 @@ import com.jakemoore.datakache.api.DataKacheContext
 import com.jakemoore.datakache.api.coroutines.GlobalDataKacheScope
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.mode.StorageMode
+import kotlin.time.TimeSource
 
 object DataKache {
     var enabled = false
         private set
     var context: DataKacheContext? = null
-        private set
-
-    // Internal Properties
-    var onEnableTime: Long = -1
         private set
 
     /**
@@ -28,8 +25,11 @@ object DataKache {
         if (enabled) {
             return false
         }
-        val msStart = System.currentTimeMillis()
+        val startMark = TimeSource.Monotonic.markNow()
         info("Enabling DataKache...")
+
+        // Enable Coroutines
+        GlobalDataKacheScope.restart()
 
         DataKache.context = context
         enabled = true
@@ -44,8 +44,8 @@ object DataKache {
             return false
         }
 
-        onEnableTime = System.currentTimeMillis()
-        info("DataKache enabled successfully in ${onEnableTime - msStart}ms!")
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+        info("DataKache enabled successfully in ${elapsedMillis}ms!")
         return true
     }
 
@@ -56,7 +56,7 @@ object DataKache {
         if (!enabled) {
             return false
         }
-        val msStart = System.currentTimeMillis()
+        val startMark = TimeSource.Monotonic.markNow()
         info("Disabling DataKache...")
 
         // Wait for Coroutines
@@ -65,7 +65,7 @@ object DataKache {
             logger.severe("&cFailed to wait for all coroutines to finish!")
             GlobalDataKacheScope.logActiveCoroutines()
         }
-        GlobalDataKacheScope.cancelAll()
+        GlobalDataKacheScope.shutdown()
         logger.info("&aAll DataKacheScope coroutines finished!")
 
         // Shutdown any running DocCaches
@@ -96,8 +96,8 @@ object DataKache {
         // Reset State
         enabled = false
         context = null
-        onEnableTime = -1
-        info("DataKache disabled successfully in ${System.currentTimeMillis() - msStart}ms!")
+        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+        info("DataKache disabled successfully in ${elapsedMillis}ms!")
         return true
     }
 

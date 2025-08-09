@@ -41,23 +41,35 @@ class DataKacheRegistration internal constructor(
      * This should be called at the end of your software's lifecycle to ensure proper cleanup.
      */
     suspend fun shutdown() {
-        // Iterate through all document caches and shut them down
-        //  Wrapped in an array to prevent concurrent modification issues (cache.shutdown() removes itself from the map)
-        ArrayList(docCaches.values).forEach { cache ->
-            val success = cache.shutdown()
+        try {
+            // Iterate through all document caches and shut them down
+            //  Wrapped in an array to prevent concurrent modification issues
+            //  (cache.shutdown() removes itself from the map)
+            ArrayList(docCaches.values).forEach { cache ->
+                runCatching {
+                    val success = cache.shutdown()
 
-            if (!success) {
-                DataKache.logger.severe(
-                    "Failed to shut down cache '${cache.cacheName}' in database '$databaseName'. " +
-                        "Please check the cache implementation for proper shutdown handling."
-                )
+                    if (!success) {
+                        DataKache.logger.severe(
+                            "Failed to shut down cache '${cache.cacheName}' in database '$databaseName'. " +
+                                "Please check the cache implementation for proper shutdown handling."
+                        )
+                    }
+                }.onFailure { e ->
+                    DataKache.logger.severe(
+                        e,
+                        "Exception occurred while shutting down cache '${cache.cacheName}' " +
+                            "in database '$databaseName': ${e.message}",
+                    )
+                }
             }
-        }
-        // Clear any dangling caches (this should not occur, but is a safety measure)
-        docCaches.clear()
+        } finally {
+            // Clear any dangling caches (this should not occur, but is a safety measure)
+            docCaches.clear()
 
-        // Remove this registration from the API records
-        DataKacheAPI.shutdown(this)
+            // Remove this registration from the API records
+            DataKacheAPI.shutdown(this)
+        }
     }
 
     // ------------------------------------------------------------ //

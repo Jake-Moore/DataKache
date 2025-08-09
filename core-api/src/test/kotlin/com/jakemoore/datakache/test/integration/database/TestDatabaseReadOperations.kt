@@ -126,7 +126,7 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
 
             it("should read document with complex data from database") {
 
-                val createdDoc = cache.create("dbComplexKey") { doc ->
+                cache.create("dbComplexKey") { doc ->
                     doc.copy(
                         name = "Complex Database Doc",
                         balance = 750.0,
@@ -152,7 +152,7 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
 
             it("should read document with null values from database") {
 
-                val createdDoc = cache.create("dbNullKey") { doc ->
+                cache.create("dbNullKey") { doc ->
                     doc.copy(
                         name = null,
                         balance = 0.0,
@@ -178,7 +178,7 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
 
             it("should read document with empty string key from database") {
 
-                val createdDoc = cache.create("") { doc ->
+                cache.create("") { doc ->
                     doc.copy(name = "Empty Key Database Doc", balance = 100.0)
                 }.getOrThrow()
 
@@ -194,7 +194,7 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             it("should read document with special characters in key from database") {
                 val specialKey = "db-test-key_with.special@chars#123"
 
-                val createdDoc = cache.create(specialKey) { doc ->
+                cache.create(specialKey) { doc ->
                     doc.copy(name = "Special Key Database Doc", balance = 200.0)
                 }.getOrThrow()
 
