@@ -87,37 +87,40 @@ class MongoDataKacheTestContainer(
         val cache = requireNotNull(this._cache) {
             "Cache is not initialized. Ensure beforeEach is called."
         }
-
-        // Clear this collection entirely, preparing for the next test
-        cache.clearDocsFromDatabasePermanently().getOrThrow()
-        val remaining = cache.readSizeFromDatabase().getOrThrow()
-        require(remaining == 0L) {
-            "Cache should be empty after test, but found $remaining documents"
-        }
-
-        requireNotNull(_registration) {
+        val reg = requireNotNull(_registration) {
             "Registration is not initialized. Ensure beforeEach is called."
-        }.shutdown() // SHOULD shut down the cache too
-
-        // Reset cache and registration
-        this._cache = null
-        _registration = null
-
-        // Shutdown DataKache
-        val server = requireNotNull(mockServer) {
-            "Server is not initialized. Ensure beforeEach is called."
-        }
-        val plugin = requireNotNull(mockPlugin) {
-            "Plugin is not initialized. Ensure beforeEach is called."
-        }
-        require(DataKachePlugin.disableDataKache(plugin)) {
-            "Failed to disable DataKache after test"
         }
 
-        // Unmock MockBukkit (also shuts down plugin)
-        runCatching { MockBukkit.unmock() }
-        mockServer = null
-        mockPlugin = null
+        try {
+            // Clear this collection entirely, preparing for the next test
+            cache.clearDocsFromDatabasePermanently().getOrThrow()
+            val remaining = cache.readSizeFromDatabase().getOrThrow()
+            require(remaining == 0L) {
+                "Cache should be empty after test, but found $remaining documents"
+            }
+        } finally {
+            runCatching { reg.shutdown() }
+
+            // Reset cache and registration
+            this._cache = null
+            _registration = null
+
+            // Shutdown DataKache
+            val server = requireNotNull(mockServer) {
+                "Server is not initialized. Ensure beforeEach is called."
+            }
+            val plugin = requireNotNull(mockPlugin) {
+                "Plugin is not initialized. Ensure beforeEach is called."
+            }
+            require(DataKachePlugin.disableDataKache(plugin)) {
+                "Failed to disable DataKache after test"
+            }
+
+            // Unmock MockBukkit (also shuts down plugin)
+            runCatching { MockBukkit.unmock() }
+            mockServer = null
+            mockPlugin = null
+        }
     }
 
     override suspend fun afterSpec() {

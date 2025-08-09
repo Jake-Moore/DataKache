@@ -239,7 +239,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * - an exception if the update failed
      * - or a rejection state if the update was rejected by the [updateFunction]
      */
-    @Throws(DocumentNotFoundException::class, InvalidPlayerException::class)
+    @Throws(InvalidPlayerException::class)
     suspend fun updateRejectable(player: Player, updateFunction: (D) -> D): RejectableResult<D> {
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(

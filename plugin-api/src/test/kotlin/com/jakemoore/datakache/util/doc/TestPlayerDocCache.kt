@@ -20,7 +20,8 @@ class TestPlayerDocCache internal constructor(
     docClass = TestPlayerDoc::class.java,
     instantiator = ::TestPlayerDoc,
     defaultInitializer = { it },
-    config = DocCacheConfig(optimisticCaching = true, enableMassDestructiveOps = true),
+    config = DocCacheConfig.default<UUID, TestPlayerDoc>()
+        .copy(enableMassDestructiveOps = true),
 ) {
 
     override fun getKSerializer(): KSerializer<TestPlayerDoc> = TestPlayerDoc.serializer()

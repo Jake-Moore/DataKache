@@ -69,21 +69,23 @@ class MongoDataKacheTestContainer(
         val cache = requireNotNull(this._cache) {
             "Cache is not initialized. Ensure beforeEach is called."
         }
-
-        // Clear this collection entirely, preparing for the next test
-        cache.clearDocsFromDatabasePermanently().getOrThrow()
-        val remaining = cache.readSizeFromDatabase().getOrThrow()
-        require(remaining == 0L) {
-            "Cache should be empty after test, but found $remaining documents"
+        val reg = requireNotNull(_registration) {
+            "Registration is not initialized. Ensure beforeEach is called."
         }
 
-        requireNotNull(_registration) {
-            "Registration is not initialized. Ensure beforeEach is called."
-        }.shutdown() // SHOULD shut down the cache too
-
-        // Reset cache and registration
-        this._cache = null
-        _registration = null
+        try {
+            // Clear this collection entirely, preparing for the next test
+            cache.clearDocsFromDatabasePermanently().getOrThrow()
+            val remaining = cache.readSizeFromDatabase().getOrThrow()
+            require(remaining == 0L) {
+                "Cache should be empty after test, but found $remaining documents"
+            }
+        } finally {
+            runCatching { reg.shutdown() }
+            // Reset cache and registration
+            this._cache = null
+            _registration = null
+        }
     }
 
     override suspend fun afterSpec() {

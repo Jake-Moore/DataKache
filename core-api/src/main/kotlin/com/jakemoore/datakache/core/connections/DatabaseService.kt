@@ -112,7 +112,7 @@ internal abstract class DatabaseService : LoggerService, Service {
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
-        bypassValidation: Boolean,
+        bypassValidation: Boolean = false,
     ): D {
         try {
             // METRICS

@@ -108,6 +108,9 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
                 try {
                     processUpdateRequest(request)
+                } catch (e: CancellationException) {
+                    // rethrow for cooperative cancellation
+                    throw e
                 } catch (e: Exception) {
                     docCache.getLoggerInternal().error(
                         e,
@@ -118,13 +121,15 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                     isProcessing.set(false)
                 }
             }
-        } catch (_: CancellationException) {
+        } catch (e: CancellationException) {
             // Don't log cancellation exceptions as errors during shutdown
             if (!isShutdown.get()) {
                 docCache.getLoggerInternal().severe(
                     "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}"
                 )
             }
+            // rethrow for cooperative cancellation
+            throw e
         } catch (e: Exception) {
             docCache.getLoggerInternal().error(
                 e,
@@ -189,6 +194,16 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 // Force cancellation if timeout exceeded
                 processingJob.cancel()
                 runCatching { processingJob.join() }
+                // Drain remaining queued requests and complete them exceptionally
+                while (true) {
+                    val result = updateChannel.tryReceive()
+                    if (result.isFailure) break
+                    result.getOrNull()?.deferred?.completeExceptionally(
+                        CancellationException(
+                            "UpdateQueue shutdown forced for key: ${docCache.keyToString(key)}"
+                        )
+                    )
+                }
             }
         }
     }

@@ -53,6 +53,7 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
 
     @kotlinx.serialization.Transient
     @Transient
+    @Volatile
     private var _player: Player? = null
 
     /**

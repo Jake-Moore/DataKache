@@ -20,7 +20,8 @@ class TestGenericDocCache internal constructor(
     cacheName = "TestGenericDocs",
     docClass = TestGenericDoc::class.java,
     instantiator = ::TestGenericDoc,
-    config = DocCacheConfig(optimisticCaching = true, enableMassDestructiveOps = true),
+    config = DocCacheConfig.default<String, TestGenericDoc>()
+        .copy(enableMassDestructiveOps = true),
 ) {
     internal val nameField = NameIndex(this@TestGenericDocCache)
     internal val balanceField = BalanceIndex(this@TestGenericDocCache)

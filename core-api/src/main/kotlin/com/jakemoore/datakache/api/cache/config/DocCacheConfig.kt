@@ -14,6 +14,8 @@ data class DocCacheConfig<K : Any, D : Doc<K, D>>(
     /**
      * If true, the cache will allow mass-destructive operations such as:
      * - [com.jakemoore.datakache.api.cache.DocCache.clearDocsFromDatabasePermanently]
+     *
+     * WARNING: Irreversible. Intended for tests or tightly controlled admin tooling only.
      */
     val enableMassDestructiveOps: Boolean,
 ) {

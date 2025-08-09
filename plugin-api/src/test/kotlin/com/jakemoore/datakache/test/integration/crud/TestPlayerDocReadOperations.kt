@@ -80,7 +80,7 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 playerUUIDs.shouldBe(setOf(player1.uniqueId, player2.uniqueId, player3.uniqueId))
             }
 
-            it("should handle multiple online players simultaneously") {
+            it("should handle multiple online players") {
 
                 // Add multiple players
                 val players = listOf(

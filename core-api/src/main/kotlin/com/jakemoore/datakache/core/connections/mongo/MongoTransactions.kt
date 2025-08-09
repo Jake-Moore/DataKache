@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.pow
+import kotlin.math.roundToLong
 import kotlin.random.Random
 
 @Suppress("MemberVisibilityCanBePrivate")
@@ -68,7 +69,7 @@ object MongoTransactions : CoroutineScope {
         docCache: DocCache<K, D>,
         doc: D,
         updateFunction: (D) -> D,
-        bypassValidation: Boolean,
+        bypassValidation: Boolean = false,
     ): D {
         val startMS = System.currentTimeMillis()
 
@@ -385,10 +386,11 @@ object MongoTransactions : CoroutineScope {
         val basePingMs = (pingNanos / 1_000_000).coerceAtLeast(MIN_BACKOFF_MS)
 
         // Use exponential backoff but with much smaller multiplier
-        val backoffMs = basePingMs * (1.2).pow(attempt - 2).toLong()
+        val backoffMs = (basePingMs.toDouble() * 1.2.pow(attempt - 2)).roundToLong()
 
         // Add jitter (±20%)
-        val jitter = Random.nextLong(-backoffMs / 5, backoffMs / 5)
+        val jitterBound = (backoffMs / 5).coerceAtLeast(1)
+        val jitter = Random.nextLong(-jitterBound, jitterBound + 1)
 
         return (backoffMs + jitter).coerceIn(MIN_BACKOFF_MS, MAX_BACKOFF_MS)
     }

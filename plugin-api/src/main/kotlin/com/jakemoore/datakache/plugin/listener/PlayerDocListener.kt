@@ -162,7 +162,7 @@ object PlayerDocListener : Listener {
         username: String,
     ): Boolean {
         // Wrap each readOrCreate call in an async block to allow parallel loading
-        val loadsDeferred = kotlinx.coroutines.coroutineScope {
+        val results = kotlinx.coroutines.coroutineScope {
             DataKacheAPI.listRegistrations()
                 .flatMap { it.getDocCaches() }
                 .filterIsInstance<PlayerDocCache<*>>()
@@ -184,10 +184,8 @@ object PlayerDocListener : Listener {
                         // If the username is not set correctly, update it
                         return@async cache.updateUsername(key = uuid, username)
                     }
-                }
+                }.awaitAll()
         }
-        // Wait for all loads to complete
-        val results = loadsDeferred.awaitAll()
 
         // Check if all PlayerDoc objects were successfully loaded or created
         results.forEach { result ->
