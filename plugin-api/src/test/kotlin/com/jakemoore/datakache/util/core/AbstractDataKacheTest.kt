@@ -83,20 +83,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param playerName The name of the player to add
      * @return The [PlayerMock] instance representing the added player
      */
-    protected suspend fun addPlayer(playerName: String): PlayerMock {
-        return eventually(5.seconds) {
-            server.addPlayer(playerName)
-            return@eventually checkMockPlayer(playerName)
-        }
-    }
-
-    /**
-     * Adds a player to the mock server.
-     *
-     * @param playerName The name of the player to add
-     * @return The [PlayerMock] instance representing the added player
-     */
-    protected suspend fun addPlayer(playerName: String, uuid: UUID): PlayerMock {
+    protected suspend fun addPlayer(playerName: String, uuid: UUID = UUID.randomUUID()): PlayerMock {
         return addPlayer(makePlayer(playerName, uuid))
     }
 
@@ -106,9 +93,16 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param player The [PlayerMock] instance to add
      * @return The [PlayerMock] instance representing the added player
      */
+    @Suppress("UnstableApiUsage")
     protected suspend fun addPlayer(player: PlayerMock): PlayerMock {
         return eventually(5.seconds) {
+            // make sure this player is not on the server already
+            runCatching { server.playerList.disconnectPlayer(player) }
+
+            // Add the player to the server (join may get cancelled)
             server.addPlayer(player)
+
+            // Ensure the player is online and valid (join was successful)
             return@eventually checkMockPlayer(player.name)
         }
     }
