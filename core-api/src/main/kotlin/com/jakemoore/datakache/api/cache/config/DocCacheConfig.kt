@@ -12,7 +12,7 @@ data class DocCacheConfig<K : Any, D : Doc<K, D>>(
     val optimisticCaching: Boolean,
 
     /**
-     * If true, the cache will allow mass destructive like:
+     * If true, the cache will allow mass-destructive operations such as:
      * - [com.jakemoore.datakache.api.cache.DocCache.clearDocsFromDatabasePermanently]
      */
     val enableMassDestructiveOps: Boolean,

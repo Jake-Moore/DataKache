@@ -52,7 +52,6 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
 
             // Create a new instance in modifiable state
             val instantiated: D = instantiator(key, 0L)
-            instantiated.initializeInternal(this)
 
             // Allow caller to initialize the document with starter data
             val doc: D = initializer(instantiated)
@@ -133,6 +132,7 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
     override fun keyFromString(string: String): String {
         return string
     }
+
     override fun keyToString(key: String): String {
         return key
     }

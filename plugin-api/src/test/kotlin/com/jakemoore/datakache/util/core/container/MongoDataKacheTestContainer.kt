@@ -92,7 +92,7 @@ class MongoDataKacheTestContainer(
         cache.clearDocsFromDatabasePermanently().getOrThrow()
         val remaining = cache.readSizeFromDatabase().getOrThrow()
         require(remaining == 0L) {
-            "Cache should be empty after test, but found ${cache.readSizeFromDatabase().getOrThrow()} documents"
+            "Cache should be empty after test, but found $remaining documents"
         }
 
         requireNotNull(_registration) {
@@ -115,7 +115,9 @@ class MongoDataKacheTestContainer(
         }
 
         // Unmock MockBukkit (also shuts down plugin)
-        MockBukkit.unmock()
+        runCatching { MockBukkit.unmock() }
+        mockServer = null
+        mockPlugin = null
     }
 
     override suspend fun afterSpec() {
@@ -123,7 +125,9 @@ class MongoDataKacheTestContainer(
         container.stop()
 
         // Double Check MockBukkit
-        MockBukkit.unmock()
+        runCatching { MockBukkit.unmock() }
+        mockServer = null
+        mockPlugin = null
     }
 
     override val cache: TestPlayerDocCache

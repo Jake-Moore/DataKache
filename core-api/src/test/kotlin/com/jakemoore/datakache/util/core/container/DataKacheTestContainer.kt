@@ -5,7 +5,7 @@ import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.util.doc.TestGenericDocCache
 
 /**
- * Abstract container for managing DataKache test infrastructure.
+ * Interface for managing DataKache test infrastructure
  *
  * This interface provides a database-agnostic way to manage test containers,
  * including setup, teardown, and access to test resources.

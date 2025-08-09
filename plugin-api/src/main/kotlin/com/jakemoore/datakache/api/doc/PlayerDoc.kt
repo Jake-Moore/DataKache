@@ -51,7 +51,8 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     val uniqueId: UUID
         get() = this.key
 
-    @kotlinx.serialization.Transient @Transient
+    @kotlinx.serialization.Transient
+    @Transient
     private var _player: Player? = null
 
     /**
@@ -83,7 +84,11 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
      * See [isTrulyOnline] for a more strict check.
      */
     val isOnline: Boolean
-        get() = getPlayer()?.isOnline ?: false
+        get() {
+            val cached = _player
+            if (cached != null && cached.isOnline) return true
+            return Bukkit.getPlayer(this.uniqueId)?.isOnline ?: false
+        }
 
     // ------------------------------------------------------------ //
     //                      Internal API Methods                    //

@@ -12,6 +12,7 @@ import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.api.result.Success
 import com.jakemoore.datakache.util.Color
 import com.jakemoore.datakache.util.DataKacheFileLogger
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -166,7 +167,7 @@ object PlayerDocListener : Listener {
                 .flatMap { it.getDocCaches() }
                 .filterIsInstance<PlayerDocCache<*>>()
                 .map { cache ->
-                    async {
+                    async(Dispatchers.IO) {
                         val createResult = cache.readOrCreate(uuid)
                         // If not successful, return to the caller
                         if (createResult !is Success<PlayerDoc<*>>) {

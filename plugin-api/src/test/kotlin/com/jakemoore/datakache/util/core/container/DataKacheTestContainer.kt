@@ -7,7 +7,7 @@ import com.jakemoore.datakache.util.doc.TestPlayerDocCache
 import org.mockbukkit.mockbukkit.ServerMock
 
 /**
- * Abstract container for managing DataKache test infrastructure.
+ * Interface for managing DataKache test infrastructure
  *
  * This interface provides a database-agnostic way to manage test containers,
  * including setup, teardown, and access to test resources.

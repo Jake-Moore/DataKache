@@ -35,7 +35,7 @@ internal object RejectableUpdatePlayerDocResultHandler {
             // (it was likely deleted by another thread or task before this operation could complete)
             return Failure(
                 ResultExceptionWrapper(
-                    message = "Update operation failed: Player Document not found",
+                    message = "Update operation failed: Document not found",
                     exception = e,
                 )
             )

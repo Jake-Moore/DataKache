@@ -13,6 +13,7 @@ object Color {
         }
         return ChatColor.translateAlternateColorCodes('&', msg)
     }
+
     fun t(msg: String): String {
         return ChatColor.translateAlternateColorCodes('&', msg)
     }

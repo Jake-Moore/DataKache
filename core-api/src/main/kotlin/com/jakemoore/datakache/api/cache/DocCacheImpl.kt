@@ -157,6 +157,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         getLoggerInternal().debug("Cache shutdown completed: $cacheName")
         return superShutdownSuccess
     }
+
     protected abstract suspend fun shutdownSuper(): Boolean
 
     // ------------------------------------------------------------ //
@@ -297,6 +298,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             DataKache.storageMode.databaseService.registerUniqueIndex(this, index)
         }
     }
+
     override fun <T> readByUniqueIndex(index: DocUniqueIndex<K, D, T>, value: T): OptionalResult<D> {
         return ReadUniqueIndexResultHandler.wrap {
             // Read from cache trying to find the first document that matches the unique index value
@@ -305,6 +307,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             }
         }
     }
+
     override suspend fun <T> readByUniqueIndexFromDatabase(
         index: DocUniqueIndex<K, D, T>,
         value: T

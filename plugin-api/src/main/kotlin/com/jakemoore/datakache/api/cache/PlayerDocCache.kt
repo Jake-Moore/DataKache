@@ -30,7 +30,6 @@ import com.jakemoore.datakache.util.PlayerUtil
 import kotlinx.coroutines.runBlocking
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
-import org.bukkit.event.player.AsyncPlayerPreLoginEvent
 import org.bukkit.plugin.java.JavaPlugin
 import org.jetbrains.annotations.ApiStatus
 import java.util.UUID
@@ -86,8 +85,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      *
      * @param player The online player whose document is to be read.
      *
+     * @throws InvalidPlayerException If the provided [Player] is not online or valid.
+     *
      * @return An [DefiniteResult] containing the document or an exception if the document could not be read.
      */
+    @Throws(InvalidPlayerException::class)
     fun read(player: Player): DefiniteResult<D> {
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
@@ -119,7 +121,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                         createAndInsertNewPlayerDoc(
                             uuid = player.uniqueId,
                             username = player.name,
-                            loginEvent = null,
                             initializer = { it },
                         )
                     }
@@ -134,7 +135,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
             return@wrap createAndInsertNewPlayerDoc(
                 uuid = key,
                 username = null,
-                loginEvent = null,
                 initializer = initializer,
             )
         }
@@ -184,8 +184,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      *
      * @param player The **online** player who owns the document to be modified (uses Player UUID).
      *
+     * @throws InvalidPlayerException If the provided [Player] is not online or valid.
+     *
      * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
      */
+    @Throws(InvalidPlayerException::class)
     suspend fun update(player: Player, updateFunction: (D) -> D): DefiniteResult<D> {
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
@@ -229,12 +232,14 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * Within the [updateFunction], you can throw a [RejectUpdateException] to cancel the update operation. The
      * [RejectableResult] will then indicate that the update was rejected, and no modifications were made.
      *
+     * @throws InvalidPlayerException If the provided [Player] is not online or valid.
+     *
      * @return The [RejectableResult] containing:
      * - the updated document if the update was successful
      * - an exception if the update failed
      * - or a rejection state if the update was rejected by the [updateFunction]
      */
-    @Throws(DocumentNotFoundException::class)
+    @Throws(DocumentNotFoundException::class, InvalidPlayerException::class)
     suspend fun updateRejectable(player: Player, updateFunction: (D) -> D): RejectableResult<D> {
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
@@ -277,8 +282,11 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      *
      * @param player The **online** player who owns the document to be deleted (uses Player UUID).
      *
+     * @throws InvalidPlayerException If the provided [Player] is not online or valid.
+     *
      * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
      */
+    @Throws(InvalidPlayerException::class)
     suspend fun delete(player: Player): DefiniteResult<Boolean> {
         if (!PlayerUtil.isFullyValidPlayer(player)) {
             throw InvalidPlayerException(
@@ -295,6 +303,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     override fun keyFromString(string: String): UUID {
         return UUID.fromString(string)
     }
+
     override fun keyToString(key: UUID): String {
         return key.toString()
     }
@@ -313,7 +322,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     private suspend fun createAndInsertNewPlayerDoc(
         uuid: UUID,
         username: String? = null,
-        loginEvent: AsyncPlayerPreLoginEvent? = null,
         initializer: (D) -> D,
     ): D {
         val doc: D = constructNewPlayerDoc(uuid, username, initializer)
@@ -336,7 +344,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
 
         // Create from instantiator
         val instantiated: D = this.instantiator(uuid, 0L, username)
-        instantiated.initializeInternal(this)
 
         // Initialize the document with default values
         val default: D = this.defaultInitializer(instantiated)

@@ -174,6 +174,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> readInternal(
         docCache: DocCache<K, D>,
         key: K,
@@ -199,6 +200,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> deleteInternal(
         docCache: DocCache<K, D>,
         key: K,
@@ -221,6 +223,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> readAllInternal(
         docCache: DocCache<K, D>,
     ): Flow<D>
@@ -242,6 +245,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> sizeInternal(
         docCache: DocCache<K, D>,
     ): Long
@@ -266,6 +270,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> hasKeyInternal(
         docCache: DocCache<K, D>,
         key: K,
@@ -290,6 +295,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> clearInternal(
         docCache: DocCache<K, D>,
     ): Long
@@ -311,6 +317,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>> readKeysInternal(
         docCache: DocCache<K, D>,
     ): Flow<K>
@@ -371,6 +378,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>, T> registerUniqueIndexInternal(
         docCache: DocCache<K, D>,
         index: DocUniqueIndex<K, D, T>,
@@ -400,6 +408,7 @@ internal abstract class DatabaseService : LoggerService, Service {
             throw e
         }
     }
+
     protected abstract suspend fun <K : Any, D : Doc<K, D>, T> readByUniqueIndexInternal(
         docCache: DocCache<K, D>,
         index: DocUniqueIndex<K, D, T>,

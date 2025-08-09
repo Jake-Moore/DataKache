@@ -17,7 +17,8 @@ import java.util.concurrent.ConcurrentHashMap
  * It also maintains all registered document caches for this database.
  */
 @Suppress("unused")
-class DataKacheRegistration internal constructor( // Internal constructor, instantiation is managed by DataKache
+class DataKacheRegistration internal constructor(
+    // Internal constructor, instantiation is managed by DataKache
     /**
      * Your DataKache client instance
      */

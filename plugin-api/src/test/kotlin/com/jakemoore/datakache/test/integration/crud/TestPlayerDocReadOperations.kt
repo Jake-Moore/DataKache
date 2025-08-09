@@ -14,6 +14,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.kotest.matchers.types.shouldNotBeInstanceOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import org.mockbukkit.mockbukkit.entity.PlayerMock
@@ -140,7 +141,7 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 // Launch 10 concurrent reads
                 val results = kotlinx.coroutines.coroutineScope {
                     (1..10).map {
-                        async {
+                        async(Dispatchers.IO) {
                             cache.read(player)
                         }
                     }.awaitAll()

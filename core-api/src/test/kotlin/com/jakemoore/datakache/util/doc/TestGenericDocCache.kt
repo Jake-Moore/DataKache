@@ -4,7 +4,6 @@ package com.jakemoore.datakache.util.doc
 
 import com.jakemoore.datakache.api.cache.GenericDocCache
 import com.jakemoore.datakache.api.cache.config.DocCacheConfig
-import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.Empty
 import com.jakemoore.datakache.api.result.OptionalResult
@@ -22,8 +21,7 @@ class TestGenericDocCache internal constructor(
     docClass = TestGenericDoc::class.java,
     instantiator = ::TestGenericDoc,
     config = DocCacheConfig(optimisticCaching = true, enableMassDestructiveOps = true),
-),
-    DataKacheScope {
+) {
     internal val nameField = NameIndex(this@TestGenericDocCache)
     internal val balanceField = BalanceIndex(this@TestGenericDocCache)
 

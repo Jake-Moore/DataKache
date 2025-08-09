@@ -74,7 +74,7 @@ class MongoDataKacheTestContainer(
         cache.clearDocsFromDatabasePermanently().getOrThrow()
         val remaining = cache.readSizeFromDatabase().getOrThrow()
         require(remaining == 0L) {
-            "Cache should be empty after test, but found ${cache.readSizeFromDatabase().getOrThrow()} documents"
+            "Cache should be empty after test, but found $remaining documents"
         }
 
         requireNotNull(_registration) {

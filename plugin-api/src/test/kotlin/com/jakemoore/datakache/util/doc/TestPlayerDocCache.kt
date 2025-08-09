@@ -4,7 +4,6 @@ package com.jakemoore.datakache.util.doc
 
 import com.jakemoore.datakache.api.cache.PlayerDocCache
 import com.jakemoore.datakache.api.cache.config.DocCacheConfig
-import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import kotlinx.serialization.KSerializer
 import org.bukkit.plugin.java.JavaPlugin
@@ -22,8 +21,7 @@ class TestPlayerDocCache internal constructor(
     instantiator = ::TestPlayerDoc,
     defaultInitializer = { it },
     config = DocCacheConfig(optimisticCaching = true, enableMassDestructiveOps = true),
-),
-    DataKacheScope {
+) {
 
     override fun getKSerializer(): KSerializer<TestPlayerDoc> = TestPlayerDoc.serializer()
     override fun getKeyKProperty(): KProperty<UUID> = TestPlayerDoc::key

@@ -83,7 +83,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         // Update activity time
         lastActivityTime.set(System.currentTimeMillis())
 
-        // Add to queue - this will suspend if the queue is full (shouldn't happen with unlimited channel)
+        // Add to queue - trySend will NOT suspend; it returns a failure if the channel is full/closed
         val sent = updateChannel.trySend(request)
         if (!sent.isSuccess) {
             val exception = sent.exceptionOrNull() ?: IllegalStateException(

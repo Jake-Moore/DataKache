@@ -210,7 +210,7 @@ object MongoTransactions : CoroutineScope {
         DuplicateDocumentKeyException::class,
         DuplicateUniqueIndexException::class,
     )
-    internal fun <D : Doc<K, D>, K : Any> checkDuplicateKeyExceptions(
+    internal fun <K : Any, D : Doc<K, D>> checkDuplicateKeyExceptions(
         e: MongoWriteException,
         docCache: DocCache<K, D>,
         doc: D,
@@ -239,6 +239,7 @@ object MongoTransactions : CoroutineScope {
                     docCache.keyToString(doc.key),
                     fullMessage = errorMessage,
                     operation = operation,
+                    cause = e,
                 )
             }
             else -> {
@@ -248,6 +249,7 @@ object MongoTransactions : CoroutineScope {
                     fullMessage = errorMessage,
                     operation = operation,
                     index = index,
+                    cause = e,
                 )
             }
         }

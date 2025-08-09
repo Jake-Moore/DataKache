@@ -12,6 +12,7 @@ import com.jakemoore.datakache.util.doc.TestPlayerDoc
 import com.jakemoore.datakache.util.doc.data.MyData
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -211,7 +212,7 @@ class TestPlayerDocCreateOperations : AbstractDataKacheTest() {
                 // Perform multiple concurrent creation attempts
                 val results = kotlinx.coroutines.coroutineScope {
                     (1..5).map { index ->
-                        async {
+                        async(Dispatchers.IO) {
                             delay(index * 30L) // concurrent, but they need to arrive in a specific order
                             cache.create(uuid) { it.copy(name = "ConcurrentPlayer$index") }
                         }
