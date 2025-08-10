@@ -130,11 +130,5 @@ internal class MongoListener(private val service: MongoDatabaseService) : Cluste
         } else {
             -1L // No servers available, set to -1 to indicate no ping
         }
-
-        val ms = this.service.averagePingNanos / 1_000_000
-        System.err.println(
-            "[recalculateAveragePing] Average Ping: ${service.averagePingNanos} nanos ($ms ms) " +
-                "from ${pingAverages.size()} servers."
-        )
     }
 }
