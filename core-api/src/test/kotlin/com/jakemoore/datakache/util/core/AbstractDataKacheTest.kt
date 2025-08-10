@@ -23,7 +23,7 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
         prettyPrint = true
     }
 
-    private lateinit var testContainer: DataKacheTestContainer
+    protected lateinit var testContainer: DataKacheTestContainer
 
     init {
         beforeSpec {

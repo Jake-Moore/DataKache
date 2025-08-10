@@ -36,4 +36,9 @@ interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
      * Gets the number of consecutive failures.
      */
     fun getConsecutiveFailures(): Int
+
+    /**
+     * Checks if the change stream job, and the event processor job are both active.
+     */
+    fun areJobsActive(): Boolean
 }

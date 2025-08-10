@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.3.5"
+val VERSION = "0.3.6"
 
 ext {
     // KotlinX
@@ -102,7 +102,13 @@ allprojects {
             showStackTraces = true
 
             // log all event types
-            events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED, TestLogEvent.STANDARD_ERROR)
+            events(
+                TestLogEvent.PASSED,
+                TestLogEvent.SKIPPED,
+                TestLogEvent.FAILED,
+                TestLogEvent.STANDARD_ERROR,
+                // TestLogEvent.STANDARD_OUT, // Uncomment to debug tests
+            )
         }
     }
 

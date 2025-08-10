@@ -51,45 +51,30 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     val uniqueId: UUID
         get() = this.key
 
-    @kotlinx.serialization.Transient
-    @Transient
-    @Volatile
-    private var _player: Player? = null
-
     /**
      * Get the Bukkit [Player] who owns this document.
+     *
+     * Alias for `Bukkit.getPlayer(UUID)`.
      */
     fun getPlayer(): Player? {
-        if (PlayerUtil.isFullyValidPlayer(this._player)) return this._player
-
-        val tempPlayer = Bukkit.getPlayer(this.uniqueId)
-        this._player = if (!PlayerUtil.isFullyValidPlayer(tempPlayer)) {
-            null
-        } else {
-            tempPlayer
-        }
-        return this._player
+        return Bukkit.getPlayer(this.uniqueId)
     }
 
     /**
-     * Checks if the [Player] behind this [PlayerDoc] is online AND valid.
+     * Checks if the [Player] behind this [PlayerDoc] is online AND alive.
      *
-     * See [isOnline] for a more lenient check.
+     * See [isOnline] for a more lenient check that does not check alive status.
      */
-    val isTrulyOnline: Boolean
-        get() = PlayerUtil.isFullyValidPlayer(getPlayer())
+    val isAlive: Boolean
+        get() = PlayerUtil.isPlayerOnlineAndAlive(getPlayer())
 
     /**
      * Checks if the [Player] behind this [PlayerDoc] is online. (not necessarily valid)
      *
-     * See [isTrulyOnline] for a more strict check.
+     * See [isAlive] for a more strict check.
      */
     val isOnline: Boolean
-        get() {
-            val cached = _player
-            if (cached != null && cached.isOnline) return true
-            return Bukkit.getPlayer(this.uniqueId)?.isOnline ?: false
-        }
+        get() = getPlayer()?.isOnline ?: false
 
     // ------------------------------------------------------------ //
     //                      Internal API Methods                    //

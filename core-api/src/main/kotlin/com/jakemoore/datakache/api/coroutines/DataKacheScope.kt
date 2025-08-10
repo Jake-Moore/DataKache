@@ -6,6 +6,7 @@ import com.jakemoore.datakache.DataKache
 import com.jakemoore.datakache.api.coroutines.DataKacheScope.Companion.EXCEPTION_CONSUMERS
 import com.jakemoore.datakache.api.coroutines.exception.ExceptionConsumer
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.core.connections.GlobalDatabaseScope
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,10 @@ internal object GlobalDataKacheScope : CoroutineScope {
         get() = Dispatchers.IO + supervisorJob + exceptionHandler
 
     internal fun restart() {
+        runCatching {
+            GlobalDatabaseScope.restart()
+        }
+
         // Cancel any existing job if still active
         if (supervisorJob.isActive) {
             supervisorJob.cancel()
@@ -73,6 +78,9 @@ internal object GlobalDataKacheScope : CoroutineScope {
 
     // Terminate all scopes and coroutines
     internal fun shutdown() {
+        runCatching {
+            GlobalDatabaseScope.shutdown()
+        }
         supervisorJob.cancel()
     }
 

@@ -241,25 +241,15 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             ChangeOperationType.DELETE -> {
                 val documentKey = change.documentKey
                 if (documentKey != null) {
-                    val id = extractIdFromDocumentKey(documentKey)
-                    if (id != null) {
-                        try {
-                            @Suppress("UNCHECKED_CAST")
-                            context.eventHandler.onDocumentDeleted(id as K)
-                            if (isRecoveryMode) {
-                                context.logger.warn("Recovered from lost DELETE event for document: $id")
-                            } else {
-                                context.logger.debug("Processed DELETE for document: $id")
-                            }
-                            return true
-                        } catch (_: ClassCastException) {
-                            context.logger.error(
-                                "Type mismatch in document ID during DELETE " +
-                                    "${if (isRecoveryMode) "recovery" else "processing"}: " +
-                                    "expected type K, got ${id::class.simpleName}"
-                            )
-                            return false
+                    val keyString = extractIdFromDocumentKey(documentKey)
+                    if (keyString != null) {
+                        context.eventHandler.onDocumentDeleted(keyString)
+                        if (isRecoveryMode) {
+                            context.logger.warn("Recovered from lost DELETE event for document: $keyString")
+                        } else {
+                            context.logger.debug("Processed DELETE for document: $keyString")
                         }
+                        return true
                     } else {
                         val message = if (isRecoveryMode) {
                             "Could not extract ID from delete operation during recovery"
@@ -382,16 +372,16 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     }
 
     /**
-     * Extracts the document ID from a change stream document key.
+     * Extracts the document ID (as a [String]) from a change stream document key.
      */
-    private fun extractIdFromDocumentKey(documentKey: BsonDocument): Any? {
+    private fun extractIdFromDocumentKey(documentKey: BsonDocument): String? {
         return try {
             val bsonValue = documentKey["_id"]
             when {
                 bsonValue?.isObjectId == true -> bsonValue.asObjectId().value.toHexString()
                 bsonValue?.isString == true -> bsonValue.asString().value
-                bsonValue?.isInt32 == true -> bsonValue.asInt32().value
-                bsonValue?.isInt64 == true -> bsonValue.asInt64().value
+                bsonValue?.isInt32 == true -> bsonValue.asInt32().value.toString()
+                bsonValue?.isInt64 == true -> bsonValue.asInt64().value.toString()
                 else -> {
                     context.logger.warn("Unsupported ID type in document key: ${bsonValue?.bsonType}")
                     null

@@ -294,4 +294,8 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * Gets the number of consecutive failures.
      */
     override fun getConsecutiveFailures(): Int = errorHandler.getConsecutiveFailures()
+
+    override fun areJobsActive(): Boolean {
+        return stateManager.areJobsActive()
+    }
 }

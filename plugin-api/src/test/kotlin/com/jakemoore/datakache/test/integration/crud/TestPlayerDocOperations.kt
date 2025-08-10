@@ -52,14 +52,14 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
 
                 // Initially should be online
                 doc.isOnline.shouldBe(true)
-                doc.isTrulyOnline.shouldBe(true)
+                doc.isAlive.shouldBe(true)
 
                 // Disconnect player to simulate offline
                 player.disconnect()
 
                 // Should detect offline state
                 doc.isOnline.shouldBe(false)
-                doc.isTrulyOnline.shouldBe(false)
+                doc.isAlive.shouldBe(false)
             }
 
             it("should handle username updates via copyHelper") {
@@ -99,7 +99,7 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
                 player.disconnect()
                 doc.getPlayer().shouldBeNull()
                 doc.isOnline.shouldBe(false)
-                doc.isTrulyOnline.shouldBe(false)
+                doc.isAlive.shouldBe(false)
 
                 // Simulate player reconnection
                 player.reconnect()
@@ -109,7 +109,7 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
                 retrievedPlayer.shouldNotBeNull()
                 retrievedPlayer.shouldBe(player)
                 doc.isOnline.shouldBe(true)
-                doc.isTrulyOnline.shouldBe(true)
+                doc.isAlive.shouldBe(true)
             }
 
             it("should handle player name changes") {
@@ -159,14 +159,14 @@ class TestPlayerDocOperations : AbstractDataKacheTest() {
                     player.disconnect()
                     doc.getPlayer().shouldBeNull()
                     doc.isOnline.shouldBe(false)
-                    doc.isTrulyOnline.shouldBe(false)
+                    doc.isAlive.shouldBe(false)
 
                     // Reconnect player
                     player.reconnect()
 
                     doc.getPlayer().shouldNotBeNull()
                     doc.isOnline.shouldBe(true)
-                    doc.isTrulyOnline.shouldBe(true)
+                    doc.isAlive.shouldBe(true)
                 }
             }
         }

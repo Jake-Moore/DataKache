@@ -91,7 +91,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     @Throws(InvalidPlayerException::class)
     fun read(player: Player): DefiniteResult<D> {
-        if (!PlayerUtil.isFullyValidPlayer(player)) {
+        if (!PlayerUtil.isPlayerOnline(player)) {
             throw InvalidPlayerException(
                 player = player,
                 operation = Operation.READ,
@@ -147,7 +147,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     fun readAllOnline(): List<D> {
         return Bukkit.getOnlinePlayers()
-            .filter { PlayerUtil.isFullyValidPlayer(it) }
+            .filter { PlayerUtil.isPlayerOnline(it) }
             .mapNotNull { player ->
                 val result = this.read(player)
                 val exception = result.exceptionOrNull()
@@ -190,7 +190,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     @Throws(InvalidPlayerException::class)
     suspend fun update(player: Player, updateFunction: (D) -> D): DefiniteResult<D> {
-        if (!PlayerUtil.isFullyValidPlayer(player)) {
+        if (!PlayerUtil.isPlayerOnline(player)) {
             throw InvalidPlayerException(
                 player = player,
                 operation = Operation.UPDATE,
@@ -241,7 +241,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     @Throws(InvalidPlayerException::class)
     suspend fun updateRejectable(player: Player, updateFunction: (D) -> D): RejectableResult<D> {
-        if (!PlayerUtil.isFullyValidPlayer(player)) {
+        if (!PlayerUtil.isPlayerOnline(player)) {
             throw InvalidPlayerException(
                 player = player,
                 operation = Operation.UPDATE_REJECTABLE,
@@ -288,7 +288,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      */
     @Throws(InvalidPlayerException::class)
     suspend fun delete(player: Player): DefiniteResult<Boolean> {
-        if (!PlayerUtil.isFullyValidPlayer(player)) {
+        if (!PlayerUtil.isPlayerOnline(player)) {
             throw InvalidPlayerException(
                 player = player,
                 operation = Operation.DELETE,

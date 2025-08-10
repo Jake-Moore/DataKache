@@ -392,6 +392,10 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     //                        MongoDB Streams                       //
     // ------------------------------------------------------------ //
+    override fun areChangeStreamJobsRunning(): Boolean {
+        return changeStreamManager?.areJobsActive() ?: false
+    }
+
     private suspend fun loadAllIntoCache() = withContext(Dispatchers.IO) {
         val documents = DataKache.storageMode.databaseService.readAll(this@DocCacheImpl)
         documents.collect { doc ->
@@ -453,12 +457,13 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 }
             }
 
-            override suspend fun onDocumentDeleted(key: K) {
+            override suspend fun onDocumentDeleted(keyString: String) {
+                val key: K = this@DocCacheImpl.keyFromString(keyString)
+
                 // METRICS
                 val name = this@DocCacheImpl.cacheName
-                val keyStr = this@DocCacheImpl.keyToString(key)
                 DataKacheMetrics.getReceiversInternal().forEach {
-                    it.onChangeStreamDelete(name, keyStr)
+                    it.onChangeStreamDelete(name, keyString)
                 }
 
                 val removed = uncacheInternal(key)

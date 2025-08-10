@@ -425,4 +425,10 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
         originalDoc: D,
         updatedDoc: D,
     )
+
+    /**
+     * Checks if the change stream jobs are currently running.
+     */
+    @ApiStatus.Internal
+    fun areChangeStreamJobsRunning(): Boolean
 }

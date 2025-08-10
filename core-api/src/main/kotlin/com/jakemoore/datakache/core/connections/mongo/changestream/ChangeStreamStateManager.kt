@@ -167,4 +167,12 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
             false
         }
     }
+
+    /**
+     * Checks if the change stream job, and the event processor job are both active.
+     */
+    fun areJobsActive(): Boolean {
+        // both jobs must be non-null and active
+        return changeStreamJob?.isActive == true && eventProcessorJob?.isActive == true
+    }
 }

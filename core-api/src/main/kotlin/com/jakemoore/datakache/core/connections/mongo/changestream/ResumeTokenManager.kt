@@ -81,8 +81,8 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
      * @return true if configuration succeeded, false otherwise
      */
     private fun tryConfigureStream(
-        handleResumeErrors: Boolean = true,
         description: String,
+        handleResumeErrors: Boolean = true,
         configAction: () -> Unit
     ): Boolean {
         return try {
@@ -137,9 +137,8 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
             if (!configured && effectiveStartTime != null) {
                 configured = tryConfigureStream(
                     description = "Starting change stream from operation time $effectiveStartTime",
-                    configAction = { startAtOperationTime(effectiveStartTime) },
                     handleResumeErrors = false
-                )
+                ) { startAtOperationTime(effectiveStartTime) }
             }
 
             // Last resort: Current time

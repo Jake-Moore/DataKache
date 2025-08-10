@@ -1,6 +1,8 @@
 package com.jakemoore.datakache.util.core.container
 
 import com.jakemoore.datakache.api.DataKacheConfig
+import com.jakemoore.datakache.api.cache.DocCache
+import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.util.doc.TestGenericDocCache
 
@@ -55,4 +57,45 @@ interface DataKacheTestContainer {
      * The [DataKacheConfig] instance for testing.
      */
     val dataKacheConfig: DataKacheConfig
+
+    /**
+     * Manually inserts a document into the cache using the backing database.
+     *
+     * This method does NOT use the cache's API.
+     */
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentInsert(
+        cache: DocCache<K, D>,
+        doc: D,
+    )
+
+    /**
+     * Manually updates a document in the cache using the backing database.
+     *
+     * This method does NOT use the cache's API.
+     */
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentUpdate(
+        cache: DocCache<K, D>,
+        doc: D,
+        newVersion: Long,
+    )
+
+    /**
+     * Manually replace a document from the cache using the backing database.
+     *
+     * This method does NOT use the cache's API.
+     */
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentReplace(
+        cache: DocCache<K, D>,
+        doc: D,
+    )
+
+    /**
+     * Manually deletes a document from the cache using the backing database.
+     *
+     * This method does NOT use the cache's API.
+     */
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentDelete(
+        cache: DocCache<K, D>,
+        key: K,
+    )
 }
