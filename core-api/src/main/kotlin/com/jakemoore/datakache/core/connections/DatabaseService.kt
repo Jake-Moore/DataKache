@@ -26,6 +26,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.roundToLong
 
 /**
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
@@ -71,29 +72,31 @@ internal abstract class DatabaseService : LoggerService, Service {
         docCache: DocCache<K, D>,
         docKey: K,
     ): Long {
-        // Base timeout: 3x the average ping time (converted to milliseconds)
+        // While the ping may be less than 10ms, let's give the timeout the benefit of the doubt
+        val pingMs = (averagePingNanos / 1_000_000).coerceAtLeast(10)
+
+        // Base timeout: 5x the average ping time (converted to milliseconds)
         // This accounts for the database round-trip plus processing overhead
         val baseTimeoutMs = if (averagePingNanos > 0) {
-            (averagePingNanos * 3) / 1_000_000
+            pingMs * 5
         } else {
-            // Fallback if ping is not available: 100ms
-            100L
+            // Fallback if ping is not available: 250ms
+            250L
         }
 
         // Get the actual queue size for this specific document
-        val queueSize = updateQueueManager.getTotalQueueSize(docCache, docKey)
+        //  Add one so that if the current document is in 'processing', it still counts as part of the queue
+        val queueSize = updateQueueManager.getTotalQueueSize(docCache, docKey) + 1
 
         // Calculate timeout based on actual queue depth
         // Each queued item needs time to be processed
         val queueDepthTimeoutMs = baseTimeoutMs * queueSize
 
         // Add safety margin: 50% extra time for network variability
-        val safetyMarginMs = queueDepthTimeoutMs / 2
-
-        val totalTimeoutMs = queueDepthTimeoutMs + safetyMarginMs
+        val totalTimeoutMs = (queueDepthTimeoutMs * 1.5).roundToLong()
 
         // Ensure minimum and maximum bounds
-        return totalTimeoutMs.coerceIn(25L, 60_000L) // 25 ms to 1 min
+        return totalTimeoutMs.coerceIn(25L, 300_000L) // 25 ms to 5 min
     }
 
     // ------------------------------------------------------------ //
@@ -161,6 +164,7 @@ internal abstract class DatabaseService : LoggerService, Service {
         updateFunction: (D) -> D,
         bypassValidation: Boolean = false,
     ): D {
+        var timeoutMS = -1L
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdate)
@@ -176,10 +180,16 @@ internal abstract class DatabaseService : LoggerService, Service {
             )
 
             // Apply timeout to prevent indefinite blocking
-            val timeoutMs = calculateUpdateTimeoutMs(updateQueueManager, docCache, doc.key)
-            return withTimeout(timeoutMs) {
+            timeoutMS = calculateUpdateTimeoutMs(updateQueueManager, docCache, doc.key)
+            return withTimeout(timeoutMS) {
                 deferred.await()
             }
+        } catch (e: TimeoutCancellationException) {
+            error(
+                "UPDATE for document with key '${doc.key}' in cache '${docCache.cacheName}' timed out! " +
+                    "Waited for ${timeoutMS}ms, but the queue did not process the update in time. "
+            )
+            throw e
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

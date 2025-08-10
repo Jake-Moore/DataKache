@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.3.6"
+val VERSION = "0.3.7"
 
 ext {
     // KotlinX
@@ -106,7 +106,7 @@ allprojects {
                 TestLogEvent.PASSED,
                 TestLogEvent.SKIPPED,
                 TestLogEvent.FAILED,
-                TestLogEvent.STANDARD_ERROR,
+                // TestLogEvent.STANDARD_ERROR, // Uncomment to debug tests
                 // TestLogEvent.STANDARD_OUT, // Uncomment to debug tests
             )
         }

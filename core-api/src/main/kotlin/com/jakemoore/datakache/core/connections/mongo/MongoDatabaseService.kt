@@ -58,7 +58,7 @@ internal class MongoDatabaseService : DatabaseService() {
     override var averagePingNanos: Long = -1 // Initial value 0
     override val serverPingMap: Cache<String, Long> = CacheBuilder
         .newBuilder()
-        .expireAfterWrite(90, TimeUnit.SECONDS)
+        .expireAfterWrite(5, TimeUnit.MINUTES)
         .build()
 
     internal var mongoClient: MongoClient? = null

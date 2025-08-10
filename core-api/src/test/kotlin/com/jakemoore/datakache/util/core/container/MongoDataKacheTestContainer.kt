@@ -27,8 +27,8 @@ import org.testcontainers.utility.DockerImageName
  *
  * Manages MongoDB container lifecycle and provides access to test resources.
  */
+@Suppress("UnusedVariable", "unused")
 class MongoDataKacheTestContainer(
-    private val container: MongoDBContainer,
     private val dbNameShort: String = "TestDatabase"
 ) : DataKacheTestContainer {
 
@@ -40,9 +40,6 @@ class MongoDataKacheTestContainer(
     private var _cache: TestGenericDocCache? = null
 
     override suspend fun beforeSpec() {
-        // Start the MongoDB container
-        container.start()
-
         // Validate container is running
         require(container.isRunning) {
             "MongoDB container failed to start"
@@ -92,12 +89,8 @@ class MongoDataKacheTestContainer(
         }
 
         try {
-            // Clear this collection entirely, preparing for the next test
-            cache.clearDocsFromDatabasePermanently().getOrThrow()
-            val remaining = cache.readSizeFromDatabase().getOrThrow()
-            require(remaining == 0L) {
-                "Cache should be empty after test, but found $remaining documents"
-            }
+            // Drop the database so the next test starts with a clean slate
+            dropDatabase()
         } finally {
             runCatching { reg.shutdown() }
             // Reset cache and registration
@@ -114,9 +107,6 @@ class MongoDataKacheTestContainer(
     override suspend fun afterSpec() {
         // Close MongoDB client
         runCatching { mongoClient.close() }
-
-        // Stop container
-        container.stop()
     }
 
     override val cache: TestGenericDocCache
@@ -184,18 +174,35 @@ class MongoDataKacheTestContainer(
         coll.deleteOne(filter)
     }
 
-    companion object {
-        /**
-         * Creates a new MongoDataKacheTestContainer with default MongoDB 8.0 image.
-         *
-         * @param databaseName The name of the test database
-         * @return A new MongoDataKacheTestContainer instance
-         */
-        fun create(databaseName: String = "TestDatabase"): MongoDataKacheTestContainer {
-            // Create a fresh MongoDB container on each test run (prevent reuse)
-            val container = MongoDBContainer(DockerImageName.parse("mongo:8.0"))
-                .withReuse(false)
-            return MongoDataKacheTestContainer(container, databaseName)
+    private suspend fun dropDatabase() {
+        runCatching {
+            mongoClient.getDatabase(databaseName).drop()
+        }.onFailure {
+            it.printStackTrace()
         }
+    }
+
+    companion object {
+        private var _container: MongoDBContainer? = null
+        internal fun startContainers() {
+            runCatching {
+                _container?.stop()
+            }
+
+            this._container = MongoDBContainer(DockerImageName.parse("mongo:8.0"))
+                .withReuse(false).also { it.start() }
+        }
+
+        internal fun stopContainers() {
+            runCatching {
+                _container?.stop()
+            }
+            _container = null
+        }
+
+        internal val container: MongoDBContainer
+            get() = requireNotNull(_container) {
+                "MongoDB container is not initialized. Call startContainers() before accessing."
+            }
     }
 }

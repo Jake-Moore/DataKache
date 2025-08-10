@@ -1,5 +1,8 @@
 package com.jakemoore.datakache.core.connections.mongo
 
+import com.google.common.cache.Cache
+import com.google.common.cache.CacheBuilder
+import com.jakemoore.datakache.util.RollingAverage
 import com.mongodb.connection.ServerDescription
 import com.mongodb.event.ClusterClosedEvent
 import com.mongodb.event.ClusterDescriptionChangedEvent
@@ -7,6 +10,7 @@ import com.mongodb.event.ClusterListener
 import com.mongodb.event.ServerHeartbeatSucceededEvent
 import com.mongodb.event.ServerMonitorListener
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * Listens to MongoDB cluster events and server heartbeats to monitor connection status and ping times.
@@ -85,30 +89,52 @@ internal class MongoListener(private val service: MongoDatabaseService) : Cluste
         }
     }
 
+    // Map <server address, ping rolling average>
+    private val pingAverages: Cache<String, RollingAverage> = CacheBuilder
+        .newBuilder()
+        .expireAfterWrite(5, TimeUnit.MINUTES)
+        .build()
+
     private fun updateClusterServerPings(servers: List<ServerDescription>) {
         if (service.activeListener != listenerID) return // This listener is not the active one, ignore the event
 
         for (server in servers) {
-            service.serverPingMap.put(server.address.toString(), server.roundTripTimeNanos)
+            val rolling = pingAverages.asMap().computeIfAbsent(server.address.toString()) {
+                RollingAverage(30)
+            }
+            rolling.add(server.roundTripTimeNanos)
         }
         recalculateAveragePing()
     }
 
     private fun recalculateAveragePing() {
         if (service.activeListener != listenerID) return // This listener is not the active one, ignore the event
-
         if (!service.mongoConnected) return
 
-        var pingSumNanos = 0L
-        for (ping in service.serverPingMap.asMap().values) {
-            pingSumNanos += ping
+        // Update service serverPingMap with rolling averages
+        var count = 0
+        var sumNanos = 0L
+        for ((address, rolling) in pingAverages.asMap()) {
+            val average = rolling.average()
+            // Only update if the rolling average is valid
+            service.serverPingMap.put(address, average)
+
+            // Keep track of local average nanos
+            sumNanos += average
+            count++
         }
 
         // Set average ping nanos
-        this.service.averagePingNanos = if (service.serverPingMap.size() > 0) {
-            pingSumNanos / service.serverPingMap.size()
+        this.service.averagePingNanos = if (count > 0) {
+            sumNanos / count
         } else {
             -1L // No servers available, set to -1 to indicate no ping
         }
+
+        val ms = this.service.averagePingNanos / 1_000_000
+        System.err.println(
+            "[recalculateAveragePing] Average Ping: ${service.averagePingNanos} nanos ($ms ms) " +
+                "from ${pingAverages.size()} servers."
+        )
     }
 }

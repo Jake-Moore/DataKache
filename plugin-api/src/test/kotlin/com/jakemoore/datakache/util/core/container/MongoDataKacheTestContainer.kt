@@ -9,6 +9,10 @@ import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.util.TestPlugin
 import com.jakemoore.datakache.util.TestUtil
 import com.jakemoore.datakache.util.doc.TestPlayerDocCache
+import com.mongodb.ConnectionString
+import com.mongodb.MongoClientSettings
+import com.mongodb.kotlin.client.coroutine.MongoClient
+import org.bson.UuidRepresentation
 import org.mockbukkit.mockbukkit.MockBukkit
 import org.mockbukkit.mockbukkit.ServerMock
 import org.testcontainers.containers.MongoDBContainer
@@ -22,9 +26,10 @@ import java.io.File
  */
 @Suppress("UnusedVariable", "unused")
 class MongoDataKacheTestContainer(
-    private val container: MongoDBContainer,
-    private val databaseName: String = "TestDatabase"
+    private val dbNameShort: String = "TestDatabase"
 ) : DataKacheTestContainer {
+
+    private lateinit var mongoClient: MongoClient
 
     private lateinit var config: DataKacheConfig
     private var mockServer: ServerMock? = null
@@ -33,9 +38,6 @@ class MongoDataKacheTestContainer(
     private var _cache: TestPlayerDocCache? = null
 
     override suspend fun beforeSpec() {
-        // Start the MongoDB container
-        container.start()
-
         // Validate container is running
         require(container.isRunning) {
             "MongoDB container failed to start"
@@ -43,6 +45,11 @@ class MongoDataKacheTestContainer(
         require(!container.connectionString.isNullOrBlank()) {
             "MongoDB connection string is empty"
         }
+
+        // Initialize MongoDB client
+        val settings = MongoClientSettings.builder().uuidRepresentation(UuidRepresentation.STANDARD)
+        settings.applyConnectionString(ConnectionString(container.connectionString))
+        mongoClient = MongoClient.create(settings.build())
 
         // Create context factory and context
         config = DataKacheConfig(
@@ -76,11 +83,16 @@ class MongoDataKacheTestContainer(
         }
 
         // Create registration and cache
-        TestUtil.createRegistration(databaseName = databaseName).also {
+        TestUtil.createRegistration(databaseName = dbNameShort).also {
             _registration = it
             _cache = TestUtil.createTestPlayerDocCache(plugin, it)
         }
     }
+
+    private val databaseName: String
+        get() = requireNotNull(_registration) {
+            "Registration is not initialized. Ensure beforeEach is called."
+        }.databaseName
 
     override suspend fun afterEach() {
         // Shut down registration and cache
@@ -92,12 +104,8 @@ class MongoDataKacheTestContainer(
         }
 
         try {
-            // Clear this collection entirely, preparing for the next test
-            cache.clearDocsFromDatabasePermanently().getOrThrow()
-            val remaining = cache.readSizeFromDatabase().getOrThrow()
-            require(remaining == 0L) {
-                "Cache should be empty after test, but found $remaining documents"
-            }
+            // Drop the database so the next test starts with a clean slate
+            dropDatabase()
         } finally {
             runCatching { reg.shutdown() }
 
@@ -124,8 +132,8 @@ class MongoDataKacheTestContainer(
     }
 
     override suspend fun afterSpec() {
-        // Stop container
-        container.stop()
+        // Close MongoDB client
+        runCatching { mongoClient.close() }
 
         // Double Check MockBukkit
         runCatching { MockBukkit.unmock() }
@@ -148,18 +156,35 @@ class MongoDataKacheTestContainer(
     override val plugin: TestPlugin
         get() = requireNotNull(mockPlugin) { "Plugin is not initialized. Ensure beforeEach is called." }
 
-    companion object {
-        /**
-         * Creates a new MongoDataKacheTestContainer with default MongoDB 8.0 image.
-         *
-         * @param databaseName The name of the test database
-         * @return A new MongoDataKacheTestContainer instance
-         */
-        fun create(databaseName: String = "TestDatabase"): MongoDataKacheTestContainer {
-            // Create a fresh MongoDB container on each test run (prevent reuse)
-            val container = MongoDBContainer(DockerImageName.parse("mongo:8.0"))
-                .withReuse(false)
-            return MongoDataKacheTestContainer(container, databaseName)
+    private suspend fun dropDatabase() {
+        runCatching {
+            mongoClient.getDatabase(databaseName).drop()
+        }.onFailure {
+            it.printStackTrace()
         }
+    }
+
+    companion object {
+        private var _container: MongoDBContainer? = null
+        internal fun startContainers() {
+            runCatching {
+                _container?.stop()
+            }
+
+            this._container = MongoDBContainer(DockerImageName.parse("mongo:8.0"))
+                .withReuse(false).also { it.start() }
+        }
+
+        internal fun stopContainers() {
+            runCatching {
+                _container?.stop()
+            }
+            _container = null
+        }
+
+        internal val container: MongoDBContainer
+            get() = requireNotNull(_container) {
+                "MongoDB container is not initialized. Call startContainers() before accessing."
+            }
     }
 }

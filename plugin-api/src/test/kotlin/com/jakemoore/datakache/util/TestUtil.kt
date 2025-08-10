@@ -24,7 +24,33 @@ object TestUtil {
         databaseName: String = "TestDatabase"
     ): DataKacheTestContainer {
         return when (storageMode) {
-            StorageMode.MONGODB -> MongoDataKacheTestContainer.create(databaseName)
+            StorageMode.MONGODB -> MongoDataKacheTestContainer(databaseName)
+        }
+    }
+
+    /**
+     * Starts the necessary test containers for the specified storage mode.
+     *
+     * Should be called before all tests to ensure the environment is set up correctly.
+     */
+    fun startTestContainers(
+        storageMode: StorageMode,
+    ) {
+        when (storageMode) {
+            StorageMode.MONGODB -> MongoDataKacheTestContainer.startContainers()
+        }
+    }
+
+    /**
+     * Stops the test containers for the specified storage mode.
+     *
+     * Should be called after all tests to clean up the environment.
+     */
+    fun stopTestContainers(
+        storageMode: StorageMode,
+    ) {
+        when (storageMode) {
+            StorageMode.MONGODB -> MongoDataKacheTestContainer.stopContainers()
         }
     }
 
