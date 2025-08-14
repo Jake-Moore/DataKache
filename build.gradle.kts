@@ -29,7 +29,7 @@ ext {
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.0")
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.10")
 
     // MongoDB Driver + Kotlin Support
     val mongoVer = "5.5.1"
