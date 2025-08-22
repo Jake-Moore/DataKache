@@ -140,7 +140,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         }
 
         // Shutdown the super cache
-        val superShutdownSuccess = shutdownSuper()
+        val superShutdownSuccess = shutdownDocCache()
 
         // Mark as not running
         cacheMap.clear()
@@ -158,7 +158,10 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         return superShutdownSuccess
     }
 
-    protected abstract suspend fun shutdownSuper(): Boolean
+    protected open suspend fun shutdownDocCache(): Boolean {
+        // nothing, intended for super class overrides
+        return true
+    }
 
     // ------------------------------------------------------------ //
     //                          API Methods                         //

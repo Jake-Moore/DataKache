@@ -68,14 +68,6 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     abstract fun getUsernameKProperty(): KProperty<String?>
 
     // ------------------------------------------------------------ //
-    //                         Service Methods                      //
-    // ------------------------------------------------------------ //
-    override suspend fun shutdownSuper(): Boolean {
-        // Nothing to do here, no special shutdown logic for GenericDocCache
-        return true
-    }
-
-    // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
     /**
