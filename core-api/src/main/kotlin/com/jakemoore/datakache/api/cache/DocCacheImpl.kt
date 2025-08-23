@@ -71,6 +71,9 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         if (running) return false
 
         try {
+            // Ensure the backing Collection is created on the majority of nodes, ready for us after this call
+            DataKache.storageMode.databaseService.ensureCollectionExists(this)
+
             // Capture operation time BEFORE loading documents to prevent timing gaps
             val operationTime = DataKache.storageMode.databaseService.getCurrentOperationTime()
             this.getLoggerInternal().debug(

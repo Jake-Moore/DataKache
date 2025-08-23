@@ -103,6 +103,13 @@ internal abstract class DatabaseService : LoggerService, Service {
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
     /**
+     * Ensure the backing collection for the given [docCache] exists in the database.
+     *
+     * Creates the collection if it does not exist.
+     */
+    internal abstract suspend fun <K : Any, D : Doc<K, D>> ensureCollectionExists(docCache: DocCache<K, D>)
+
+    /**
      * Insert the given document to the database.
      *
      * Will not overwrite an existing document. Insertions that violate a primary key will throw:

@@ -23,6 +23,7 @@ import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.connections.mongo.MongoTransactions.checkDuplicateKeyExceptions
 import com.jakemoore.datakache.core.serialization.util.SerializationUtil
+import com.jakemoore.datakache.util.eventually
 import com.mongodb.ConnectionString
 import com.mongodb.MongoClientSettings
 import com.mongodb.MongoException
@@ -49,6 +50,7 @@ import org.bson.types.ObjectId
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
 
 internal class MongoDatabaseService : DatabaseService() {
 
@@ -224,6 +226,33 @@ internal class MongoDatabaseService : DatabaseService() {
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
+    override suspend fun <K : Any, D : Doc<K, D>> ensureCollectionExists(docCache: DocCache<K, D>) {
+        // Check if the collection already exists
+        val database = getDatabase(docCache)
+
+        // Attempt to find the collection by name
+        val existing = database.listCollectionNames().firstOrNull { it == docCache.cacheName }
+        if (existing != null) {
+            // Collection already exists, nothing to do
+            return
+        }
+
+        // Create the collection
+        database.createCollection(docCache.cacheName)
+
+        // Try for a little while, to ensure the collection is fully created and visible
+        eventually(timeout = 10.seconds) {
+            // Wait until the collection appears in the list of collections
+            val collectionNames = database.listCollectionNames().toList()
+            require(docCache.cacheName in collectionNames) {
+                "Collection '${docCache.cacheName}' not found in database '${docCache.databaseName}' after creation."
+            }
+        }
+        docCache.getLoggerInternal().debug(
+            "Created Collection: ${docCache.cacheName} in Database: ${docCache.databaseName}"
+        )
+    }
+
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
     override suspend fun <K : Any, D : Doc<K, D>> insertInternal(
         docCache: DocCache<K, D>,
@@ -295,8 +324,7 @@ internal class MongoDatabaseService : DatabaseService() {
         val client = requireNotNull(mongoClient) {
             "MongoClient is not initialized! Could not update Doc in MongoDB!"
         }
-        // Using WriteConcern.MAJORITY to ensure the write is acknowledged by the majority of nodes
-        val collection = getMongoCollection(docCache).withWriteConcern(WriteConcern.MAJORITY)
+        val collection = getMongoCollection(docCache)
         return@withContext MongoTransactions.update(
             client,
             collection,
@@ -583,50 +611,44 @@ internal class MongoDatabaseService : DatabaseService() {
     private val collections = ConcurrentHashMap<String, MongoCollection<*>>() // Map<Name, MongoCollection>
     private val rawCollections = ConcurrentHashMap<String, MongoCollection<Document>>() // Map<Name, MongoCollection>
 
-    @Suppress("UNCHECKED_CAST")
-    private fun <K : Any, D : Doc<K, D>> getMongoCollection(docCache: DocCache<K, D>): MongoCollection<D> {
+    private fun <K : Any, D : Doc<K, D>> getDatabase(docCache: DocCache<K, D>): MongoDatabase {
         val client = requireNotNull(this.mongoClient) {
             "MongoClient is not initialized! Could not fetch MongoCollection!"
         }
+
+        // Create or Get the current Database from MongoDB
+        return databases.computeIfAbsent(docCache.databaseName) { name: String ->
+            // Using MAJORITY to ensure everything is acknowledged by the majority of nodes
+            client.getDatabase(name).withWriteConcern(WriteConcern.MAJORITY)
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <K : Any, D : Doc<K, D>> getMongoCollection(docCache: DocCache<K, D>): MongoCollection<D> {
         // Unique key that identifies the cache in this specific database
         val cacheKey = docCache.databaseName + "." + docCache.cacheName
 
-        // Return existing cached collection if available
-        collections[cacheKey]?.let {
-            return it as MongoCollection<D>
-        }
-
-        // Create or Get the current Database from MongoDB
-        val database = databases.computeIfAbsent(docCache.databaseName) { name: String ->
-            client.getDatabase(name)
-        }
-
-        // Create or Get the MongoCollection for the specific DocCache
-        return database
-            .getCollection(docCache.cacheName, docCache.docClass)
-            .also { collections[cacheKey] = it }
+        // Create or Get the current Collection from MongoDB
+        return collections.computeIfAbsent(cacheKey) {
+            getDatabase(docCache)
+                .getCollection(docCache.cacheName, docCache.docClass)
+                // Using MAJORITY to ensure everything is acknowledged by the majority of nodes
+                .withWriteConcern(WriteConcern.MAJORITY)
+        } as MongoCollection<D>
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun <K : Any, D : Doc<K, D>> getRawCollection(docCache: DocCache<K, D>): MongoCollection<Document> {
-        val client = requireNotNull(this.mongoClient) {
-            "MongoClient is not initialized! Could not fetch raw MongoCollection!"
-        }
         // Unique key that identifies the cache in this specific database
         val rawKey = docCache.databaseName + "." + docCache.cacheName
 
-        // Return existing cached collection if available
-        rawCollections[rawKey]?.let { return it }
-
-        // Create or Get the current Database from MongoDB
-        val database = databases.computeIfAbsent(docCache.databaseName) { name: String ->
-            client.getDatabase(name)
+        // Create or Get the current Collection from MongoDB
+        return rawCollections.computeIfAbsent(rawKey) {
+            getDatabase(docCache)
+                .getCollection<Document>(docCache.cacheName)
+                // Using MAJORITY to ensure everything is acknowledged by the majority of nodes
+                .withWriteConcern(WriteConcern.MAJORITY)
         }
-
-        // Create or Get the MongoCollection for the specific DocCache
-        return database
-            .getCollection<Document>(docCache.cacheName)
-            .also { rawCollections[rawKey] = it }
     }
 
     @Suppress("CanConvertToMultiDollarString")
