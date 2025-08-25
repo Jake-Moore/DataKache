@@ -54,7 +54,7 @@ dependencies {
 
     // MockBukkit
     @Suppress("VulnerableLibrariesLocal")
-    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.7")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.72.8")
 }
 
 tasks {
