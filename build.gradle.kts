@@ -75,8 +75,8 @@ allprojects {
         detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")
 
         // Annotations
-        compileOnly("org.jetbrains:annotations:26.0.2")
-        testCompileOnly("org.jetbrains:annotations:26.0.2")
+        compileOnly("org.jetbrains:annotations:26.0.2-1")
+        testCompileOnly("org.jetbrains:annotations:26.0.2-1")
     }
 
     repositories {
