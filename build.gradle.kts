@@ -29,7 +29,7 @@ ext {
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.10")
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.20")
 
     // MongoDB Driver + Kotlin Support
     val mongoVer = "5.5.1"
@@ -75,8 +75,8 @@ allprojects {
         detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")
 
         // Annotations
-        compileOnly("org.jetbrains:annotations:26.0.2")
-        testCompileOnly("org.jetbrains:annotations:26.0.2")
+        compileOnly("org.jetbrains:annotations:26.0.2-1")
+        testCompileOnly("org.jetbrains:annotations:26.0.2-1")
     }
 
     repositories {
