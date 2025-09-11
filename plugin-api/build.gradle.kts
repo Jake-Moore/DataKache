@@ -2,6 +2,7 @@
 
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.util.jar.JarFile
 
 plugins {
     kotlin("jvm")
@@ -9,8 +10,38 @@ plugins {
 }
 
 repositories {
+    mavenCentral()
     maven(url = "https://repo.papermc.io/repository/maven-public/")
 }
+
+// Base MockBukkit Dependency Versions
+val mockBukkitModule = "org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.76.0"
+val defaultPaperVersion = "1.21.5-R0.1-SNAPSHOT"
+
+// Resolve JUST MockBukkit jar via a detached, resolvable configuration
+// This avoids issues with other resolutions that cause resolution cycle failures
+fun resolvePaperVersionFromMockBukkit(): String {
+    val detached = configurations.detachedConfiguration(
+        dependencies.create(mockBukkitModule)
+    ).apply {
+        // we only need the main jar
+        isTransitive = false
+    }
+
+    val mockbukkitJar = detached
+        .resolve()
+        .find { it.name.startsWith("mockbukkit-") }
+
+    return if (mockbukkitJar != null) {
+        JarFile(mockbukkitJar).use { jar ->
+            jar.manifest?.mainAttributes?.getValue("Paper-Version") ?: defaultPaperVersion
+        }
+    } else {
+        defaultPaperVersion
+    }
+}
+// Evaluate once at configuration time (safe, isolated)
+val paperVersion = resolvePaperVersionFromMockBukkit()
 
 // Unique module dependencies
 dependencies {
@@ -53,8 +84,9 @@ dependencies {
     testRuntimeOnly(project.property("slf4j-nop") as String)
 
     // MockBukkit
+    testImplementation(mockBukkitModule)
     @Suppress("VulnerableLibrariesLocal")
-    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.76.0")
+    testImplementation("io.papermc.paper:paper-api:${paperVersion}")
 }
 
 tasks {
