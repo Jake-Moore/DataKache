@@ -32,7 +32,7 @@ ext {
     set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.20")
 
     // MongoDB Driver + Kotlin Support
-    val mongoVer = "5.5.1"
+    val mongoVer = "5.6.0"
     set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
     set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
     set("slf4j-nop", "org.slf4j:slf4j-nop:2.0.17") // Logging for MongoDB (silent, no-op)
