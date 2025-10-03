@@ -62,6 +62,9 @@ dependencies {
     api(project.property("kotlinx-serialization-json-jvm") as String)
     api(project.property("kotlin-reflect") as String)
 
+    // KamiCommon
+    api(project.property("kamicommon-standalone-utils") as String)
+
     // MongoDB
     api(project.property("mongodb-driver-kotlin-coroutine") as String)
     api(project.property("bson-kotlinx") as String)

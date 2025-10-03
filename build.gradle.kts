@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.4.2"
+val VERSION = "0.4.3-SNAPSHOT"
 
 ext {
     // KotlinX
@@ -30,6 +30,10 @@ ext {
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
     set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.20")
+
+    // KamiCommon standalone-utils
+    val kamiCommonVer = "5.0.0-alpha.27-20251003.052255-5"
+    set("kamicommon-standalone-utils", "com.kamikazejam.kamicommon:standalone-utils:$kamiCommonVer")
 
     // MongoDB Driver + Kotlin Support
     val mongoVer = "5.5.1"

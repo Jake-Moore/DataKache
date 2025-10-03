@@ -6,7 +6,6 @@ import com.jakemoore.datakache.api.config.DataKachePluginConfig
 import com.jakemoore.datakache.api.config.DataKachePluginLang
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.logging.PluginLoggerService
-import org.bukkit.configuration.file.FileConfiguration
 import org.bukkit.plugin.java.JavaPlugin
 import java.io.File
 
@@ -19,16 +18,8 @@ class DataKachePluginContext : DataKacheContext {
 
     constructor(plugin: JavaPlugin) : this(
         plugin = plugin,
-        fileConfiguration = DataKachePluginConfig.loadFileConfiguration(
-            plugin = plugin,
-            resourceFile = "DataKache.yml",
-        ),
-    )
-
-    constructor(plugin: JavaPlugin, fileConfiguration: FileConfiguration) : this(
-        plugin = plugin,
-        config = DataKachePluginConfig.loadFromFileConfiguration(fileConfiguration),
-        lang = DataKachePluginLang.loadFromFileConfiguration(fileConfiguration)
+        config = DataKachePluginConfig.loadDataKacheConfig(plugin),
+        lang = DataKachePluginConfig.loadDataKacheLang(plugin)
     )
 
     constructor(plugin: JavaPlugin, config: DataKacheConfig, lang: DataKachePluginLang) {
