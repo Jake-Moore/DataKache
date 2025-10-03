@@ -19,6 +19,8 @@ object DataKachePluginConfig {
      * A supplier that provides the [StandaloneConfig] used to configure the DataKache client.
      * This defaults to trying to find the DataKache.yml file on the filesystem, but can be
      * overridden to provide custom configuration loading logic.
+     *
+     * This value must be set BEFORE enabling [com.jakemoore.datakache.DataKachePlugin]
      */
     var configSupplier: Function<JavaPlugin, ConfigurationMethods<*>> = Function { plugin ->
         val file = File(plugin.dataFolder, PLUGIN_CONFIG_FILE)
@@ -29,10 +31,21 @@ object DataKachePluginConfig {
         }
     }
 
+    /**
+     * An optional override for the database namespace specified in the configuration file.
+     * If set, this value will take precedence over the value in the config file.
+     * This can be useful for multi-tenant applications or when isolating data between
+     * different environments (e.g., development, staging, production).
+     *
+     * This value must be set BEFORE enabling [com.jakemoore.datakache.DataKachePlugin]
+     */
+    var databaseNamespaceOverride: String? = null
+
     internal fun loadDataKacheConfig(plugin: JavaPlugin): DataKacheConfig {
         val config = getCachedConfig(plugin)
+        val namespace = databaseNamespaceOverride ?: config.getString("database-namespace", "global")
         return DataKacheConfig(
-            databaseNamespace = config.getString("database-namespace", "global"),
+            databaseNamespace = namespace,
             debug = config.getBoolean("debug", true),
             storageMode = StorageMode.valueOf(config.getString("storage.mode")),
 
