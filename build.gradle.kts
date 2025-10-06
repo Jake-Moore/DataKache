@@ -32,17 +32,17 @@ ext {
     set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.20")
 
     // KamiCommon standalone-utils
-    val kamiCommonVer = "5.0.0-alpha.27-20251003.052255-5"
+    val kamiCommonVer = "5.0.0-alpha.28-SNAPSHOT"
     set("kamicommon-standalone-utils", "com.kamikazejam.kamicommon:standalone-utils:$kamiCommonVer")
 
     // MongoDB Driver + Kotlin Support
-    val mongoVer = "5.5.1"
+    val mongoVer = "5.6.1"
     set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
     set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
     set("slf4j-nop", "org.slf4j:slf4j-nop:2.0.17") // Logging for MongoDB (silent, no-op)
 
     // Google Guava (for CacheBuilder)
-    set("guava", "com.google.guava:guava:33.4.8-jre")
+    set("guava", "com.google.guava:guava:33.5.0-jre")
 
     // Testing Dependencies
     val kotestVer = "5.9.1"

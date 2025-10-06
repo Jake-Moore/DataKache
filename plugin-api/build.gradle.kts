@@ -15,7 +15,7 @@ repositories {
 }
 
 // Base MockBukkit Dependency Versions
-val mockBukkitModule = "org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.76.0"
+val mockBukkitModule = "org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.83.0"
 val defaultPaperVersion = "1.21.5-R0.1-SNAPSHOT"
 
 // Resolve JUST MockBukkit jar via a detached, resolvable configuration
