@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.4.3"
+val VERSION = "0.4.4"
 
 ext {
     // KotlinX
@@ -51,12 +51,11 @@ ext {
     set("kotest-property", "io.kotest:kotest-property:${kotestVer}")
     set("kotest-framework-datatest", "io.kotest:kotest-framework-datatest:${kotestVer}")
 
-    val testcontainersVer = "1.21.3"
-    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:${testcontainersVer}")
+    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:1.21.3")
     // NOTE: the MongoDB container automatically sets up its own single-node replica set
     //       This means it supports retryable writes and transactions automatically.
-    set("testcontainers-mongodb", "org.testcontainers:mongodb:${testcontainersVer}")
-    set("testcontainers-core", "org.testcontainers:testcontainers:${testcontainersVer}")
+    set("testcontainers-mongodb", "org.testcontainers:mongodb:1.21.3")
+    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.2")
 }
 
 allprojects {

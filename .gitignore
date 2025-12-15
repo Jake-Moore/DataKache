@@ -6,7 +6,6 @@ build/
 
 
 ### IntelliJ IDEA ###
-.idea
 .kotlin/
 .kotlinx/
 *.iws
@@ -40,7 +39,9 @@ bin/
 
 ### Mac OS ###
 .DS_Store
-/.idea/
 /allatori/input.txt
 /allatori/output.txt
 /src/test/java/TestAMQP.java
+
+/.idea/*
+!/.idea/runConfigurations
