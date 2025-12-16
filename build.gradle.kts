@@ -29,7 +29,7 @@ ext {
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.2.21")
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.0")
 
     // KamiCommon standalone-utils
     val kamiCommonVer = "5.0.0-alpha.36"
@@ -51,11 +51,11 @@ ext {
     set("kotest-property", "io.kotest:kotest-property:${kotestVer}")
     set("kotest-framework-datatest", "io.kotest:kotest-framework-datatest:${kotestVer}")
 
-    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:1.21.3")
+    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:1.21.4")
     // NOTE: the MongoDB container automatically sets up its own single-node replica set
     //       This means it supports retryable writes and transactions automatically.
-    set("testcontainers-mongodb", "org.testcontainers:mongodb:1.21.3")
-    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.2")
+    set("testcontainers-mongodb", "org.testcontainers:mongodb:1.21.4")
+    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.3")
 }
 
 allprojects {
