@@ -6,37 +6,36 @@ import com.jakemoore.datakache.plugin.command.api.AbstractCommand
 import com.jakemoore.datakache.util.Color
 import org.bukkit.command.CommandSender
 
-internal class CmdStatus(
-    parent: DataKacheCommand,
-) : AbstractCommand(
-    parent = parent,
-    commandName = "status",
-    permission = "datakache.command.status",
-    argsDescription = "",
-    description = "View DataKache Status.",
-) {
-
+internal class CmdStatus(parent: DataKacheCommand) :
+    AbstractCommand(
+        parent = parent,
+        commandName = "status",
+        permission = "datakache.command.status",
+        argsDescription = "",
+        description = "View DataKache Status.",
+    ) {
     override fun processCommand(sender: CommandSender, args: Array<String>) {
         sender.sendMessage(Color.t("&7--- &9[&bDataKache Status&9]&7 ---"))
         sender.sendMessage(Color.t("&7Database namespace: &8'&f${DataKache.databaseNamespace}&8'"))
-        val storageStatus = if (DataKache.storageMode.isDatabaseReadyForWrites()) {
-            "&aReady"
-        } else {
-            "&cNot Ready"
-        }
+        val storageStatus =
+            if (DataKache.storageMode.isDatabaseReadyForWrites()) {
+                "&aReady"
+            } else {
+                "&cNot Ready"
+            }
         sender.sendMessage(Color.t("&7Storage Mode: &f${DataKache.storageMode.name} &7($storageStatus&7)"))
 
         val averageMS = DataKache.storageMode.getDatabaseServiceAveragePing() / 1_000_000
         sender.sendMessage(
             Color.t(
-                "&7Storage Pings &8(&7average &f${averageMS}ms&8)"
-            )
+                "&7Storage Pings &8(&7average &f${averageMS}ms&8)",
+            ),
         )
         for ((address, pingNS) in DataKache.storageMode.getDatabaseServiceServerPings()) {
             sender.sendMessage(
                 Color.t(
-                    "  &8'&f${trimAddress(address)}&8' &7-> &f${pingNS / 1_000_000}ms &7(${pingNS}ns)"
-                )
+                    "  &8'&f${trimAddress(address)}&8' &7-> &f${pingNS / 1_000_000}ms &7(${pingNS}ns)",
+                ),
             )
         }
     }

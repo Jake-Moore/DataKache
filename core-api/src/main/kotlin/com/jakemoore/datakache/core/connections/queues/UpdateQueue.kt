@@ -11,6 +11,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -34,9 +35,8 @@ import kotlin.time.TimeSource
 internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     private val key: K,
     private val docCache: DocCache<K, D>,
-    private val updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D
+    private val updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D,
 ) {
-
     // Separate job for the processing coroutine
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val processingJob: Job
@@ -59,9 +59,10 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
     init {
         // Start the processing coroutine with its own job
-        processingJob = scope.launch {
-            processUpdates()
-        }
+        processingJob =
+            scope.launch {
+                processUpdates()
+            }
     }
 
     /**
@@ -73,11 +74,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      * - If the channel is full, retries with short delays
      * - If all retries fail, rejects the update with an appropriate exception
      */
-    fun enqueueUpdate(
-        doc: D,
-        updateFunction: (D) -> D,
-        bypassValidation: Boolean,
-    ): CompletableDeferred<D> {
+    fun enqueueUpdate(doc: D, updateFunction: (D) -> D, bypassValidation: Boolean): CompletableDeferred<D> {
         require(doc.key == key) {
             "Enqueued doc key does not match UpdateQueue key"
         }
@@ -87,7 +84,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
         if (isShutdown.get()) {
             deferred.completeExceptionally(
-                IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown")
+                IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown"),
             )
             return deferred
         }
@@ -103,12 +100,13 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 // Successfully queued - increment counter
                 queueSize.incrementAndGet()
             }
+
             sendResult.isFailure -> {
                 val exception = sendResult.exceptionOrNull()
-                if (exception is kotlinx.coroutines.channels.ClosedSendChannelException) {
+                if (exception is ClosedSendChannelException) {
                     // Channel is closed (shutdown)
                     deferred.completeExceptionally(
-                        IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown")
+                        IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown"),
                     )
                 } else {
                     // Channel is full - implement backpressure strategy
@@ -125,10 +123,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      * Attempts to retry sending the request with short delays.
      */
     @OptIn(DelicateCoroutinesApi::class)
-    private fun handleBackpressure(
-        request: UpdateRequest<K, D>,
-        deferred: CompletableDeferred<D>
-    ) {
+    private fun handleBackpressure(request: UpdateRequest<K, D>, deferred: CompletableDeferred<D>) {
         // Launch a coroutine to handle backpressure asynchronously
         scope.launch {
             try {
@@ -148,18 +143,19 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 }
 
                 // All retries failed - reject the update
-                val errorMessage = "UpdateQueue for key ${docCache.keyToString(key)} is full " +
-                    "(capacity: $MAX_QUEUED_UPDATES). Update rejected after $MAX_BACKPRESSURE_RETRIES retry attempts."
+                val errorMessage =
+                    "UpdateQueue for key ${docCache.keyToString(key)} is full " +
+                        "(capacity: $MAX_QUEUED_UPDATES). Update rejected after $MAX_BACKPRESSURE_RETRIES retry attempts."
 
                 docCache.getLoggerInternal().warn(errorMessage)
                 deferred.completeExceptionally(
-                    IllegalStateException(errorMessage)
+                    IllegalStateException(errorMessage),
                 )
             } catch (e: Exception) {
                 // Handle any unexpected errors during backpressure handling
                 docCache.getLoggerInternal().error(
                     e,
-                    "Error during backpressure handling for key: ${docCache.keyToString(key)}"
+                    "Error during backpressure handling for key: ${docCache.keyToString(key)}",
                 )
                 deferred.completeExceptionally(e)
             }
@@ -185,15 +181,15 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 } catch (e: CancellationException) {
                     request.deferred.completeExceptionally(
                         CancellationException(
-                            "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}"
-                        )
+                            "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}",
+                        ),
                     )
                     // rethrow for cooperative cancellation
                     throw e
                 } catch (e: Exception) {
                     docCache.getLoggerInternal().error(
                         e,
-                        "Unexpected error processing update request for key: ${docCache.keyToString(key)}"
+                        "Unexpected error processing update request for key: ${docCache.keyToString(key)}",
                     )
                     request.deferred.completeExceptionally(e)
                 } finally {
@@ -204,7 +200,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
             // Don't log cancellation exceptions as errors during shutdown
             if (!isShutdown.get()) {
                 docCache.getLoggerInternal().severe(
-                    "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}"
+                    "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}",
                 )
             }
             // rethrow for cooperative cancellation
@@ -212,7 +208,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
         } catch (e: Exception) {
             docCache.getLoggerInternal().error(
                 e,
-                "UpdateQueue processing loop terminated with error for key: ${docCache.keyToString(key)}"
+                "UpdateQueue processing loop terminated with error for key: ${docCache.keyToString(key)}",
             )
         } finally {
             docCache.getLoggerInternal().debug("UpdateQueue processing ended for key: ${docCache.keyToString(key)}")
@@ -249,7 +245,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
             docCache.getLoggerInternal().debug(
                 "Shutting down UpdateQueue for key: ${docCache.keyToString(key)} - " +
-                    "will complete all pending updates (timeout: ${timeoutMs}ms)"
+                    "will complete all pending updates (timeout: ${timeoutMs}ms)",
             )
 
             // Step 1: Close the channel to prevent new updates
@@ -263,12 +259,12 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                     processingJob.join()
                 }
                 docCache.getLoggerInternal().debug(
-                    "UpdateQueue graceful shutdown complete for key: ${docCache.keyToString(key)}"
+                    "UpdateQueue graceful shutdown complete for key: ${docCache.keyToString(key)}",
                 )
             } catch (_: TimeoutCancellationException) {
                 docCache.getLoggerInternal().error(
                     "UpdateQueue shutdown timed out after ${timeoutMs}ms for key: ${docCache.keyToString(key)} - " +
-                        "forcing cancellation"
+                        "forcing cancellation",
                 )
 
                 // Force cancellation if timeout exceeded
@@ -280,8 +276,8 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                     if (result.isFailure) break
                     result.getOrNull()?.deferred?.completeExceptionally(
                         CancellationException(
-                            "UpdateQueue shutdown forced for key: ${docCache.keyToString(key)}"
-                        )
+                            "UpdateQueue shutdown forced for key: ${docCache.keyToString(key)}",
+                        ),
                     )
                 }
             } finally {
@@ -292,7 +288,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 runCatching { scope.coroutineContext[Job]?.join() }
 
                 docCache.getLoggerInternal().debug(
-                    "UpdateQueue scope cancelled and cleaned up for key: ${docCache.keyToString(key)}"
+                    "UpdateQueue scope cancelled and cleaned up for key: ${docCache.keyToString(key)}",
                 )
             }
         }
@@ -301,9 +297,8 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     /**
      * @return true if this queue has been idle for the specified duration
      */
-    fun isIdleForDuration(durationMs: Long): Boolean {
-        return !isProcessing.get() && lastActivityTime.get().elapsedNow().inWholeMilliseconds > durationMs
-    }
+    fun isIdleForDuration(durationMs: Long): Boolean =
+        !isProcessing.get() && lastActivityTime.get().elapsedNow().inWholeMilliseconds > durationMs
 
     /**
      * @return true if this queue is currently processing an update

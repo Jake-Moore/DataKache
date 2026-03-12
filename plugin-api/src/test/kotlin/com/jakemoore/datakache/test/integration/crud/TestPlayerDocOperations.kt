@@ -10,7 +10,6 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 
 @Suppress("unused")
 class TestPlayerDocOperations : AbstractDataKacheTest() {
-
     init {
         describe("PlayerDoc Operations") {
 

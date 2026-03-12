@@ -8,7 +8,4 @@ import com.jakemoore.datakache.api.doc.Doc
  * [doc] represents the successfully processed document. (nonnull = success).
  * [databaseDoc] represents the database document that was fetched (nonnull = failure requiring retry).
  */
-internal class TransactionResult<K : Any, D : Doc<K, D>>(
-    val doc: D?,
-    val databaseDoc: D? = null,
-)
+internal class TransactionResult<K : Any, D : Doc<K, D>>(val doc: D?, val databaseDoc: D? = null)

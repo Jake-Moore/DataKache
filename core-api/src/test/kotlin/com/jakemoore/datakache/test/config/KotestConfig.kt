@@ -13,7 +13,6 @@ import io.kotest.core.spec.SpecExecutionOrder
  */
 @Suppress("unused")
 object KotestConfig : AbstractProjectConfig() {
-
     override val specExecutionOrder = SpecExecutionOrder.Annotated
 
     override suspend fun beforeProject() {

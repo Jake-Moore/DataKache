@@ -14,7 +14,6 @@ object Color {
         return ChatColor.translateAlternateColorCodes('&', msg)
     }
 
-    fun t(msg: String): String {
-        return ChatColor.translateAlternateColorCodes('&', msg)
-    }
+    @Suppress("FunctionNameMinLength")
+    fun t(msg: String): String = ChatColor.translateAlternateColorCodes('&', msg)
 }

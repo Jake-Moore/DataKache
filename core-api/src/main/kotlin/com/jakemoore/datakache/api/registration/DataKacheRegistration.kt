@@ -5,8 +5,11 @@ import com.jakemoore.datakache.api.DataKacheAPI
 import com.jakemoore.datakache.api.DataKacheClient
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.cache.DocCacheImpl
+import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.exception.DuplicateCacheException
+import kotlinx.coroutines.future.future
 import java.util.Collections
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -33,8 +36,7 @@ class DataKacheRegistration internal constructor(
      * The [DatabaseRegistration] for this registration.
      */
     val databaseRegistration: DatabaseRegistration,
-) {
-
+) : DataKacheScope {
     /**
      * API Method to safely shut down this registration and all associated caches.
      *
@@ -52,7 +54,7 @@ class DataKacheRegistration internal constructor(
                     if (!success) {
                         DataKache.logger.severe(
                             "Failed to shut down cache '${cache.cacheName}' in database '$databaseName'. " +
-                                "Please check the cache implementation for proper shutdown handling."
+                                "Please check the cache implementation for proper shutdown handling.",
                         )
                     }
                 }.onFailure { e ->
@@ -114,7 +116,8 @@ class DataKacheRegistration internal constructor(
 
     // Normalizes the cache name to ensure uniqueness and consistency in the docCaches map.
     private fun normalizeCacheName(cacheName: String): String {
-        return cacheName.lowercase()
+        return cacheName
+            .lowercase()
             .replace(" ", "_") // replace spaces with underscores
             .replace("\\p{Zs}+".toRegex(), "") // replace any other whitespace
     }
@@ -122,7 +125,14 @@ class DataKacheRegistration internal constructor(
     /**
      * Gets a read only collection of all registered document caches for this database.
      */
-    fun getDocCaches(): Collection<DocCache<*, *>> {
-        return Collections.unmodifiableCollection(docCaches.values)
-    }
+    fun getDocCaches(): Collection<DocCache<*, *>> = Collections.unmodifiableCollection(docCaches.values)
+
+    // ------------------------------------------------------------ //
+    //              Java Compatibility — CompletableFuture API      //
+    // ------------------------------------------------------------ //
+
+    fun registerDocCacheAsync(docCache: DocCacheImpl<*, *>): CompletableFuture<Unit> =
+        future { registerDocCache(docCache) }
+
+    fun shutdownAsync(): CompletableFuture<Unit> = future { shutdown() }
 }

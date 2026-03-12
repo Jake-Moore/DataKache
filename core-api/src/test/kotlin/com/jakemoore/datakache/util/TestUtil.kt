@@ -10,7 +10,6 @@ import com.jakemoore.datakache.util.core.container.MongoDataKacheTestContainer
 import com.jakemoore.datakache.util.doc.TestGenericDocCache
 
 object TestUtil {
-
     /**
      * Returns a test container for the specified database type.
      *
@@ -18,23 +17,17 @@ object TestUtil {
      * @param databaseName The name of the test database
      * @return A DataKacheTestContainer instance for the specified database type
      */
-    fun createTestContainer(
-        storageMode: StorageMode,
-        databaseName: String = "TestDatabase"
-    ): DataKacheTestContainer {
-        return when (storageMode) {
+    fun createTestContainer(storageMode: StorageMode, databaseName: String = "TestDatabase"): DataKacheTestContainer =
+        when (storageMode) {
             StorageMode.MONGODB -> MongoDataKacheTestContainer(databaseName)
         }
-    }
 
     /**
      * Starts the necessary test containers for the specified storage mode.
      *
      * Should be called before all tests to ensure the environment is set up correctly.
      */
-    fun startTestContainers(
-        storageMode: StorageMode,
-    ) {
+    fun startTestContainers(storageMode: StorageMode) {
         when (storageMode) {
             StorageMode.MONGODB -> MongoDataKacheTestContainer.startContainers()
         }
@@ -45,9 +38,7 @@ object TestUtil {
      *
      * Should be called after all tests to clean up the environment.
      */
-    fun stopTestContainers(
-        storageMode: StorageMode,
-    ) {
+    fun stopTestContainers(storageMode: StorageMode) {
         when (storageMode) {
             StorageMode.MONGODB -> MongoDataKacheTestContainer.stopContainers()
         }
@@ -56,18 +47,14 @@ object TestUtil {
     fun createRegistration(
         client: DataKacheClient = DefaultKacheClient("TestClient"),
         databaseName: String = "TestDatabase",
-    ): DataKacheRegistration {
-        return DataKacheAPI.register(
-            client = client,
-            databaseName = databaseName,
-        )
-    }
+    ): DataKacheRegistration =
+        DataKacheAPI.register(
+        client = client,
+        databaseName = databaseName,
+    )
 
-    suspend fun createTestGenericDocCache(
-        registration: DataKacheRegistration,
-    ): TestGenericDocCache {
-        return TestGenericDocCache(registration).also {
+    suspend fun createTestGenericDocCache(registration: DataKacheRegistration): TestGenericDocCache =
+        TestGenericDocCache(registration).also {
             registration.registerDocCache(it)
         }
-    }
 }

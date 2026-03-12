@@ -6,11 +6,15 @@ package com.jakemoore.datakache.api.metrics.receiver
 interface UniqueIndexReceiver {
     // Read Operations
     fun onDatabaseReadDocByUniqueIndex()
+
     fun onCacheReadDocByUniqueIndex()
+
     fun onRegisterUniqueIndex()
 
     // Read Operation Failures
     fun onDatabaseReadDocByUniqueIndexFail()
+
     fun onCacheReadDocByUniqueIndexFail()
+
     fun onRegisterUniqueIndexFail()
 }

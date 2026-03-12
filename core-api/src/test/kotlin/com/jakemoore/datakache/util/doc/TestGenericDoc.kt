@@ -19,8 +19,12 @@ data class TestGenericDoc(
     val customSet: Set<MyData> = emptySet(),
     val customMap: Map<String, MyData> = emptyMap(),
 ) : GenericDoc<TestGenericDoc>() {
+    override fun copyHelper(version: Long): TestGenericDoc = this.copy(version = version)
 
-    override fun copyHelper(version: Long): TestGenericDoc {
-        return this.copy(version = version)
-    }
+    // Java-friendly mutation helpers for use in Java test code
+    fun withName(name: String?) = copy(name = name)
+
+    fun withBalance(balance: Double) = copy(balance = balance)
+
+    fun withList(list: List<String>) = copy(list = list)
 }

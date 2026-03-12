@@ -14,7 +14,7 @@ internal object UpdatePlayerDocResultHandler {
     internal suspend fun <D : PlayerDoc<D>> wrap(
         // Work cannot return a null document.
         //   If the document is not found it should throw a [DocumentNotFoundException].
-        work: suspend () -> D
+        work: suspend () -> D,
     ): DefiniteResult<D> {
         try {
             // METRICS
@@ -35,7 +35,7 @@ internal object UpdatePlayerDocResultHandler {
                 ResultExceptionWrapper(
                     message = "Update operation failed: Document not found",
                     exception = e,
-                )
+                ),
             )
         } catch (e: Exception) {
             // METRICS

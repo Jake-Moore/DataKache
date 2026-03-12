@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.toList
 
 @Suppress("unused")
 class TestDatabaseSizeOperations : AbstractDataKacheTest() {
-
     init {
         describe("Database Size Operations") {
 
@@ -23,9 +22,10 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should read size from database with one document") {
 
                 // Create one document
-                cache.create("sizeTestKey1") { doc ->
-                    doc.copy(name = "Size Test Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeTestKey1") { doc ->
+                        doc.copy(name = "Size Test Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
                 val sizeResult = cache.readSizeFromDatabase()
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -35,25 +35,30 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should read size from database with multiple documents") {
 
                 // Create multiple documents with unique names and balances
-                cache.create("sizeTestKey1") { doc ->
-                    doc.copy(name = "Size Test Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeTestKey1") { doc ->
+                        doc.copy(name = "Size Test Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("sizeTestKey2") { doc ->
-                    doc.copy(name = "Size Test Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeTestKey2") { doc ->
+                        doc.copy(name = "Size Test Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
-                cache.create("sizeTestKey3") { doc ->
-                    doc.copy(name = "Size Test Doc 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeTestKey3") { doc ->
+                        doc.copy(name = "Size Test Doc 3", balance = 300.0)
+                    }.getOrThrow()
 
-                cache.create("sizeTestKey4") { doc ->
-                    doc.copy(name = "Size Test Doc 4", balance = 400.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeTestKey4") { doc ->
+                        doc.copy(name = "Size Test Doc 4", balance = 400.0)
+                    }.getOrThrow()
 
-                cache.create("sizeTestKey5") { doc ->
-                    doc.copy(name = "Size Test Doc 5", balance = 500.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeTestKey5") { doc ->
+                        doc.copy(name = "Size Test Doc 5", balance = 500.0)
+                    }.getOrThrow()
 
                 val sizeResult = cache.readSizeFromDatabase()
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -68,25 +73,28 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
                 sizeResult.getOrThrow().shouldBe(0L)
 
                 // Create first document
-                cache.create("sizeIncreaseKey1") { doc ->
-                    doc.copy(name = "Size Increase Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeIncreaseKey1") { doc ->
+                        doc.copy(name = "Size Increase Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
                 sizeResult = cache.readSizeFromDatabase()
                 sizeResult.getOrThrow().shouldBe(1L)
 
                 // Create second document
-                cache.create("sizeIncreaseKey2") { doc ->
-                    doc.copy(name = "Size Increase Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeIncreaseKey2") { doc ->
+                        doc.copy(name = "Size Increase Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
                 sizeResult = cache.readSizeFromDatabase()
                 sizeResult.getOrThrow().shouldBe(2L)
 
                 // Create third document
-                cache.create("sizeIncreaseKey3") { doc ->
-                    doc.copy(name = "Size Increase Doc 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeIncreaseKey3") { doc ->
+                        doc.copy(name = "Size Increase Doc 3", balance = 300.0)
+                    }.getOrThrow()
 
                 sizeResult = cache.readSizeFromDatabase()
                 sizeResult.getOrThrow().shouldBe(3L)
@@ -95,18 +103,20 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size remains same after updating documents") {
 
                 // Create a document
-                cache.create("sizeUpdateKey") { doc ->
-                    doc.copy(name = "Size Update Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeUpdateKey") { doc ->
+                        doc.copy(name = "Size Update Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Size should be 1
                 var sizeResult = cache.readSizeFromDatabase()
                 sizeResult.getOrThrow().shouldBe(1L)
 
                 // Update the document
-                cache.update("sizeUpdateKey") { doc ->
-                    doc.copy(name = "Updated Size Doc", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .update("sizeUpdateKey") { doc ->
+                        doc.copy(name = "Updated Size Doc", balance = 200.0)
+                    }.getOrThrow()
 
                 // Size should still be 1 (update doesn't change count)
                 sizeResult = cache.readSizeFromDatabase()
@@ -116,17 +126,20 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size decreases after deleting documents") {
 
                 // Create multiple documents
-                cache.create("sizeDeleteKey1") { doc ->
-                    doc.copy(name = "Size Delete Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeDeleteKey1") { doc ->
+                        doc.copy(name = "Size Delete Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("sizeDeleteKey2") { doc ->
-                    doc.copy(name = "Size Delete Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeDeleteKey2") { doc ->
+                        doc.copy(name = "Size Delete Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
-                cache.create("sizeDeleteKey3") { doc ->
-                    doc.copy(name = "Size Delete Doc 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeDeleteKey3") { doc ->
+                        doc.copy(name = "Size Delete Doc 3", balance = 300.0)
+                    }.getOrThrow()
 
                 // Initial size should be 3
                 var sizeResult = cache.readSizeFromDatabase()
@@ -151,27 +164,29 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size with documents having complex data") {
 
                 // Create documents with complex data
-                cache.create("sizeComplexKey1") { doc ->
-                    doc.copy(
-                        name = "Complex Size Doc 1",
-                        balance = 100.0,
-                        list = listOf("item1", "item2"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key1" to MyData.createRandom())
-                    )
-                }.getOrThrow()
+                cache
+                    .create("sizeComplexKey1") { doc ->
+                        doc.copy(
+                            name = "Complex Size Doc 1",
+                            balance = 100.0,
+                            list = listOf("item1", "item2"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key1" to MyData.createRandom()),
+                        )
+                    }.getOrThrow()
 
-                cache.create("sizeComplexKey2") { doc ->
-                    doc.copy(
-                        name = "Complex Size Doc 2",
-                        balance = 200.0,
-                        list = listOf("item3", "item4", "item5"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key2" to MyData.createRandom())
-                    )
-                }.getOrThrow()
+                cache
+                    .create("sizeComplexKey2") { doc ->
+                        doc.copy(
+                            name = "Complex Size Doc 2",
+                            balance = 200.0,
+                            list = listOf("item3", "item4", "item5"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key2" to MyData.createRandom()),
+                        )
+                    }.getOrThrow()
 
                 val sizeResult = cache.readSizeFromDatabase()
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -181,16 +196,17 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size with documents having null values") {
 
                 // Create document with null values
-                cache.create("sizeNullKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }.getOrThrow()
+                cache
+                    .create("sizeNullKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }.getOrThrow()
 
                 val sizeResult = cache.readSizeFromDatabase()
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -200,9 +216,10 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size with documents having empty string key") {
 
                 // Create document with empty key
-                cache.create("") { doc ->
-                    doc.copy(name = "Empty Key Size Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("") { doc ->
+                        doc.copy(name = "Empty Key Size Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 val sizeResult = cache.readSizeFromDatabase()
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -213,9 +230,10 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
                 val specialKey = "size-test-key_with.special@chars#123"
 
                 // Create document with special key
-                cache.create(specialKey) { doc ->
-                    doc.copy(name = "Special Key Size Doc", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create(specialKey) { doc ->
+                        doc.copy(name = "Special Key Size Doc", balance = 200.0)
+                    }.getOrThrow()
 
                 val sizeResult = cache.readSizeFromDatabase()
                 sizeResult.shouldBeInstanceOf<Success<Long>>()
@@ -225,17 +243,20 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size consistency with readAllFromDatabase") {
 
                 // Create multiple documents
-                cache.create("sizeConsistencyKey1") { doc ->
-                    doc.copy(name = "Consistency Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeConsistencyKey1") { doc ->
+                        doc.copy(name = "Consistency Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("sizeConsistencyKey2") { doc ->
-                    doc.copy(name = "Consistency Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeConsistencyKey2") { doc ->
+                        doc.copy(name = "Consistency Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
-                cache.create("sizeConsistencyKey3") { doc ->
-                    doc.copy(name = "Consistency Doc 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeConsistencyKey3") { doc ->
+                        doc.copy(name = "Consistency Doc 3", balance = 300.0)
+                    }.getOrThrow()
 
                 // Size from readSizeFromDatabase
                 val sizeResult = cache.readSizeFromDatabase()
@@ -254,13 +275,15 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
             it("should verify size consistency with readKeysFromDatabase") {
 
                 // Create multiple documents
-                cache.create("sizeKeysConsistencyKey1") { doc ->
-                    doc.copy(name = "Keys Consistency Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeKeysConsistencyKey1") { doc ->
+                        doc.copy(name = "Keys Consistency Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("sizeKeysConsistencyKey2") { doc ->
-                    doc.copy(name = "Keys Consistency Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("sizeKeysConsistencyKey2") { doc ->
+                        doc.copy(name = "Keys Consistency Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
                 // Size from readSizeFromDatabase
                 val sizeResult = cache.readSizeFromDatabase()
@@ -283,26 +306,30 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
                 sizeResult.getOrThrow().shouldBe(0L)
 
                 // Create documents
-                cache.create("sequenceKey1") { doc ->
-                    doc.copy(name = "Sequence Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sequenceKey1") { doc ->
+                        doc.copy(name = "Sequence Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("sequenceKey2") { doc ->
-                    doc.copy(name = "Sequence Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("sequenceKey2") { doc ->
+                        doc.copy(name = "Sequence Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
-                cache.create("sequenceKey3") { doc ->
-                    doc.copy(name = "Sequence Doc 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("sequenceKey3") { doc ->
+                        doc.copy(name = "Sequence Doc 3", balance = 300.0)
+                    }.getOrThrow()
 
                 // Size should be 3
                 sizeResult = cache.readSizeFromDatabase()
                 sizeResult.getOrThrow().shouldBe(3L)
 
                 // Update one document
-                cache.update("sequenceKey2") { doc ->
-                    doc.copy(name = "Updated Sequence Doc 2", balance = 250.0)
-                }.getOrThrow()
+                cache
+                    .update("sequenceKey2") { doc ->
+                        doc.copy(name = "Updated Sequence Doc 2", balance = 250.0)
+                    }.getOrThrow()
 
                 // Size should still be 3
                 sizeResult = cache.readSizeFromDatabase()
@@ -316,9 +343,10 @@ class TestDatabaseSizeOperations : AbstractDataKacheTest() {
                 sizeResult.getOrThrow().shouldBe(2L)
 
                 // Create another document
-                cache.create("sequenceKey4") { doc ->
-                    doc.copy(name = "Sequence Doc 4", balance = 400.0)
-                }.getOrThrow()
+                cache
+                    .create("sequenceKey4") { doc ->
+                        doc.copy(name = "Sequence Doc 4", balance = 400.0)
+                    }.getOrThrow()
 
                 // Size should be 3
                 sizeResult = cache.readSizeFromDatabase()

@@ -9,11 +9,15 @@ package com.jakemoore.datakache.api.metrics.receiver
 interface PlayerDocCacheReceiver {
     // CRUD Operations
     fun onPlayerDocClear()
+
     fun onPlayerDocCreate()
 
     // Fail States
     fun onPlayerDocClearFail()
+
     fun onPlayerDocCreateDuplicateFail()
+
     fun onPlayerDocCreateDuplicateFailIndex()
+
     fun onPlayerDocCreateFail()
 }

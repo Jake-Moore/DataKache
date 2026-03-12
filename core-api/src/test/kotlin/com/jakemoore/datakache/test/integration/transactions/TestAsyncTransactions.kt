@@ -15,38 +15,41 @@ import kotlin.time.TimeSource
 @Order(1)
 @Suppress("unused")
 class TestAsyncTransactions : AbstractDataKacheTest() {
-
     init {
         describe("Async Transactions") {
             it("should handle concurrent transactions atomically") {
-                val doc = cache.createRandom {
-                    it.copy(
-                        balance = 0.0,
-                        list = listOf("Initial entry")
-                    )
-                }.getOrThrow()
+                val doc =
+                    cache
+                        .createRandom {
+                            it.copy(
+                                balance = 0.0,
+                                list = listOf("Initial entry"),
+                            )
+                        }.getOrThrow()
 
                 // Queue multiple transactions to modify the same document concurrently
                 val startMark = TimeSource.Monotonic.markNow()
                 val atomicCount = AtomicInteger(0)
-                val deferred = (1..THREAD_COUNT).map { i ->
-                    async {
-                        // coroutine scheduler will break FIFO unless we deliberately delay each enough
-                        //  to ensure they are processed in the order we want
-                        delay(i * DELAY_MS_PER_JOB)
-                        val r = cache.update(doc.key) {
-                            it.copy(
-                                list = it.list + "Thread $i started"
+                val deferred =
+                    (1..THREAD_COUNT).map { i ->
+                        async {
+                            // coroutine scheduler will break FIFO unless we deliberately delay each enough
+                            //  to ensure they are processed in the order we want
+                            delay(i * DELAY_MS_PER_JOB)
+                            val r =
+                                cache.update(doc.key) {
+                                    it.copy(
+                                        list = it.list + "Thread $i started",
+                                    )
+                                }
+                            val finished = atomicCount.addAndGet(1)
+                            val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
+                            System.err.println(
+                                "Async Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsedMillis}ms",
                             )
+                            return@async r
                         }
-                        val finished = atomicCount.addAndGet(1)
-                        val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
-                        System.err.println(
-                            "Async Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsedMillis}ms"
-                        )
-                        return@async r
                     }
-                }
                 val results = deferred.awaitAll()
 
                 // Verify that all transactions were successful

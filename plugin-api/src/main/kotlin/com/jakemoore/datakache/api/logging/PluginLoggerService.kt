@@ -18,12 +18,15 @@ open class PluginLoggerService(private val plugin: JavaPlugin, debug: Boolean = 
                 if (!permitsDebugStatements) return
                 Bukkit.getConsoleSender().sendMessage(Color.t("&7[DEBUG] $plPrefix$msg"))
             }
+
             LoggerService.LogLevel.INFO -> {
                 Bukkit.getConsoleSender().sendMessage(Color.t(plPrefix + msg))
             }
+
             LoggerService.LogLevel.WARNING -> {
                 Bukkit.getConsoleSender().sendMessage(Color.t("&e[WARNING] $plPrefix$msg"))
             }
+
             LoggerService.LogLevel.SEVERE -> {
                 Bukkit.getConsoleSender().sendMessage(Color.t("&c[SEVERE] $plPrefix$msg"))
             }

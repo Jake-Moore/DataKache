@@ -25,14 +25,11 @@ abstract class GenericDoc<D : GenericDoc<D>> : Doc<String, D> {
     //                          API Methods                         //
     // ------------------------------------------------------------ //
     private lateinit var docCache: GenericDocCache<D>
-    override fun getDocCache(): DocCache<String, D> {
-        return docCache
-    }
+
+    override fun getDocCache(): DocCache<String, D> = docCache
 
     @ApiStatus.Internal
-    override fun hasDocCacheInternal(): Boolean {
-        return ::docCache.isInitialized
-    }
+    override fun hasDocCacheInternal(): Boolean = ::docCache.isInitialized
 
     // ------------------------------------------------------------ //
     //                      Internal API Methods                    //
@@ -47,9 +44,7 @@ abstract class GenericDoc<D : GenericDoc<D>> : Doc<String, D> {
         }
     }
 
-    override fun hashCode(): Int {
-        return Objects.hashCode(this.key)
-    }
+    override fun hashCode(): Int = Objects.hashCode(this.key)
 
     override fun equals(other: Any?): Boolean {
         if (other === this) return true

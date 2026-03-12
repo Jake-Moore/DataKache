@@ -19,17 +19,17 @@ import java.util.UUID
 
 @Suppress("unused")
 class TestCreateOperations : AbstractDataKacheTest() {
-
     init {
         describe("Create Operations") {
 
             it("should create document with specific key") {
-                val result = cache.create("testKey") { doc ->
-                    doc.copy(
-                        name = "Test Document",
-                        balance = 100.0
-                    )
-                }
+                val result =
+                    cache.create("testKey") { doc ->
+                        doc.copy(
+                            name = "Test Document",
+                            balance = 100.0,
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -42,12 +42,13 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with random key") {
-                val result = cache.createRandom { doc ->
-                    doc.copy(
-                        name = "Random Document",
-                        balance = 250.0
-                    )
-                }
+                val result =
+                    cache.createRandom { doc ->
+                        doc.copy(
+                            name = "Random Document",
+                            balance = 250.0,
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -63,16 +64,17 @@ class TestCreateOperations : AbstractDataKacheTest() {
             it("should create document with complex nested data") {
                 val myData = MyData.createRandom()
 
-                val result = cache.create("complexKey") { doc ->
-                    doc.copy(
-                        name = "Complex Document",
-                        balance = 500.0,
-                        list = listOf("item1", "item2", "item3"),
-                        customList = listOf(myData),
-                        customSet = setOf(myData),
-                        customMap = mapOf("key1" to myData)
-                    )
-                }
+                val result =
+                    cache.create("complexKey") { doc ->
+                        doc.copy(
+                            name = "Complex Document",
+                            balance = 500.0,
+                            list = listOf("item1", "item2", "item3"),
+                            customList = listOf(myData),
+                            customSet = setOf(myData),
+                            customMap = mapOf("key1" to myData),
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -102,15 +104,17 @@ class TestCreateOperations : AbstractDataKacheTest() {
             it("should fail when creating document with duplicate key") {
 
                 // Create first document
-                val firstResult = cache.create("duplicateKey") { doc ->
-                    doc.copy(name = "First Document", balance = 1.0)
-                }
+                val firstResult =
+                    cache.create("duplicateKey") { doc ->
+                        doc.copy(name = "First Document", balance = 1.0)
+                    }
                 firstResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
                 // Try to create second document with same key
-                val secondResult = cache.create("duplicateKey") { doc ->
-                    doc.copy(name = "Second Document", balance = 2.0)
-                }
+                val secondResult =
+                    cache.create("duplicateKey") { doc ->
+                        doc.copy(name = "Second Document", balance = 2.0)
+                    }
 
                 secondResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = secondResult.exception
@@ -121,9 +125,10 @@ class TestCreateOperations : AbstractDataKacheTest() {
             it("should fail when creating document changes document key") {
 
                 // Create a document
-                val createResult = cache.create("keyModificationKey") { doc ->
-                    doc.copy(key = "modifiedKey") // Modify key - should fail
-                }
+                val createResult =
+                    cache.create("keyModificationKey") { doc ->
+                        doc.copy(key = "modifiedKey") // Modify key - should fail
+                    }
                 createResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 createResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -137,9 +142,10 @@ class TestCreateOperations : AbstractDataKacheTest() {
             it("should fail when creating document changes document version") {
 
                 // Create a document
-                val createResult = cache.create("versionModificationKey") { doc ->
-                    doc.copy(version = 42) // Modify version - should fail
-                }
+                val createResult =
+                    cache.create("versionModificationKey") { doc ->
+                        doc.copy(version = 42) // Modify version - should fail
+                    }
                 createResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 createResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -153,16 +159,18 @@ class TestCreateOperations : AbstractDataKacheTest() {
             it("should fail when creating document with duplicate unique index") {
 
                 // Create first document with unique key/name, but balance = 1.0
-                val firstResult = cache.create("firstDoc") { doc ->
-                    doc.copy(name = "First Document", balance = 1.0)
-                }
+                val firstResult =
+                    cache.create("firstDoc") { doc ->
+                        doc.copy(name = "First Document", balance = 1.0)
+                    }
                 firstResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
                 // Create second document with unique key/name, but SAME balance = 1.0
                 //   balance is a unique index, and this creation should fail
-                val secondResult = cache.create("secondDoc") { doc ->
-                    doc.copy(name = "Second Document", balance = 1.0)
-                }
+                val secondResult =
+                    cache.create("secondDoc") { doc ->
+                        doc.copy(name = "Second Document", balance = 1.0)
+                    }
 
                 secondResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = secondResult.exception
@@ -173,17 +181,23 @@ class TestCreateOperations : AbstractDataKacheTest() {
 
             it("should create multiple documents with different keys") {
 
-                val doc1 = cache.create("key1") { doc ->
-                    doc.copy(name = "Document 1", balance = 100.0)
-                }.getOrThrow()
+                val doc1 =
+                    cache
+                        .create("key1") { doc ->
+                            doc.copy(name = "Document 1", balance = 100.0)
+                        }.getOrThrow()
 
-                val doc2 = cache.create("key2") { doc ->
-                    doc.copy(name = "Document 2", balance = 200.0)
-                }.getOrThrow()
+                val doc2 =
+                    cache
+                        .create("key2") { doc ->
+                            doc.copy(name = "Document 2", balance = 200.0)
+                        }.getOrThrow()
 
-                val doc3 = cache.create("key3") { doc ->
-                    doc.copy(name = "Document 3", balance = 300.0)
-                }.getOrThrow()
+                val doc3 =
+                    cache
+                        .create("key3") { doc ->
+                            doc.copy(name = "Document 3", balance = 300.0)
+                        }.getOrThrow()
 
                 // Verify all documents were created successfully
                 doc1.key shouldBe "key1"
@@ -205,9 +219,10 @@ class TestCreateOperations : AbstractDataKacheTest() {
             }
 
             it("should create document with empty string key") {
-                val result = cache.create("") { doc ->
-                    doc.copy(name = "Empty Key Document")
-                }
+                val result =
+                    cache.create("") { doc ->
+                        doc.copy(name = "Empty Key Document")
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -219,9 +234,10 @@ class TestCreateOperations : AbstractDataKacheTest() {
             it("should create document with special characters in key") {
                 val specialKey = "test-key_with.special@chars#123"
 
-                val result = cache.create(specialKey) { doc ->
-                    doc.copy(name = "Special Key Document")
-                }
+                val result =
+                    cache.create(specialKey) { doc ->
+                        doc.copy(name = "Special Key Document")
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 

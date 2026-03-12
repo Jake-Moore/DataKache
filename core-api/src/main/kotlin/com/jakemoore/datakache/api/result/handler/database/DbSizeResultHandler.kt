@@ -8,7 +8,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 internal object DbSizeResultHandler {
     internal suspend fun wrap(
         // Work returns either success or failure (true or false) no other state is allowed.
-        work: suspend () -> Long
+        work: suspend () -> Long,
     ): DefiniteResult<Long> {
         try {
             val value = work()

@@ -10,12 +10,11 @@ import kotlinx.coroutines.flow.Flow
 internal object DbReadAllResultHandler {
     internal suspend fun <K : Any, D : Doc<K, D>> wrap(
         // Work may return a null document, which indicates that the document was not found.
-        work: suspend () -> Flow<D>
-    ): DefiniteResult<Flow<D>> {
-        return try {
+        work: suspend () -> Flow<D>,
+    ): DefiniteResult<Flow<D>> =
+        try {
             Success(work())
         } catch (e: Exception) {
             Failure(ResultExceptionWrapper("DB Read All operation failed.", e))
         }
-    }
 }

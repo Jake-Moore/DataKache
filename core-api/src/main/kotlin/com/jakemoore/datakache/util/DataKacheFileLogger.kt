@@ -27,43 +27,57 @@ object DataKacheFileLogger {
     // ------------------------------------------------------------ //
 
     fun debug(msg: String): File? = logToFile(msg, DEBUG, randomFile)
+
     fun debug(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, DEBUG, getFileByCache(cache))
+
     fun debug(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = debug(msg, trace, getFileByCache(cache))
+
     fun debug(msg: String, trace: Throwable): File? = debug(msg, trace, randomFile)
+
     fun debug(msg: String, trace: Throwable, file: File): File? = logToFile(msg, DEBUG, file, trace)
 
     fun info(msg: String): File? = logToFile(msg, INFO, randomFile)
+
     fun info(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, INFO, getFileByCache(cache))
+
     fun info(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = info(msg, trace, getFileByCache(cache))
+
     fun info(msg: String, trace: Throwable): File? = info(msg, trace, randomFile)
+
     fun info(msg: String, trace: Throwable, file: File): File? = logToFile(msg, INFO, file, trace)
 
     fun warn(msg: String): File? = logToFile(msg, WARN, randomFile)
+
     fun warn(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, WARN, getFileByCache(cache))
+
     fun warn(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = warn(msg, trace, getFileByCache(cache))
+
     fun warn(msg: String, trace: Throwable): File? = warn(msg, trace, randomFile)
+
     fun warn(msg: String, trace: Throwable, file: File): File? = logToFile(msg, WARN, file, trace)
 
     fun severe(msg: String): File? = logToFile(msg, SEVERE, randomFile)
+
     fun severe(cache: DocCache<*, *>, msg: String): File? = logToFile(msg, SEVERE, getFileByCache(cache))
+
     fun severe(cache: DocCache<*, *>, msg: String, trace: Throwable): File? = severe(msg, trace, getFileByCache(cache))
+
     fun severe(msg: String, trace: Throwable): File? = severe(msg, trace, randomFile)
+
     fun severe(msg: String, trace: Throwable, file: File): File? = logToFile(msg, SEVERE, file, trace)
 
     // ------------------------------------------------------------ //
     //                         Helper Methods                       //
     // ------------------------------------------------------------ //
 
-    private fun appendToFile(throwable: Throwable, file: File): Boolean {
-        return appendToFile(file) { writer ->
-            throwable.printStackTrace(writer)
-        }
+    private fun appendToFile(throwable: Throwable, file: File): Boolean =
+        appendToFile(file) { writer ->
+        throwable.printStackTrace(writer)
     }
 
-    private fun appendToFile(lines: List<String>, file: File): Boolean {
-        return appendToFile(file) { writer ->
-            lines.forEach(writer::println)
-        }
+    private fun appendToFile(lines: List<String>, file: File): Boolean =
+        appendToFile(file) { writer ->
+        lines.forEach(writer::println)
     }
 
     private fun appendToFile(file: File, writerAction: (PrintWriter) -> Unit): Boolean {
@@ -87,7 +101,7 @@ object DataKacheFileLogger {
 
     private fun createStackTrace(msg: String): Throwable {
         try {
-            throw kotlin.Exception(msg)
+            throw Exception(msg)
         } catch (e: Exception) {
             return e
         }

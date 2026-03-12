@@ -32,6 +32,7 @@ dependencies {
     testImplementation(project.property("testcontainers-core") as String)
     testImplementation(project.property("kotlinx-coroutines-test") as String)
 
+    testRuntimeOnly(project.property("junit-jupiter-engine") as String)
     testRuntimeOnly(project.property("slf4j-nop") as String)
 }
 

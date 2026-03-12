@@ -7,15 +7,14 @@ import com.jakemoore.datakache.plugin.command.api.AbstractCommand
 import com.jakemoore.datakache.util.Color
 import org.bukkit.command.CommandSender
 
-internal class CmdDatabaseInfo(
-    parent: DataKacheCommand,
-) : AbstractCommand(
-    parent = parent,
-    commandName = "database-info",
-    permission = "datakache.command.database.info",
-    description = "View Database Information.",
-    argsDescription = "<database_name>",
-) {
+internal class CmdDatabaseInfo(parent: DataKacheCommand) :
+    AbstractCommand(
+        parent = parent,
+        commandName = "database-info",
+        permission = "datakache.command.database.info",
+        description = "View Database Information.",
+        argsDescription = "<database_name>",
+    ) {
     override fun processCommand(sender: CommandSender, args: Array<String>) {
         if (args.isEmpty()) {
             sendUsage(sender)
@@ -35,8 +34,8 @@ internal class CmdDatabaseInfo(
         for (docCache in registration.getDocCaches()) {
             sender.sendMessage(
                 Color.t(
-                    "&7 - &8'&f${docCache.cacheName}&8' &7(${docCache.getCacheSize()} objects)"
-                )
+                    "&7 - &8'&f${docCache.cacheName}&8' &7(${docCache.getCacheSize()} objects)",
+                ),
             )
         }
     }
@@ -49,15 +48,16 @@ internal class CmdDatabaseInfo(
         }
 
         val stem: String? = if (args.isEmpty()) null else args.first()
-        return DataKacheAPI.listRegistrations()
+        return DataKacheAPI
+            .listRegistrations()
             .map { it.databaseName }
             .filter { it.startsWith(stem ?: "", ignoreCase = true) }
             .sorted()
             .take(20)
     }
 
-    private fun getRegistrationFromDatabase(databaseName: String): DataKacheRegistration? {
-        return DataKacheAPI.listRegistrations()
-            .firstOrNull { it.databaseName == databaseName }
-    }
+    private fun getRegistrationFromDatabase(databaseName: String): DataKacheRegistration? =
+        DataKacheAPI
+        .listRegistrations()
+        .firstOrNull { it.databaseName == databaseName }
 }

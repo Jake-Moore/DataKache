@@ -16,21 +16,22 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 
 @Suppress("unused")
 class TestErrorHandling : AbstractDataKacheTest() {
-
     init {
         describe("Error Handling") {
 
             it("should handle duplicate document key exception on create") {
 
                 // Create first document
-                cache.create("duplicateKeyTest") { doc ->
-                    doc.copy(name = "Duplicate Key Test Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("duplicateKeyTest") { doc ->
+                        doc.copy(name = "Duplicate Key Test Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to create document with same key - should fail
-                val result = cache.create("duplicateKeyTest") { doc ->
-                    doc.copy(name = "Duplicate Key Test Doc 2", balance = 200.0)
-                }
+                val result =
+                    cache.create("duplicateKeyTest") { doc ->
+                        doc.copy(name = "Duplicate Key Test Doc 2", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -47,14 +48,16 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle duplicate unique index exception on create") {
 
                 // Create first document with unique name and balance
-                cache.create("uniqueIndexTest1") { doc ->
-                    doc.copy(name = "Unique Index Test Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("uniqueIndexTest1") { doc ->
+                        doc.copy(name = "Unique Index Test Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to create document with same name (unique index violation)
-                val result = cache.create("uniqueIndexTest2") { doc ->
-                    doc.copy(name = "Unique Index Test Doc", balance = 200.0)
-                }
+                val result =
+                    cache.create("uniqueIndexTest2") { doc ->
+                        doc.copy(name = "Unique Index Test Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -70,9 +73,10 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle document not found exception on update") {
 
                 // Try to update non-existent document
-                val result = cache.update("nonExistentUpdateKey") { doc ->
-                    doc.copy(name = "Updated Non Existent Doc", balance = 200.0)
-                }
+                val result =
+                    cache.update("nonExistentUpdateKey") { doc ->
+                        doc.copy(name = "Updated Non Existent Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -92,14 +96,16 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle rejectable update with RejectUpdateException") {
 
                 // Create a document
-                cache.create("rejectableUpdateKey") { doc ->
-                    doc.copy(name = "Rejectable Update Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("rejectableUpdateKey") { doc ->
+                        doc.copy(name = "Rejectable Update Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to update with rejection logic
-                val result = cache.updateRejectable("rejectableUpdateKey") { doc ->
-                    throw RejectUpdateException("Balance too low for update")
-                }
+                val result =
+                    cache.updateRejectable("rejectableUpdateKey") { doc ->
+                        throw RejectUpdateException("Balance too low for update")
+                    }
 
                 result.shouldBeInstanceOf<Reject<TestGenericDoc>>()
 
@@ -113,18 +119,20 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle successful rejectable update") {
 
                 // Create a document
-                cache.create("successfulRejectableKey") { doc ->
-                    doc.copy(name = "Successful Rejectable Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("successfulRejectableKey") { doc ->
+                        doc.copy(name = "Successful Rejectable Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Update with sufficient balance (should succeed)
-                val result = cache.updateRejectable("successfulRejectableKey") { doc ->
-                    // Only reject if balance is too low
-                    if (doc.balance < 50.0) {
-                        throw RejectUpdateException("Balance too low for update")
+                val result =
+                    cache.updateRejectable("successfulRejectableKey") { doc ->
+                        // Only reject if balance is too low
+                        if (doc.balance < 50.0) {
+                            throw RejectUpdateException("Balance too low for update")
+                        }
+                        doc.copy(name = "Updated Successful Rejectable Doc", balance = 200.0)
                     }
-                    doc.copy(name = "Updated Successful Rejectable Doc", balance = 200.0)
-                }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.getOrThrow().name shouldBe "Updated Successful Rejectable Doc"
@@ -134,9 +142,10 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle document not found in rejectable update") {
 
                 // Try to update non-existent document with rejectable update
-                val result = cache.updateRejectable("nonExistentRejectableKey") { doc ->
-                    doc.copy(name = "Updated Non Existent Rejectable Doc", balance = 200.0)
-                }
+                val result =
+                    cache.updateRejectable("nonExistentRejectableKey") { doc ->
+                        doc.copy(name = "Updated Non Existent Rejectable Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -147,18 +156,21 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle duplicate key exception on update with unique constraints") {
 
                 // Create two documents with different names
-                cache.create("updateDuplicateKey1") { doc ->
-                    doc.copy(name = "Update Duplicate Key Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("updateDuplicateKey1") { doc ->
+                        doc.copy(name = "Update Duplicate Key Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("updateDuplicateKey2") { doc ->
-                    doc.copy(name = "Update Duplicate Key Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("updateDuplicateKey2") { doc ->
+                        doc.copy(name = "Update Duplicate Key Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
                 // Try to update second document to have same name as first (unique index violation)
-                val result = cache.update("updateDuplicateKey2") { doc ->
-                    doc.copy(name = "Update Duplicate Key Doc 1", balance = 300.0)
-                }
+                val result =
+                    cache.update("updateDuplicateKey2") { doc ->
+                        doc.copy(name = "Update Duplicate Key Doc 1", balance = 300.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -177,14 +189,16 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle readOrCreate with existing document") {
 
                 // Create a document
-                cache.create("readOrCreateExistingKey") { doc ->
-                    doc.copy(name = "ReadOrCreate Existing Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("readOrCreateExistingKey") { doc ->
+                        doc.copy(name = "ReadOrCreate Existing Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to readOrCreate with same key - should return existing document
-                val result = cache.readOrCreate("readOrCreateExistingKey") { doc ->
-                    doc.copy(name = "ReadOrCreate New Doc", balance = 200.0)
-                }
+                val result =
+                    cache.readOrCreate("readOrCreateExistingKey") { doc ->
+                        doc.copy(name = "ReadOrCreate New Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.getOrThrow().name shouldBe "ReadOrCreate Existing Doc"
@@ -194,9 +208,10 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle readOrCreate with non-existent document") {
 
                 // Try to readOrCreate non-existent document
-                val result = cache.readOrCreate("readOrCreateNewKey") { doc ->
-                    doc.copy(name = "ReadOrCreate New Doc", balance = 100.0)
-                }
+                val result =
+                    cache.readOrCreate("readOrCreateNewKey") { doc ->
+                        doc.copy(name = "ReadOrCreate New Doc", balance = 100.0)
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.getOrThrow().name shouldBe "ReadOrCreate New Doc"
@@ -206,33 +221,38 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle complex error scenarios with multiple operations") {
 
                 // Create initial documents
-                cache.create("complexErrorKey1") { doc ->
-                    doc.copy(name = "Complex Error Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("complexErrorKey1") { doc ->
+                        doc.copy(name = "Complex Error Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("complexErrorKey2") { doc ->
-                    doc.copy(name = "Complex Error Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("complexErrorKey2") { doc ->
+                        doc.copy(name = "Complex Error Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
                 // Try to create duplicate key
-                val createResult = cache.create("complexErrorKey1") { doc ->
-                    doc.copy(name = "Duplicate Complex Error Doc", balance = 300.0)
-                }
+                val createResult =
+                    cache.create("complexErrorKey1") { doc ->
+                        doc.copy(name = "Duplicate Complex Error Doc", balance = 300.0)
+                    }
                 createResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
 
                 // Try to update non-existent document
-                val updateResult = cache.update("nonExistentComplexKey") { doc ->
-                    doc.copy(name = "Updated Non Existent Complex Doc", balance = 400.0)
-                }
+                val updateResult =
+                    cache.update("nonExistentComplexKey") { doc ->
+                        doc.copy(name = "Updated Non Existent Complex Doc", balance = 400.0)
+                    }
                 updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
 
                 // Try to update with rejection
-                val rejectableResult = cache.updateRejectable("complexErrorKey1") { doc ->
-                    if (doc.balance < 150.0) {
-                        throw RejectUpdateException("Balance too low for complex error test")
+                val rejectableResult =
+                    cache.updateRejectable("complexErrorKey1") { doc ->
+                        if (doc.balance < 150.0) {
+                            throw RejectUpdateException("Balance too low for complex error test")
+                        }
+                        doc.copy(name = "Updated Complex Error Doc", balance = 500.0)
                     }
-                    doc.copy(name = "Updated Complex Error Doc", balance = 500.0)
-                }
                 rejectableResult.shouldBeInstanceOf<Reject<TestGenericDoc>>()
 
                 // Verify original documents are unchanged
@@ -250,14 +270,16 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle error scenarios with empty string keys") {
 
                 // Create document with empty key
-                cache.create("") { doc ->
-                    doc.copy(name = "Empty Key Error Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("") { doc ->
+                        doc.copy(name = "Empty Key Error Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to create another document with empty key
-                val result = cache.create("") { doc ->
-                    doc.copy(name = "Duplicate Empty Key Error Doc", balance = 200.0)
-                }
+                val result =
+                    cache.create("") { doc ->
+                        doc.copy(name = "Duplicate Empty Key Error Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -274,14 +296,16 @@ class TestErrorHandling : AbstractDataKacheTest() {
                 val specialKey = "error-test-key_with.special@chars#123"
 
                 // Create document with special key
-                cache.create(specialKey) { doc ->
-                    doc.copy(name = "Special Key Error Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create(specialKey) { doc ->
+                        doc.copy(name = "Special Key Error Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to create another document with same special key
-                val result = cache.create(specialKey) { doc ->
-                    doc.copy(name = "Duplicate Special Key Error Doc", balance = 200.0)
-                }
+                val result =
+                    cache.create(specialKey) { doc ->
+                        doc.copy(name = "Duplicate Special Key Error Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -297,24 +321,26 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle error scenarios with null values") {
 
                 // Create document with null values
-                cache.create("nullValueErrorKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }.getOrThrow()
+                cache
+                    .create("nullValueErrorKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }.getOrThrow()
 
                 // Try to create another document with same name (null) - should fail due to unique index
-                val result = cache.create("nullValueErrorKey2") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 100.0
-                    )
-                }
+                val result =
+                    cache.create("nullValueErrorKey2") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 100.0,
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -329,28 +355,30 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle error scenarios with complex data") {
 
                 // Create document with complex data
-                cache.create("complexErrorKey") { doc ->
-                    doc.copy(
-                        name = "Complex Error Doc",
-                        balance = 100.0,
-                        list = listOf("item1", "item2"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key1" to MyData.createRandom())
-                    )
-                }.getOrThrow()
+                cache
+                    .create("complexErrorKey") { doc ->
+                        doc.copy(
+                            name = "Complex Error Doc",
+                            balance = 100.0,
+                            list = listOf("item1", "item2"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key1" to MyData.createRandom()),
+                        )
+                    }.getOrThrow()
 
                 // Try to update non-existent document with complex data
-                val result = cache.update("nonExistentComplexErrorKey") { doc ->
-                    doc.copy(
-                        name = "Updated Complex Error Doc",
-                        balance = 200.0,
-                        list = listOf("item3", "item4"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key2" to MyData.createRandom())
-                    )
-                }
+                val result =
+                    cache.update("nonExistentComplexErrorKey") { doc ->
+                        doc.copy(
+                            name = "Updated Complex Error Doc",
+                            balance = 200.0,
+                            list = listOf("item3", "item4"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key2" to MyData.createRandom()),
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception
@@ -367,14 +395,17 @@ class TestErrorHandling : AbstractDataKacheTest() {
             it("should handle error scenarios with random key creation") {
 
                 // Create document with random key
-                val randomDoc = cache.createRandom { doc ->
-                    doc.copy(name = "Random Key Error Doc", balance = 100.0)
-                }.getOrThrow()
+                val randomDoc =
+                    cache
+                        .createRandom { doc ->
+                            doc.copy(name = "Random Key Error Doc", balance = 100.0)
+                        }.getOrThrow()
 
                 // Try to create another document with same random key
-                val result = cache.create(randomDoc.key) { doc ->
-                    doc.copy(name = "Duplicate Random Key Error Doc", balance = 200.0)
-                }
+                val result =
+                    cache.create(randomDoc.key) { doc ->
+                        doc.copy(name = "Duplicate Random Key Error Doc", balance = 200.0)
+                    }
 
                 result.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 val wrapper: ResultExceptionWrapper = result.exception

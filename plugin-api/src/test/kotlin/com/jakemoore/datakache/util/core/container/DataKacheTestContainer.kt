@@ -14,7 +14,6 @@ import org.mockbukkit.mockbukkit.ServerMock
  */
 @Suppress("unused")
 interface DataKacheTestContainer {
-
     /**
      * Starts the test container and prepares the environment.
      *

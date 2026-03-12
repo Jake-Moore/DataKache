@@ -4,9 +4,13 @@ import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.coroutines.DataKacheScope
 import com.jakemoore.datakache.api.exception.DocumentNotFoundException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
+import com.jakemoore.datakache.api.java.ThrowingUnaryOperator
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.RejectableResult
+import kotlinx.coroutines.future.future
 import org.jetbrains.annotations.ApiStatus
+import java.util.concurrent.CompletableFuture
+import java.util.function.UnaryOperator
 
 /**
  * Represents an IMMUTABLE 'document' in the DataKache system.
@@ -48,6 +52,7 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                         Properties                           //
     // ------------------------------------------------------------ //
+
     /**
      * The unique identifier of this [Doc] (type [K]).
      *
@@ -70,6 +75,7 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                          API Methods                         //
     // ------------------------------------------------------------ //
+
     /**
      * @return The [DocCache] associated with this [Doc]. (This doc can be found in this cache, unless deleted)
      */
@@ -97,6 +103,7 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     // We do not have access to the top level data class, so we ask
     //  that the doc provide some methods that allow access to the data class copy
+
     /**
      * Produces a new instance of this document with its version updated.
      *
@@ -117,15 +124,15 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
+
     /**
      * Modify this document (both cache and database will be updated).
      *
      * @return A [DefiniteResult] containing the updated document, or an exception if the document could not be updated.
      */
     @Throws(DocumentNotFoundException::class)
-    suspend fun update(updateFunction: (D) -> D): DefiniteResult<D> {
-        return this.getDocCache().update(this.key, updateFunction)
-    }
+    suspend fun update(updateFunction: (D) -> D): DefiniteResult<D> =
+        this.getDocCache().update(this.key, updateFunction)
 
     /**
      * Modify this document, allowing the operation to gracefully be rejected within the [updateFunction].
@@ -139,14 +146,23 @@ interface Doc<K : Any, D : Doc<K, D>> : DataKacheScope {
      * - or a rejection state if the update was rejected by the [updateFunction]
      */
     @Throws(DocumentNotFoundException::class)
-    suspend fun updateRejectable(updateFunction: (D) -> D): RejectableResult<D> {
-        return this.getDocCache().updateRejectable(this.key, updateFunction)
-    }
+    suspend fun updateRejectable(updateFunction: (D) -> D): RejectableResult<D> =
+        this.getDocCache().updateRejectable(this.key, updateFunction)
 
     /**
      * See [DocCache.delete] for details.
      */
-    suspend fun delete(): DefiniteResult<Boolean> {
-        return this.getDocCache().delete(this.key)
-    }
+    suspend fun delete(): DefiniteResult<Boolean> = this.getDocCache().delete(this.key)
+
+    // ------------------------------------------------------------ //
+    //              Java Compatibility — CompletableFuture API      //
+    // ------------------------------------------------------------ //
+
+    fun updateAsync(updateFunction: UnaryOperator<D>): CompletableFuture<DefiniteResult<D>> =
+        future { update { updateFunction.apply(it) } }
+
+    fun updateRejectableAsync(updateFunction: ThrowingUnaryOperator<D>): CompletableFuture<RejectableResult<D>> =
+        future { updateRejectable { updateFunction.apply(it) } }
+
+    fun deleteAsync(): CompletableFuture<DefiniteResult<Boolean>> = future { delete() }
 }

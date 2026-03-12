@@ -14,7 +14,6 @@ import com.jakemoore.datakache.util.doc.TestGenericDocCache
  */
 @Suppress("unused")
 interface DataKacheTestContainer {
-
     /**
      * Starts the test container and prepares the environment.
      *
@@ -63,39 +62,26 @@ interface DataKacheTestContainer {
      *
      * This method does NOT use the cache's API.
      */
-    suspend fun <K : Any, D : Doc<K, D>> manualDocumentInsert(
-        cache: DocCache<K, D>,
-        doc: D,
-    )
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentInsert(cache: DocCache<K, D>, doc: D)
 
     /**
      * Manually updates a document in the cache using the backing database.
      *
      * This method does NOT use the cache's API.
      */
-    suspend fun <K : Any, D : Doc<K, D>> manualDocumentUpdate(
-        cache: DocCache<K, D>,
-        doc: D,
-        newVersion: Long,
-    )
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentUpdate(cache: DocCache<K, D>, doc: D, newVersion: Long)
 
     /**
      * Manually replace a document from the cache using the backing database.
      *
      * This method does NOT use the cache's API.
      */
-    suspend fun <K : Any, D : Doc<K, D>> manualDocumentReplace(
-        cache: DocCache<K, D>,
-        doc: D,
-    )
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentReplace(cache: DocCache<K, D>, doc: D)
 
     /**
      * Manually deletes a document from the cache using the backing database.
      *
      * This method does NOT use the cache's API.
      */
-    suspend fun <K : Any, D : Doc<K, D>> manualDocumentDelete(
-        cache: DocCache<K, D>,
-        key: K,
-    )
+    suspend fun <K : Any, D : Doc<K, D>> manualDocumentDelete(cache: DocCache<K, D>, key: K)
 }

@@ -12,19 +12,20 @@ import kotlin.time.TimeSource
 @Order(2)
 @Suppress("unused")
 class TestAsyncShutdown : AbstractDataKacheTest() {
-
     private val atomicCount = AtomicInteger(0)
 
     init {
         describe("Async Shutdown") {
             it("should await all DataKacheScope coroutines before shutdown") {
                 val docCache = this@TestAsyncShutdown.cache
-                val doc = docCache.createRandom {
-                    it.copy(
-                        balance = 0.0,
-                        list = mutableListOf("Initial entry")
-                    )
-                }.getOrThrow()
+                val doc =
+                    docCache
+                        .createRandom {
+                            it.copy(
+                                balance = 0.0,
+                                list = mutableListOf("Initial entry"),
+                            )
+                        }.getOrThrow()
 
                 // Queue multiple transactions to modify the same document concurrently
                 val startMark = TimeSource.Monotonic.markNow()
@@ -35,7 +36,7 @@ class TestAsyncShutdown : AbstractDataKacheTest() {
                         val finished = atomicCount.addAndGet(1)
                         val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
                         System.err.println(
-                            "Scope Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsedMillis}ms"
+                            "Scope Transaction $i finished. ($finished/$THREAD_COUNT) in ${elapsedMillis}ms",
                         )
                     }
                 }

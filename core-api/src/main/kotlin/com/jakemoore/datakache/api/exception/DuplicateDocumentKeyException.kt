@@ -12,7 +12,8 @@ class DuplicateDocumentKeyException(
     val fullMessage: String,
     cause: Throwable,
 ) : DataKacheException(
-    message = "Duplicate Document Key '$keyString' during '${operation.name}': " +
+    message =
+    "Duplicate Document Key '$keyString' during '${operation.name}': " +
         fullMessage.ifBlank { "Operation Failed." },
     cause = cause,
 )

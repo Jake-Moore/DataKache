@@ -16,24 +16,23 @@ import com.jakemoore.datakache.api.result.handler.CreateGenericDocResultHandler
 import com.jakemoore.datakache.api.result.handler.DeleteResultHandler
 import com.jakemoore.datakache.api.result.handler.RejectableUpdateGenericDocResultHandler
 import com.jakemoore.datakache.api.result.handler.UpdateGenericDocResultHandler
+import kotlinx.coroutines.future.future
 import java.util.UUID
+import java.util.concurrent.CompletableFuture
+import java.util.function.UnaryOperator
 
 abstract class GenericDocCache<D : GenericDoc<D>>(
     cacheName: String,
     registration: DataKacheRegistration,
     docClass: Class<D>,
     logger: (String) -> LoggerService = { cacheName -> DefaultCacheLogger(cacheName) },
-
     /**
      * @param UUID the unique identifier for the document.
      * @param Long the version of the document.
      */
     val instantiator: (String, Long) -> D,
-
     override val config: DocCacheConfig<String, D> = DocCacheConfig.default(),
-
 ) : DocCacheImpl<String, D>(cacheName, registration, docClass, logger) {
-
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
@@ -81,9 +80,11 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      *
      * @return A [DefiniteResult] containing the document, or the exception if the document could not be created.
      */
-    suspend fun createRandom(initializer: (D) -> D = { it }): DefiniteResult<D> {
-        return create(UUID.randomUUID().toString(), initializer)
-    }
+    suspend fun createRandom(
+        initializer: (D) -> D = {
+            it
+        },
+    ): DefiniteResult<D> = create(UUID.randomUUID().toString(), initializer)
 
     // Regular update method (does not bypass validation)
     override suspend fun update(key: String, updateFunction: (D) -> D): DefiniteResult<D> {
@@ -119,15 +120,20 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
     }
 
     // ------------------------------------------------------------ //
+    //              Java Compatibility — CompletableFuture API      //
+    // ------------------------------------------------------------ //
+
+    fun createRandomAsync(): CompletableFuture<DefiniteResult<D>> = future { createRandom() }
+
+    fun createRandomAsync(initializer: UnaryOperator<D>): CompletableFuture<DefiniteResult<D>> =
+        future { createRandom { initializer.apply(it) } }
+
+    // ------------------------------------------------------------ //
     //                    Key Manipulation Methods                  //
     // ------------------------------------------------------------ //
-    override fun keyFromString(string: String): String {
-        return string
-    }
+    override fun keyFromString(string: String): String = string
 
-    override fun keyToString(key: String): String {
-        return key
-    }
+    override fun keyToString(key: String): String = key
 
     // ------------------------------------------------------------ //
     //                        Internal Methods                      //

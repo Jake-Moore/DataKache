@@ -14,18 +14,19 @@ import kotlinx.coroutines.flow.toSet
 
 @Suppress("unused")
 class TestDatabaseReadOperations : AbstractDataKacheTest() {
-
     init {
         describe("Database Read Operations") {
 
             it("should read document from database") {
                 // Create a document in cache
-                val createdDoc = cache.create("dbReadKey") { doc ->
-                    doc.copy(
-                        name = "Database Read Document",
-                        balance = 150.0
-                    )
-                }.getOrThrow()
+                val createdDoc =
+                    cache
+                        .create("dbReadKey") { doc ->
+                            doc.copy(
+                                name = "Database Read Document",
+                                balance = 150.0,
+                            )
+                        }.getOrThrow()
 
                 // Read from database directly
                 val dbReadResult = cache.readFromDatabase("dbReadKey")
@@ -51,17 +52,20 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             it("should read all documents from database") {
 
                 // Create multiple documents with unique names and balances
-                cache.create("dbReadAllKey1") { doc ->
-                    doc.copy(name = "Database Doc 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("dbReadAllKey1") { doc ->
+                        doc.copy(name = "Database Doc 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("dbReadAllKey2") { doc ->
-                    doc.copy(name = "Database Doc 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("dbReadAllKey2") { doc ->
+                        doc.copy(name = "Database Doc 2", balance = 200.0)
+                    }.getOrThrow()
 
-                cache.create("dbReadAllKey3") { doc ->
-                    doc.copy(name = "Database Doc 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("dbReadAllKey3") { doc ->
+                        doc.copy(name = "Database Doc 3", balance = 300.0)
+                    }.getOrThrow()
 
                 // Read all documents from database
                 val allDocs = cache.readAllFromDatabase().getOrThrow().toList()
@@ -81,17 +85,20 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             it("should read keys from database") {
 
                 // Create multiple documents
-                cache.create("dbKeysKey1") { doc ->
-                    doc.copy(name = "Keys Doc 1", balance = 150.0)
-                }.getOrThrow()
+                cache
+                    .create("dbKeysKey1") { doc ->
+                        doc.copy(name = "Keys Doc 1", balance = 150.0)
+                    }.getOrThrow()
 
-                cache.create("dbKeysKey2") { doc ->
-                    doc.copy(name = "Keys Doc 2", balance = 250.0)
-                }.getOrThrow()
+                cache
+                    .create("dbKeysKey2") { doc ->
+                        doc.copy(name = "Keys Doc 2", balance = 250.0)
+                    }.getOrThrow()
 
-                cache.create("dbKeysKey3") { doc ->
-                    doc.copy(name = "Keys Doc 3", balance = 350.0)
-                }.getOrThrow()
+                cache
+                    .create("dbKeysKey3") { doc ->
+                        doc.copy(name = "Keys Doc 3", balance = 350.0)
+                    }.getOrThrow()
 
                 // Read keys from database
                 val keys = cache.readKeysFromDatabase().getOrThrow().toSet()
@@ -114,9 +121,10 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
                 result1.value shouldBe false
 
                 // Create a document
-                cache.create("dbHasKeyTest") { doc ->
-                    doc.copy(name = "Has Key Test", balance = 500.0)
-                }.getOrThrow()
+                cache
+                    .create("dbHasKeyTest") { doc ->
+                        doc.copy(name = "Has Key Test", balance = 500.0)
+                    }.getOrThrow()
 
                 // Check existing key
                 val result2 = cache.hasKeyInDatabase("dbHasKeyTest")
@@ -126,16 +134,17 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
 
             it("should read document with complex data from database") {
 
-                cache.create("dbComplexKey") { doc ->
-                    doc.copy(
-                        name = "Complex Database Doc",
-                        balance = 750.0,
-                        list = listOf("db_item1", "db_item2", "db_item3"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("db_key1" to MyData.createRandom())
-                    )
-                }.getOrThrow()
+                cache
+                    .create("dbComplexKey") { doc ->
+                        doc.copy(
+                            name = "Complex Database Doc",
+                            balance = 750.0,
+                            list = listOf("db_item1", "db_item2", "db_item3"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("db_key1" to MyData.createRandom()),
+                        )
+                    }.getOrThrow()
 
                 val dbReadResult = cache.readFromDatabase("dbComplexKey")
                 dbReadResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -152,16 +161,17 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
 
             it("should read document with null values from database") {
 
-                cache.create("dbNullKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }.getOrThrow()
+                cache
+                    .create("dbNullKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }.getOrThrow()
 
                 val dbReadResult = cache.readFromDatabase("dbNullKey")
                 dbReadResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -178,9 +188,10 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
 
             it("should read document with empty string key from database") {
 
-                cache.create("") { doc ->
-                    doc.copy(name = "Empty Key Database Doc", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("") { doc ->
+                        doc.copy(name = "Empty Key Database Doc", balance = 100.0)
+                    }.getOrThrow()
 
                 val dbReadResult = cache.readFromDatabase("")
                 dbReadResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -194,9 +205,10 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             it("should read document with special characters in key from database") {
                 val specialKey = "db-test-key_with.special@chars#123"
 
-                cache.create(specialKey) { doc ->
-                    doc.copy(name = "Special Key Database Doc", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create(specialKey) { doc ->
+                        doc.copy(name = "Special Key Database Doc", balance = 200.0)
+                    }.getOrThrow()
 
                 val dbReadResult = cache.readFromDatabase(specialKey)
                 dbReadResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -210,14 +222,17 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             it("should verify database read after cache update") {
 
                 // Create document
-                val originalDoc = cache.create("dbUpdateReadKey") { doc ->
-                    doc.copy(name = "Original Database Doc", balance = 100.0)
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("dbUpdateReadKey") { doc ->
+                            doc.copy(name = "Original Database Doc", balance = 100.0)
+                        }.getOrThrow()
 
                 // Update document
-                cache.update("dbUpdateReadKey") { doc ->
-                    doc.copy(name = "Updated Database Doc", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .update("dbUpdateReadKey") { doc ->
+                        doc.copy(name = "Updated Database Doc", balance = 200.0)
+                    }.getOrThrow()
 
                 // Read from database - should get updated version
                 val dbReadResult = cache.readFromDatabase("dbUpdateReadKey")
@@ -233,9 +248,10 @@ class TestDatabaseReadOperations : AbstractDataKacheTest() {
             it("should verify database read after cache delete") {
 
                 // Create document
-                cache.create("dbDeleteReadKey") { doc ->
-                    doc.copy(name = "Delete Database Doc", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("dbDeleteReadKey") { doc ->
+                        doc.copy(name = "Delete Database Doc", balance = 300.0)
+                    }.getOrThrow()
 
                 // Delete document
                 cache.delete("dbDeleteReadKey").getOrThrow()

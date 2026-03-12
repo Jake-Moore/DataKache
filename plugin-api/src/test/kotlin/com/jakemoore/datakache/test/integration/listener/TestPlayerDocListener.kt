@@ -12,7 +12,6 @@ import kotlin.time.Duration.Companion.seconds
 
 @Suppress("unused")
 class TestPlayerDocListener : AbstractDataKacheTest() {
-
     init {
         describe("Test PlayerDoc Listener") {
             it("should set PlayerDoc username on first join") {
@@ -43,11 +42,12 @@ class TestPlayerDocListener : AbstractDataKacheTest() {
                 val uuid = UUID.randomUUID()
 
                 // Simulate a player doc being created before that player joins
-                cache.create(uuid) {
-                    it.copy(
-                        name = "InitialName",
-                    )
-                }.getOrThrow()
+                cache
+                    .create(uuid) {
+                        it.copy(
+                            name = "InitialName",
+                        )
+                    }.getOrThrow()
 
                 // Simulate that the player joins later
                 val player = addPlayer(username, uuid)

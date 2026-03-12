@@ -16,12 +16,12 @@ import kotlinx.serialization.json.Json
  * Provides common setup and teardown functionality for all tests.
  */
 abstract class AbstractDataKacheTest : DescribeSpec() {
-
-    protected val json = Json {
-        encodeDefaults = true // Encodes default data class property values (instead of omitting them)
-        explicitNulls = true // Encodes null values (instead of omitting them)
-        prettyPrint = true
-    }
+    protected val json =
+        Json {
+            encodeDefaults = true // Encodes default data class property values (instead of omitting them)
+            explicitNulls = true // Encodes null values (instead of omitting them)
+            prettyPrint = true
+        }
 
     protected lateinit var testContainer: DataKacheTestContainer
 

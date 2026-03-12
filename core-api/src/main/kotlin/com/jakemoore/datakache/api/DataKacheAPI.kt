@@ -24,6 +24,7 @@ object DataKacheAPI {
     // ---------------------------------------- //
     //          Registration Methods            //
     // ---------------------------------------- //
+
     /**
      * Register your plugin with a unique MongoDB database name.
      *
@@ -67,16 +68,12 @@ object DataKacheAPI {
     }
 
     @ApiStatus.Internal
-    fun getDatabaseRegistration(databaseName: String): DatabaseRegistration? {
-        return databases[databaseName.lowercase()]
-    }
+    fun getDatabaseRegistration(databaseName: String): DatabaseRegistration? = databases[databaseName.lowercase()]
 
     /**
      * Check if a database name is already registered/taken by a [DataKacheClient] using DataKache.
      */
-    fun isDatabaseNameRegistered(databaseName: String): Boolean {
-        return databases.containsKey(databaseName.lowercase())
-    }
+    fun isDatabaseNameRegistered(databaseName: String): Boolean = databases.containsKey(databaseName.lowercase())
 
     /**
      * Appends [DataKacheAPI.databaseNamespace] and a '_' char to the beginning of the dbName,
@@ -98,14 +95,10 @@ object DataKacheAPI {
     /**
      * Returns a collection of all registered databases in DataKache.
      */
-    fun listDatabases(): Collection<DatabaseRegistration> {
-        return Collections.unmodifiableCollection(databases.values)
-    }
+    fun listDatabases(): Collection<DatabaseRegistration> = Collections.unmodifiableCollection(databases.values)
 
     /**
      * Returns a collection of all registrations in DataKache.
      */
-    fun listRegistrations(): Collection<DataKacheRegistration> {
-        return Collections.unmodifiableCollection(registrations)
-    }
+    fun listRegistrations(): Collection<DataKacheRegistration> = Collections.unmodifiableCollection(registrations)
 }

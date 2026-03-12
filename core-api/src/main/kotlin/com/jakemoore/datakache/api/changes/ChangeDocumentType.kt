@@ -18,13 +18,12 @@ enum class ChangeDocumentType {
 
     companion object {
         @Throws(IllegalArgumentException::class)
-        fun fromOperationType(type: ChangeOperationType): ChangeDocumentType {
-            return when (type) {
-                ChangeOperationType.INSERT -> INSERT
-                ChangeOperationType.UPDATE -> UPDATE
-                ChangeOperationType.REPLACE -> REPLACE
-                else -> throw IllegalArgumentException("Unsupported ChangeOperationType: $type")
-            }
+        fun fromOperationType(type: ChangeOperationType): ChangeDocumentType =
+            when (type) {
+            ChangeOperationType.INSERT -> INSERT
+            ChangeOperationType.UPDATE -> UPDATE
+            ChangeOperationType.REPLACE -> REPLACE
+            else -> throw IllegalArgumentException("Unsupported ChangeOperationType: $type")
         }
     }
 }

@@ -16,6 +16,7 @@ import com.jakemoore.datakache.core.connections.mongo.changestream.RetryDecision
 import com.mongodb.client.model.changestream.ChangeStreamDocument
 import com.mongodb.kotlin.client.coroutine.MongoCollection
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.bson.BsonTimestamp
 
@@ -30,9 +31,9 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     collection: MongoCollection<D>,
     eventHandler: ChangeEventHandler<K, D>,
     config: ChangeStreamConfig = ChangeStreamConfig.forMongoDB(),
-    logger: LoggerService
-) : ChangeStreamManager<K, D>, DatabaseScope {
-
+    logger: LoggerService,
+) : ChangeStreamManager<K, D>,
+    DatabaseScope {
     // Shared context for all components
     private val context = ChangeStreamContext(collection, eventHandler, config, logger)
 
@@ -51,21 +52,21 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         stateManager.withStateLock {
             if (stateManager.isActive()) {
                 context.logger.warn(
-                    "Cannot start change stream - already in state: ${stateManager.getCurrentState()}"
+                    "Cannot start change stream - already in state: ${stateManager.getCurrentState()}",
                 )
                 return@withStateLock
             }
 
             if (!stateManager.canStart()) {
                 context.logger.warn(
-                    "Cannot start change stream - already in state: ${stateManager.getCurrentState()}"
+                    "Cannot start change stream - already in state: ${stateManager.getCurrentState()}",
                 )
                 return@withStateLock
             }
 
             if (!stateManager.transitionTo(null, ChangeStreamState.CONNECTING)) {
                 context.logger.error(
-                    "Failed to transition to CONNECTING state - concurrent state change detected"
+                    "Failed to transition to CONNECTING state - concurrent state change detected",
                 )
                 return@withStateLock
             }
@@ -87,19 +88,20 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 val processorJob = eventProcessor.startEventProcessing(this@MongoChangeStreamManager)
 
                 // Then start the change stream watcher
-                val streamJob = this@MongoChangeStreamManager.launch {
-                    try {
-                        startChangeStreamWithRetry()
-                    } catch (e: Exception) {
-                        context.logger.error(
-                            e,
-                            "Fatal error in change stream"
-                        )
-                        stateManager.transitionTo(null, ChangeStreamState.FAILED)
-                        stateManager.clearJobsUnsafe()
-                        throw e
+                val streamJob =
+                    this@MongoChangeStreamManager.launch {
+                        try {
+                            startChangeStreamWithRetry()
+                        } catch (e: Exception) {
+                            context.logger.error(
+                                e,
+                                "Fatal error in change stream",
+                            )
+                            stateManager.transitionTo(null, ChangeStreamState.FAILED)
+                            stateManager.clearJobsUnsafe()
+                            throw e
+                        }
                     }
-                }
 
                 // Register jobs with state manager
                 stateManager.setJobs(streamJob, processorJob)
@@ -108,7 +110,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             } catch (e: Exception) {
                 context.logger.error(
                     e,
-                    "Failed to start change stream"
+                    "Failed to start change stream",
                 )
                 stateManager.transitionTo(null, ChangeStreamState.FAILED)
                 stateManager.clearJobsUnsafe()
@@ -126,7 +128,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             val currentState = stateManager.getCurrentState()
             if (currentState == ChangeStreamState.SHUTDOWN) {
                 context.logger.debug(
-                    "Change stream already shutdown"
+                    "Change stream already shutdown",
                 )
                 return@withStateLock // Already shutdown
             }
@@ -135,7 +137,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             if (!stateManager.transitionTo(currentState, ChangeStreamState.SHUTDOWN)) {
                 context.logger.warn(
                     "Failed to transition to SHUTDOWN state " +
-                        "- attempted from: $currentState, current state: ${stateManager.getCurrentState()}"
+                        "- attempted from: $currentState, current state: ${stateManager.getCurrentState()}",
                 )
                 return@withStateLock
             }
@@ -186,7 +188,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             try {
                 if (!stateManager.transitionTo(
                         stateManager.getCurrentState(),
-                        ChangeStreamState.CONNECTING
+                        ChangeStreamState.CONNECTING,
                     )
                 ) {
                     context.logger.warn("Failed to transition to CONNECTING state")
@@ -194,7 +196,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 }
 
                 context.logger.debug(
-                    "Starting change stream (attempt ${retryCount + 1})"
+                    "Starting change stream (attempt ${retryCount + 1})",
                 )
 
                 val watchFlow = resumeTokenManager.configureChangeStream()
@@ -209,11 +211,15 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             } catch (e: Exception) {
                 val decision = errorHandler.handleError(e, retryCount)
                 when (decision) {
-                    is RetryDecision.Stop -> break
+                    is RetryDecision.Stop -> {
+                        break
+                    }
+
                     is RetryDecision.StopWithError -> {
                         stateManager.transitionTo(null, ChangeStreamState.FAILED)
                         break
                     }
+
                     is RetryDecision.Continue -> {
                         // Handle resume token errors
                         if (errorHandler.isResumeTokenError(e)) {
@@ -235,7 +241,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         if (retryCount >= context.config.maxRetries) {
             stateManager.transitionTo(null, ChangeStreamState.FAILED)
             context.logger.error(
-                "Change stream failed permanently after $retryCount attempts"
+                "Change stream failed permanently after $retryCount attempts",
             )
         } else if (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN) {
             stateManager.transitionTo(null, ChangeStreamState.DISCONNECTED)
@@ -245,7 +251,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     /**
      * Processes change stream events from the MongoDB watch flow.
      */
-    private suspend fun processChangeStreamEvents(watchFlow: kotlinx.coroutines.flow.Flow<ChangeStreamDocument<D>>) {
+    private suspend fun processChangeStreamEvents(watchFlow: Flow<ChangeStreamDocument<D>>) {
         watchFlow.collect { change ->
             if (stateManager.getCurrentState() == ChangeStreamState.SHUTDOWN) {
                 return@collect // Exit if shutdown was requested
@@ -269,7 +275,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     private suspend fun onSuccessfulConnection() {
         if (errorHandler.getConsecutiveFailures() > 0) {
             context.logger.debug(
-                "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures"
+                "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures",
             )
         }
 
@@ -295,7 +301,5 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      */
     override fun getConsecutiveFailures(): Int = errorHandler.getConsecutiveFailures()
 
-    override fun areJobsActive(): Boolean {
-        return stateManager.areJobsActive()
-    }
+    override fun areJobsActive(): Boolean = stateManager.areJobsActive()
 }

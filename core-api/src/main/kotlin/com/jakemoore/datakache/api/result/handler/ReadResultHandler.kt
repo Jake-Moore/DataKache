@@ -12,7 +12,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 internal object ReadResultHandler {
     internal fun <K : Any, D : Doc<K, D>> wrap(
         // Work may return a null document, which indicates that the document was not found.
-        work: () -> D?
+        work: () -> D?,
     ): OptionalResult<D> {
         try {
             // METRICS

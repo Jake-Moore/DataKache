@@ -12,16 +12,16 @@ import io.kotest.matchers.types.shouldNotBeInstanceOf
 
 @Suppress("unused")
 class TestDeleteOperations : AbstractDataKacheTest() {
-
     init {
         describe("Delete Operations") {
 
             it("should delete existing document") {
 
                 // Create a document
-                cache.create("deleteKey") { doc ->
-                    doc.copy(name = "Document to Delete", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("deleteKey") { doc ->
+                        doc.copy(name = "Document to Delete", balance = 100.0)
+                    }.getOrThrow()
 
                 // Verify document exists
                 cache.isCached("deleteKey").shouldBe(true)
@@ -57,9 +57,11 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             it("should delete document via document instance") {
 
                 // Create a document
-                val doc = cache.create("docInstanceDeleteKey") { doc ->
-                    doc.copy(name = "Document to Delete via Instance", balance = 200.0)
-                }.getOrThrow()
+                val doc =
+                    cache
+                        .create("docInstanceDeleteKey") { doc ->
+                            doc.copy(name = "Document to Delete via Instance", balance = 200.0)
+                        }.getOrThrow()
 
                 // Verify document exists
                 cache.isCached("docInstanceDeleteKey").shouldBe(true)
@@ -79,17 +81,20 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             it("should delete multiple documents") {
 
                 // Create multiple documents
-                cache.create("multiDeleteKey1") { doc ->
-                    doc.copy(name = "Document 1", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("multiDeleteKey1") { doc ->
+                        doc.copy(name = "Document 1", balance = 100.0)
+                    }.getOrThrow()
 
-                cache.create("multiDeleteKey2") { doc ->
-                    doc.copy(name = "Document 2", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .create("multiDeleteKey2") { doc ->
+                        doc.copy(name = "Document 2", balance = 200.0)
+                    }.getOrThrow()
 
-                cache.create("multiDeleteKey3") { doc ->
-                    doc.copy(name = "Document 3", balance = 300.0)
-                }.getOrThrow()
+                cache
+                    .create("multiDeleteKey3") { doc ->
+                        doc.copy(name = "Document 3", balance = 300.0)
+                    }.getOrThrow()
 
                 // Verify all documents exist
                 cache.getCacheSize().shouldBe(3)
@@ -116,16 +121,17 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             it("should delete document with complex data") {
 
                 // Create document with complex data
-                cache.create("complexDeleteKey") { doc ->
-                    doc.copy(
-                        name = "Complex Document",
-                        balance = 500.0,
-                        list = listOf("item1", "item2", "item3"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key1" to MyData.createRandom())
-                    )
-                }.getOrThrow()
+                cache
+                    .create("complexDeleteKey") { doc ->
+                        doc.copy(
+                            name = "Complex Document",
+                            balance = 500.0,
+                            list = listOf("item1", "item2", "item3"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key1" to MyData.createRandom()),
+                        )
+                    }.getOrThrow()
 
                 // Verify document exists
                 cache.isCached("complexDeleteKey").shouldBe(true)
@@ -147,9 +153,10 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             it("should delete document with empty string key") {
 
                 // Create document with empty key
-                cache.create("") { doc ->
-                    doc.copy(name = "Empty Key Document")
-                }.getOrThrow()
+                cache
+                    .create("") { doc ->
+                        doc.copy(name = "Empty Key Document")
+                    }.getOrThrow()
 
                 // Verify document exists
                 cache.isCached("").shouldBe(true)
@@ -170,9 +177,10 @@ class TestDeleteOperations : AbstractDataKacheTest() {
                 val specialKey = "test-key_with.special@chars#123"
 
                 // Create document with special key
-                cache.create(specialKey) { doc ->
-                    doc.copy(name = "Special Key Document")
-                }.getOrThrow()
+                cache
+                    .create(specialKey) { doc ->
+                        doc.copy(name = "Special Key Document")
+                    }.getOrThrow()
 
                 // Verify document exists
                 cache.isCached(specialKey).shouldBe(true)
@@ -192,14 +200,16 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             it("should handle delete after update") {
 
                 // Create a document
-                cache.create("updateThenDeleteKey") { doc ->
-                    doc.copy(name = "Original", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("updateThenDeleteKey") { doc ->
+                        doc.copy(name = "Original", balance = 100.0)
+                    }.getOrThrow()
 
                 // Update the document
-                cache.update("updateThenDeleteKey") { doc ->
-                    doc.copy(name = "Updated", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .update("updateThenDeleteKey") { doc ->
+                        doc.copy(name = "Updated", balance = 200.0)
+                    }.getOrThrow()
 
                 // Verify document exists with updated data
                 val readResult = cache.read("updateThenDeleteKey")
@@ -223,16 +233,17 @@ class TestDeleteOperations : AbstractDataKacheTest() {
             it("should handle delete of document with null values") {
 
                 // Create document with null values
-                cache.create("nullDeleteKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }.getOrThrow()
+                cache
+                    .create("nullDeleteKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }.getOrThrow()
 
                 // Verify document exists
                 cache.isCached("nullDeleteKey").shouldBe(true)

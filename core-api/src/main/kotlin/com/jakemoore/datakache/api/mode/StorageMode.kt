@@ -6,12 +6,14 @@ import com.jakemoore.datakache.core.connections.mongo.MongoDatabaseService
 
 // Abstraction layer for adding different storage modes in the future
 enum class StorageMode {
-    MONGODB;
+    MONGODB,
+    ;
 
     internal val databaseService: DatabaseService
-        get() = when (this) {
-            MONGODB -> getMongoService()
-        }
+        get() =
+            when (this) {
+                MONGODB -> getMongoService()
+            }
 
     /**
      * @return if the services were successfully enabled
@@ -51,9 +53,7 @@ enum class StorageMode {
      *
      * This method will return an empty map i the storage mode is offline or does not support server pings.
      */
-    fun getDatabaseServiceServerPings(): Map<String, Long> {
-        return databaseService.serverPingMap.asMap()
-    }
+    fun getDatabaseServiceServerPings(): Map<String, Long> = databaseService.serverPingMap.asMap()
 
     /**
      * Returns the average ROUND-TRIP ping time in nanoseconds from the database service.
@@ -62,21 +62,18 @@ enum class StorageMode {
      *
      * This method is the average across all servers the database service is connected to (the full 'cluster').
      */
-    fun getDatabaseServiceAveragePing(): Long {
-        return databaseService.averagePingNanos
-    }
+    fun getDatabaseServiceAveragePing(): Long = databaseService.averagePingNanos
 
     /**
      * @return If the database service is finished starting up and is ready to accept requests.
      */
-    fun isDatabaseReadyForWrites(): Boolean {
-        return databaseService.isDatabaseReadyForWrites()
-    }
+    fun isDatabaseReadyForWrites(): Boolean = databaseService.isDatabaseReadyForWrites()
 
     // ------------------------------------------------------------ //
     //                  DATABASE SERVICE MANAGEMENT                 //
     // ------------------------------------------------------------ //
     private var mongoService: MongoDatabaseService? = null
+
     private fun getMongoService(): MongoDatabaseService {
         require(this == MONGODB) {
             "MongoDatabaseService is only permitted in MONGODB storage mode!"

@@ -13,13 +13,14 @@ import org.bukkit.plugin.IllegalPluginAccessException
  */
 fun DocCache<*, *>.runAsync(runnable: Runnable) {
     val client = this.registration.client
-    val plugin = if (client is PluginKacheClient) {
-        client.plugin
-    } else {
-        requireNotNull(DataKachePlugin.getController()) {
-            "Unable to schedule async task: DataKachePlugin is not initialized or controller is null."
+    val plugin =
+        if (client is PluginKacheClient) {
+            client.plugin
+        } else {
+            requireNotNull(DataKachePlugin.getController()) {
+                "Unable to schedule async task: DataKachePlugin is not initialized or controller is null."
+            }
         }
-    }
     Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable)
 }
 
@@ -29,13 +30,14 @@ fun DocCache<*, *>.runAsync(runnable: Runnable) {
  */
 fun DocCache<*, *>.runSync(runnable: Runnable) {
     val client = this.registration.client
-    val plugin = if (client is PluginKacheClient) {
-        client.plugin
-    } else {
-        requireNotNull(DataKachePlugin.getController()) {
-            "Unable to schedule sync task: DataKachePlugin is not initialized or controller is null."
+    val plugin =
+        if (client is PluginKacheClient) {
+            client.plugin
+        } else {
+            requireNotNull(DataKachePlugin.getController()) {
+                "Unable to schedule sync task: DataKachePlugin is not initialized or controller is null."
+            }
         }
-    }
     Bukkit.getScheduler().runTask(plugin, runnable)
 }
 

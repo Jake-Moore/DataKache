@@ -11,5 +11,5 @@ class InvalidPlayerException(
     val operation: Operation,
 ) : DataKacheException(
     "Cannot ${operation.name}: Player '${player.name}' " +
-        "(UUID: ${player.uniqueId}) is not online or valid."
+        "(UUID: ${player.uniqueId}) is not online or valid.",
 )

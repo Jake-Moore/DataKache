@@ -6,13 +6,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.random.Random
 
 /**
  * Represents the decision after handling an error.
  */
 internal sealed class RetryDecision {
     object Continue : RetryDecision()
+
     object Stop : RetryDecision()
+
     data class StopWithError(val error: Exception) : RetryDecision()
 }
 
@@ -20,10 +23,7 @@ internal sealed class RetryDecision {
  * Handles error classification, tracking, and retry logic for change streams.
  * Provides granular error analysis and appropriate recovery strategies.
  */
-internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
-    private val context: ChangeStreamContext<K, D>
-) {
-
+internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(private val context: ChangeStreamContext<K, D>) {
     // Error tracking
     private var consecutiveFailures = 0
     private var lastError: Throwable? = null
@@ -125,7 +125,8 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
             // Specific resume token errors that require token clearing
             errorMessage.contains("resume point may no longer be in the oplog") ||
                 errorMessage.contains("invalid resume point") ||
-                errorMessage.contains("resume token") && errorMessage.contains("invalid") -> {
+                errorMessage.contains("resume token") &&
+                errorMessage.contains("invalid") -> {
                 context.logger.warn("Resume token invalidated due to specific error, clearing tokens: ${e.message}")
                 true // Indicates tokens should be cleared
             }
@@ -165,7 +166,8 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
 
             // Deadlocks or threading issues
             errorMessage.contains("deadlock") ||
-                errorMessage.contains("interrupted") && !errorMessage.contains("cancellation") -> true
+                errorMessage.contains("interrupted") &&
+                !errorMessage.contains("cancellation") -> true
 
             // Normal cancellation or timeout is not critical
             errorMessage.contains("cancellation") ||
@@ -209,24 +211,25 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
 
         // compute backoff multiplier as Double to avoid Long×Long overflow
         val multiplier = ChangeStreamConfig.BACKOFF_MULTIPLIER.pow(safeRetryCount)
-        val baseDelay = if (context.config.initialRetryDelay.inWholeMilliseconds <= 0L ||
-            multiplier > (Long.MAX_VALUE.toDouble() / context.config.initialRetryDelay.inWholeMilliseconds)
-        ) {
-            context.config.maxRetryDelay.inWholeMilliseconds
-        } else {
-            min(
-                (context.config.initialRetryDelay.inWholeMilliseconds * multiplier).toLong(),
+        val baseDelay =
+            if (context.config.initialRetryDelay.inWholeMilliseconds <= 0L ||
+                multiplier > (Long.MAX_VALUE.toDouble() / context.config.initialRetryDelay.inWholeMilliseconds)
+            ) {
                 context.config.maxRetryDelay.inWholeMilliseconds
-            )
-        }
+            } else {
+                min(
+                    (context.config.initialRetryDelay.inWholeMilliseconds * multiplier).toLong(),
+                    context.config.maxRetryDelay.inWholeMilliseconds,
+                )
+            }
 
         // Add jitter to prevent thundering herd
-        val jitter = (baseDelay * ChangeStreamConfig.JITTER_FACTOR * kotlin.random.Random.nextDouble()).toLong()
+        val jitter = (baseDelay * ChangeStreamConfig.JITTER_FACTOR * Random.nextDouble()).toLong()
         val delayMs = baseDelay + jitter
 
         context.logger.info(
             "Retrying change stream in ${delayMs}ms (attempt ${retryCount + 1}/${context.config.maxRetries}, " +
-                "consecutive failures: $consecutiveFailures)"
+                "consecutive failures: $consecutiveFailures)",
         )
 
         return try {
@@ -248,13 +251,13 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
         recordFailure(e)
 
         context.logger.warn(
-            "Change stream error (failure #$consecutiveFailures): ${e.message}"
+            "Change stream error (failure #$consecutiveFailures): ${e.message}",
         )
 
         // Check for fatal errors first
         if (isFatalError(e)) {
             context.logger.error(
-                "Fatal error detected, stopping change stream"
+                "Fatal error detected, stopping change stream",
             )
             return RetryDecision.StopWithError(e)
         }
@@ -262,7 +265,7 @@ internal class ChangeStreamErrorHandler<K : Any, D : Doc<K, D>>(
         // Check if we've exceeded retry limit
         if (retryCount >= context.config.maxRetries) {
             context.logger.error(
-                "Change stream failed permanently after $retryCount attempts"
+                "Change stream failed permanently after $retryCount attempts",
             )
             return RetryDecision.Stop
         }

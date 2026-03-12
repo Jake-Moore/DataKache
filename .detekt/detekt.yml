@@ -1,6 +1,22 @@
 complexity:
   active: false
 
+comments:
+  UndocumentedPublicFunction:
+    active: false
+  UndocumentedPublicProperty:
+    active: false
+  UndocumentedPublicClass:
+    active: false
+  DocumentationOverPrivateFunction:
+    active: false
+  DocumentationOverPrivateProperty:
+    active: false
+  EndOfSentenceFormat:
+    active: false
+  OutdatedDocumentation:
+    active: false
+
 empty-blocks:
   EmptyFunctionBlock:
     active: true
@@ -14,6 +30,10 @@ exceptions:
   TooGenericExceptionThrown:
     active: false
 
+naming:
+  FunctionNameMaxLength:
+    maximumFunctionNameLength: 50
+
 performance:
   SpreadOperator:
     active: false
@@ -21,8 +41,16 @@ performance:
 potential-bugs:
   ImplicitDefaultLocale:
     active: false
+  LateinitUsage:
+    active: false
 
 style:
+  AlsoCouldBeApply:
+    active: false
+  ClassOrdering:
+    active: false
+  DataClassContainsFunctions:
+    active: false
   LoopWithTooManyJumpStatements:
     active: false
   MagicNumber:
@@ -31,5 +59,15 @@ style:
     active: false
   ThrowsCount:
     active: false
-  UnnecessaryAbstractClass:
+  CascadingCallWrapping:
+    active: false
+  UnnecessaryParentheses:
+    active: false
+
+ktlint:
+  BackingPropertyNaming:
+    active: false
+  NoConsecutiveComments:
+    active: false
+  MixedConditionOperators:
     active: false

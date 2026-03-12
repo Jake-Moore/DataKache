@@ -14,7 +14,6 @@ import kotlin.time.Duration.Companion.seconds
 
 @Suppress("unused")
 class TestChangeStreamOperations : AbstractDataKacheTest() {
-
     init {
         describe("Change Stream Operations") {
 
@@ -29,16 +28,22 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
                 cache.getCacheSize().shouldBe(0)
                 cache.readAll().size.shouldBe(0)
                 cache.readSizeFromDatabase().getOrThrow().shouldBe(0)
-                cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(0)
+                cache
+                    .readAllFromDatabase()
+                    .getOrThrow()
+                    .toList()
+                    .size
+                    .shouldBe(0)
 
                 // Insert a new document into the database (external operation)
                 val key = UUID.randomUUID().toString()
-                val doc = TestGenericDoc(
-                    key = key,
-                    version = 42,
-                    name = "Test External Insert",
-                    balance = 1024.0,
-                )
+                val doc =
+                    TestGenericDoc(
+                        key = key,
+                        version = 42,
+                        name = "Test External Insert",
+                        balance = 1024.0,
+                    )
                 testContainer.manualDocumentInsert(cache, doc)
 
                 // Wait for the change stream to process the insert (should be fast)
@@ -48,7 +53,12 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
                 cache.getCacheSize().shouldBe(1)
                 cache.readAll().size.shouldBe(1)
                 cache.readSizeFromDatabase().getOrThrow().shouldBe(1)
-                cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(1)
+                cache
+                    .readAllFromDatabase()
+                    .getOrThrow()
+                    .toList()
+                    .size
+                    .shouldBe(1)
 
                 // Check cache read
                 val readResult = cache.read(key)
@@ -70,7 +80,12 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
             cache.getCacheSize().shouldBe(1)
             cache.readAll().size.shouldBe(1)
             cache.readSizeFromDatabase().getOrThrow().shouldBe(1)
-            cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(1)
+            cache
+                .readAllFromDatabase()
+                .getOrThrow()
+                .toList()
+                .size
+                .shouldBe(1)
 
             // Update the document in the database (external operation)
             testContainer.manualDocumentUpdate(cache, initialDoc, newVersion = 56)
@@ -82,7 +97,12 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
             cache.getCacheSize().shouldBe(1)
             cache.readAll().size.shouldBe(1)
             cache.readSizeFromDatabase().getOrThrow().shouldBe(1)
-            cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(1)
+            cache
+                .readAllFromDatabase()
+                .getOrThrow()
+                .toList()
+                .size
+                .shouldBe(1)
 
             // Check cache read
             val readResult = cache.read(key)
@@ -103,14 +123,20 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
             cache.getCacheSize().shouldBe(1)
             cache.readAll().size.shouldBe(1)
             cache.readSizeFromDatabase().getOrThrow().shouldBe(1)
-            cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(1)
+            cache
+                .readAllFromDatabase()
+                .getOrThrow()
+                .toList()
+                .size
+                .shouldBe(1)
 
             // Replace the document in the database (external operation)
-            val docReplacement = initialDoc.copy(
-                version = 72,
-                name = "Test External Replace",
-                balance = 2048.0,
-            )
+            val docReplacement =
+                initialDoc.copy(
+                    version = 72,
+                    name = "Test External Replace",
+                    balance = 2048.0,
+                )
             testContainer.manualDocumentReplace(cache, docReplacement)
 
             // Wait for the change stream to process the update (should be fast)
@@ -120,7 +146,12 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
             cache.getCacheSize().shouldBe(1)
             cache.readAll().size.shouldBe(1)
             cache.readSizeFromDatabase().getOrThrow().shouldBe(1)
-            cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(1)
+            cache
+                .readAllFromDatabase()
+                .getOrThrow()
+                .toList()
+                .size
+                .shouldBe(1)
 
             // Check cache read
             val readResult = cache.read(key)
@@ -141,7 +172,12 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
             cache.getCacheSize().shouldBe(1)
             cache.readAll().size.shouldBe(1)
             cache.readSizeFromDatabase().getOrThrow().shouldBe(1)
-            cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(1)
+            cache
+                .readAllFromDatabase()
+                .getOrThrow()
+                .toList()
+                .size
+                .shouldBe(1)
 
             // Delete the document in the database (external operation)
             testContainer.manualDocumentDelete(cache, initialDoc.key)
@@ -153,7 +189,12 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
             cache.getCacheSize().shouldBe(0)
             cache.readAll().size.shouldBe(0)
             cache.readSizeFromDatabase().getOrThrow().shouldBe(0)
-            cache.readAllFromDatabase().getOrThrow().toList().size.shouldBe(0)
+            cache
+                .readAllFromDatabase()
+                .getOrThrow()
+                .toList()
+                .size
+                .shouldBe(0)
 
             // Check cache read
             val readResult = cache.read(key)

@@ -37,19 +37,16 @@ import kotlin.reflect.KProperty
 
 abstract class PlayerDocCache<D : PlayerDoc<D>>(
     plugin: JavaPlugin,
-
     cacheName: String,
     registration: DataKacheRegistration,
     docClass: Class<D>,
     logger: (String) -> LoggerService = { cacheName -> PluginCacheLogger(cacheName, plugin) },
-
     /**
      * @param UUID the unique identifier for the document.
      * @param Long the version of the document.
      * @param String? the username (if known) of the player.
      */
     val instantiator: (UUID, Long, String?) -> D,
-
     /**
      * [PlayerDoc] documents are created automatically when a player joins the server. You cannot create them manually.
      *
@@ -58,9 +55,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * When each [PlayerDoc] for this cache is created, this initializer will be used to set the initial values.
      */
     val defaultInitializer: (D) -> D,
-
     override val config: DocCacheConfig<UUID, D> = DocCacheConfig.default(),
-
 ) : DocCacheImpl<UUID, D>(cacheName, registration, docClass, logger) {
     // ------------------------------------------------------------ //
     //                     Kotlin Reflect Access                    //
@@ -70,6 +65,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
+
     /**
      * DataKache will ensure that a [PlayerDoc] is present for every online [Player].
      *
@@ -96,13 +92,14 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                 // On Failure -> pass failure through
                 result
             }
+
             is Empty -> {
                 // PANIC! The provided player is online, but the PlayerDoc is not present in the cache.
                 // This should never happen, as DataKache ensures that a PlayerDoc is created for
                 // every online player.
                 DataKacheFileLogger.severe(
                     "[PlayerDocCache#read] PlayerDoc for player ${player.name} (${player.uniqueId})" +
-                        " is not cached. This should not happen! Attempting to resolve (MAY LAG!)."
+                        " is not cached. This should not happen! Attempting to resolve (MAY LAG!).",
                 )
 
                 // Best solution - create a new PlayerDoc using basic initialization, and any future updates
@@ -138,7 +135,8 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * @return A list of [PlayerDoc] objects for all currently online players.
      */
     fun readAllOnline(): List<D> {
-        return Bukkit.getOnlinePlayers()
+        return Bukkit
+            .getOnlinePlayers()
             .filter { PlayerUtil.isPlayerOnline(it) }
             .mapNotNull { player ->
                 val result = this.read(player)
@@ -148,7 +146,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
                         "[PlayerDocCache#readAllOnline] Failed to read PlayerDoc for " +
                             "player ${player.name} (${player.uniqueId}). " +
                             "This should not happen, please report this issue to the DataKache team.",
-                        exception
+                        exception,
                     )
                     return@mapNotNull null
                 }
@@ -200,10 +198,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
      * - [IllegalDocumentUsernameModificationException] if attempted.
      */
     @ApiStatus.Internal
-    internal suspend fun updateUsername(
-        key: UUID,
-        username: String,
-    ): DefiniteResult<D> {
+    internal suspend fun updateUsername(key: UUID, username: String): DefiniteResult<D> {
         return UpdatePlayerDocResultHandler.wrap {
             return@wrap updateInternal(
                 key = key,
@@ -292,13 +287,9 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
     // ------------------------------------------------------------ //
     //                    Key Manipulation Methods                  //
     // ------------------------------------------------------------ //
-    override fun keyFromString(string: String): UUID {
-        return UUID.fromString(string)
-    }
+    override fun keyFromString(string: String): UUID = UUID.fromString(string)
 
-    override fun keyToString(key: UUID): String {
-        return key.toString()
-    }
+    override fun keyToString(key: UUID): String = key.toString()
 
     // ------------------------------------------------------------ //
     //                        Internal Methods                      //
@@ -311,11 +302,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         IllegalDocumentVersionModificationException::class,
         IllegalDocumentUsernameModificationException::class,
     )
-    private suspend fun createAndInsertNewPlayerDoc(
-        uuid: UUID,
-        username: String? = null,
-        initializer: (D) -> D,
-    ): D {
+    private suspend fun createAndInsertNewPlayerDoc(uuid: UUID, username: String? = null, initializer: (D) -> D): D {
         val doc: D = constructNewPlayerDoc(uuid, username, initializer)
 
         // Access internal method to save and cache the document
@@ -327,11 +314,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         IllegalDocumentVersionModificationException::class,
         IllegalDocumentUsernameModificationException::class,
     )
-    private fun constructNewPlayerDoc(
-        uuid: UUID,
-        username: String?,
-        initializer: (D) -> D,
-    ): D {
+    private fun constructNewPlayerDoc(uuid: UUID, username: String?, initializer: (D) -> D): D {
         val namespace = this.getKeyNamespace(uuid)
 
         // Create from instantiator

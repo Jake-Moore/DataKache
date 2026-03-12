@@ -11,27 +11,29 @@ import io.kotest.matchers.types.shouldNotBeInstanceOf
 
 @Suppress("unused")
 class TestReadOrCreateOperations : AbstractDataKacheTest() {
-
     init {
         describe("ReadOrCreate Operations") {
 
             it("should read existing document") {
 
                 // Create a document first
-                val originalDoc = cache.create("readOrCreateExistingKey") { doc ->
-                    doc.copy(
-                        name = "Existing Document",
-                        balance = 150.0
-                    )
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("readOrCreateExistingKey") { doc ->
+                            doc.copy(
+                                name = "Existing Document",
+                                balance = 150.0,
+                            )
+                        }.getOrThrow()
 
                 // Use readOrCreate - should read existing document
-                val result = cache.readOrCreate("readOrCreateExistingKey") { doc ->
-                    doc.copy(
-                        name = "This should not be used",
-                        balance = 999.0
-                    )
-                }
+                val result =
+                    cache.readOrCreate("readOrCreateExistingKey") { doc ->
+                        doc.copy(
+                            name = "This should not be used",
+                            balance = 999.0,
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -46,12 +48,13 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should create document when it doesn't exist") {
 
                 // Use readOrCreate on non-existent document
-                val result = cache.readOrCreate("readOrCreateNewKey") { doc ->
-                    doc.copy(
-                        name = "New Document Created",
-                        balance = 250.0
-                    )
-                }
+                val result =
+                    cache.readOrCreate("readOrCreateNewKey") { doc ->
+                        doc.copy(
+                            name = "New Document Created",
+                            balance = 250.0,
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 result.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -89,16 +92,17 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should create document with complex data when it doesn't exist") {
 
                 // Use readOrCreate with complex initializer
-                val result = cache.readOrCreate("readOrCreateComplexKey") { doc ->
-                    doc.copy(
-                        name = "Complex Created Document",
-                        balance = 500.0,
-                        list = listOf("item1", "item2", "item3"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key1" to MyData.createRandom())
-                    )
-                }
+                val result =
+                    cache.readOrCreate("readOrCreateComplexKey") { doc ->
+                        doc.copy(
+                            name = "Complex Created Document",
+                            balance = 500.0,
+                            list = listOf("item1", "item2", "item3"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key1" to MyData.createRandom()),
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -116,17 +120,23 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should handle multiple readOrCreate operations") {
 
                 // Create multiple documents using readOrCreate
-                val doc1 = cache.readOrCreate("multiKey1") { doc ->
-                    doc.copy(name = "Document 1", balance = 100.0)
-                }.getOrThrow()
+                val doc1 =
+                    cache
+                        .readOrCreate("multiKey1") { doc ->
+                            doc.copy(name = "Document 1", balance = 100.0)
+                        }.getOrThrow()
 
-                val doc2 = cache.readOrCreate("multiKey2") { doc ->
-                    doc.copy(name = "Document 2", balance = 200.0)
-                }.getOrThrow()
+                val doc2 =
+                    cache
+                        .readOrCreate("multiKey2") { doc ->
+                            doc.copy(name = "Document 2", balance = 200.0)
+                        }.getOrThrow()
 
-                val doc3 = cache.readOrCreate("multiKey3") { doc ->
-                    doc.copy(name = "Document 3", balance = 300.0)
-                }.getOrThrow()
+                val doc3 =
+                    cache
+                        .readOrCreate("multiKey3") { doc ->
+                            doc.copy(name = "Document 3", balance = 300.0)
+                        }.getOrThrow()
 
                 // Verify all documents were created
                 doc1.key shouldBe "multiKey1"
@@ -151,14 +161,17 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should read existing document after creation") {
 
                 // Create document using readOrCreate
-                val createdDoc = cache.readOrCreate("readAfterCreateKey") { doc ->
-                    doc.copy(name = "Created Document", balance = 100.0)
-                }.getOrThrow()
+                val createdDoc =
+                    cache
+                        .readOrCreate("readAfterCreateKey") { doc ->
+                            doc.copy(name = "Created Document", balance = 100.0)
+                        }.getOrThrow()
 
                 // Read the same document again using readOrCreate
-                val readResult = cache.readOrCreate("readAfterCreateKey") { doc ->
-                    doc.copy(name = "This should not be used", balance = 999.0)
-                }
+                val readResult =
+                    cache.readOrCreate("readAfterCreateKey") { doc ->
+                        doc.copy(name = "This should not be used", balance = 999.0)
+                    }
 
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -172,9 +185,10 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should handle readOrCreate with empty string key") {
 
                 // Use readOrCreate with empty key
-                val result = cache.readOrCreate("") { doc ->
-                    doc.copy(name = "Empty Key Document")
-                }
+                val result =
+                    cache.readOrCreate("") { doc ->
+                        doc.copy(name = "Empty Key Document")
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -191,9 +205,10 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
                 val specialKey = "test-key_with.special@chars#123"
 
                 // Use readOrCreate with special key
-                val result = cache.readOrCreate(specialKey) { doc ->
-                    doc.copy(name = "Special Key Document")
-                }
+                val result =
+                    cache.readOrCreate(specialKey) { doc ->
+                        doc.copy(name = "Special Key Document")
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -209,16 +224,17 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should handle readOrCreate with null values") {
 
                 // Use readOrCreate with null values
-                val result = cache.readOrCreate("nullReadOrCreateKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }
+                val result =
+                    cache.readOrCreate("nullReadOrCreateKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -236,19 +252,23 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should handle readOrCreate after document update") {
 
                 // Create document using readOrCreate
-                val originalDoc = cache.readOrCreate("updateReadOrCreateKey") { doc ->
-                    doc.copy(name = "Original", balance = 100.0)
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .readOrCreate("updateReadOrCreateKey") { doc ->
+                            doc.copy(name = "Original", balance = 100.0)
+                        }.getOrThrow()
 
                 // Update the document
-                cache.update("updateReadOrCreateKey") { doc ->
-                    doc.copy(name = "Updated", balance = 200.0)
-                }.getOrThrow()
+                cache
+                    .update("updateReadOrCreateKey") { doc ->
+                        doc.copy(name = "Updated", balance = 200.0)
+                    }.getOrThrow()
 
                 // Use readOrCreate again - should read the updated document
-                val readResult = cache.readOrCreate("updateReadOrCreateKey") { doc ->
-                    doc.copy(name = "This should not be used", balance = 999.0)
-                }
+                val readResult =
+                    cache.readOrCreate("updateReadOrCreateKey") { doc ->
+                        doc.copy(name = "This should not be used", balance = 999.0)
+                    }
 
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -262,17 +282,19 @@ class TestReadOrCreateOperations : AbstractDataKacheTest() {
             it("should handle readOrCreate after document deletion") {
 
                 // Create document using readOrCreate
-                cache.readOrCreate("deleteReadOrCreateKey") { doc ->
-                    doc.copy(name = "Original", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .readOrCreate("deleteReadOrCreateKey") { doc ->
+                        doc.copy(name = "Original", balance = 100.0)
+                    }.getOrThrow()
 
                 // Delete the document
                 cache.delete("deleteReadOrCreateKey").getOrThrow()
 
                 // Use readOrCreate again - should create new document
-                val result = cache.readOrCreate("deleteReadOrCreateKey") { doc ->
-                    doc.copy(name = "Recreated", balance = 300.0)
-                }
+                val result =
+                    cache.readOrCreate("deleteReadOrCreateKey") { doc ->
+                        doc.copy(name = "Recreated", balance = 300.0)
+                    }
 
                 result.shouldBeInstanceOf<Success<TestGenericDoc>>()
 

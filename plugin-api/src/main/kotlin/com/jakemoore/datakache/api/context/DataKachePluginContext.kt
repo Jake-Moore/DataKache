@@ -19,7 +19,7 @@ class DataKachePluginContext : DataKacheContext {
     constructor(plugin: JavaPlugin) : this(
         plugin = plugin,
         config = DataKachePluginConfig.loadDataKacheConfig(plugin),
-        lang = DataKachePluginConfig.loadDataKacheLang(plugin)
+        lang = DataKachePluginConfig.loadDataKacheLang(plugin),
     )
 
     constructor(plugin: JavaPlugin, config: DataKacheConfig, lang: DataKachePluginLang) {

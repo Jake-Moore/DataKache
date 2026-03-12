@@ -7,6 +7,7 @@ object PlayerUtil {
     /**
      * @return true IFF [ player != null AND player.isOnline() AND player.isValid() ]
      */
+    @Suppress("ExpressionBodySyntax")
     fun isPlayerOnlineAndAlive(player: Player?): Boolean {
         // isValid checks validity but also if the player is ALIVE
         return player != null && player.isOnline && player.isValid

@@ -18,7 +18,7 @@ internal object CreateGenericDocResultHandler {
         // Work cannot return a null document.
         //   If the document has a key conflict, [DuplicateDocumentKeyException] should be thrown.
         //   If the document has a unique index conflict, [DuplicateUniqueIndexException] should be thrown.
-        work: suspend () -> D
+        work: suspend () -> D,
     ): DefiniteResult<D> {
         try {
             // METRICS
@@ -35,7 +35,7 @@ internal object CreateGenericDocResultHandler {
                 ResultExceptionWrapper(
                     message = "Create operation failed: Key already exists!",
                     exception = d,
-                )
+                ),
             )
         } catch (d: DuplicateUniqueIndexException) {
             // METRICS
@@ -46,7 +46,7 @@ internal object CreateGenericDocResultHandler {
                 ResultExceptionWrapper(
                     message = "Create operation failed: Unique index already exists!",
                     exception = d,
-                )
+                ),
             )
         } catch (e: Exception) {
             // METRICS
@@ -55,8 +55,8 @@ internal object CreateGenericDocResultHandler {
             return Failure(
                 ResultExceptionWrapper(
                     "Create GenericDoc operation failed.",
-                    e
-                )
+                    e,
+                ),
             )
         }
     }

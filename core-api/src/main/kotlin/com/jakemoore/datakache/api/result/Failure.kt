@@ -5,9 +5,10 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 /**
  * Failure state (exception during operation).
  */
-class Failure<T>(
-    val exception: ResultExceptionWrapper,
-) : DefiniteResult<T>, OptionalResult<T>, RejectableResult<T> {
+class Failure<T>(val exception: ResultExceptionWrapper) :
+    DefiniteResult<T>,
+    OptionalResult<T>,
+    RejectableResult<T> {
     /**
      * @return false (not a success)
      */

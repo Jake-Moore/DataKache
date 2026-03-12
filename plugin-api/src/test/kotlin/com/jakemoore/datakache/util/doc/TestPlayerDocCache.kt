@@ -10,22 +10,24 @@ import org.bukkit.plugin.java.JavaPlugin
 import java.util.UUID
 import kotlin.reflect.KProperty
 
-class TestPlayerDocCache internal constructor(
-    plugin: JavaPlugin,
-    registration: DataKacheRegistration,
-) : PlayerDocCache<TestPlayerDoc>(
-    plugin = plugin,
-    registration = registration,
-    cacheName = "TestPlayerDocs",
-    docClass = TestPlayerDoc::class.java,
-    instantiator = ::TestPlayerDoc,
-    defaultInitializer = { it },
-    config = DocCacheConfig.default<UUID, TestPlayerDoc>()
-        .copy(enableMassDestructiveOps = true),
-) {
-
+class TestPlayerDocCache internal constructor(plugin: JavaPlugin, registration: DataKacheRegistration) :
+    PlayerDocCache<TestPlayerDoc>(
+        plugin = plugin,
+        registration = registration,
+        cacheName = "TestPlayerDocs",
+        docClass = TestPlayerDoc::class.java,
+        instantiator = ::TestPlayerDoc,
+        defaultInitializer = { it },
+        config =
+        DocCacheConfig
+            .default<UUID, TestPlayerDoc>()
+            .copy(enableMassDestructiveOps = true),
+    ) {
     override fun getKSerializer(): KSerializer<TestPlayerDoc> = TestPlayerDoc.serializer()
+
     override fun getKeyKProperty(): KProperty<UUID> = TestPlayerDoc::key
+
     override fun getVersionKProperty(): KProperty<Long> = TestPlayerDoc::version
+
     override fun getUsernameKProperty(): KProperty<String?> = TestPlayerDoc::username
 }

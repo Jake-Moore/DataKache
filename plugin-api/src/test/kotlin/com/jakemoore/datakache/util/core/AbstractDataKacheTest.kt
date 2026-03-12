@@ -23,12 +23,12 @@ import kotlin.time.Duration.Companion.seconds
  * Provides common setup and teardown functionality for all tests.
  */
 abstract class AbstractDataKacheTest : DescribeSpec() {
-
-    protected val json = Json {
-        encodeDefaults = true // Encodes default data class property values (instead of omitting them)
-        explicitNulls = true // Encodes null values (instead of omitting them)
-        prettyPrint = true
-    }
+    protected val json =
+        Json {
+            encodeDefaults = true // Encodes default data class property values (instead of omitting them)
+            explicitNulls = true // Encodes null values (instead of omitting them)
+            prettyPrint = true
+        }
 
     private lateinit var testContainer: DataKacheTestContainer
 
@@ -83,9 +83,8 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param playerName The name of the player to add
      * @return The [PlayerMock] instance representing the added player
      */
-    protected suspend fun addPlayer(playerName: String, uuid: UUID = UUID.randomUUID()): PlayerMock {
-        return addPlayer(makePlayer(playerName, uuid))
-    }
+    protected suspend fun addPlayer(playerName: String, uuid: UUID = UUID.randomUUID()): PlayerMock =
+        addPlayer(makePlayer(playerName, uuid))
 
     /**
      * Adds a player to the mock server.
@@ -109,8 +108,9 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
 
     private fun checkMockPlayer(playerName: String): PlayerMock {
         // Ensure the login went through
-        val p2 = server.getPlayerExact(playerName)
-            ?: error("Player $playerName not found after adding")
+        val p2 =
+            server.getPlayerExact(playerName)
+                ?: error("Player $playerName not found after adding")
         require(p2.isOnline) {
             "Player $playerName is not online after adding"
         }
@@ -130,12 +130,8 @@ abstract class AbstractDataKacheTest : DescribeSpec() {
      * @param uuid The UUID of the player (defaults to a random UUID)
      * @return The [PlayerMock] instance representing the created player
      */
-    protected fun makePlayer(
-        playerName: String,
-        uuid: UUID = UUID.randomUUID(),
-    ): PlayerMock {
-        return PlayerMock(server, playerName, uuid)
-    }
+    protected fun makePlayer(playerName: String, uuid: UUID = UUID.randomUUID()): PlayerMock =
+        PlayerMock(server, playerName, uuid)
 
     /**
      * Gets a player by name from the mock server.

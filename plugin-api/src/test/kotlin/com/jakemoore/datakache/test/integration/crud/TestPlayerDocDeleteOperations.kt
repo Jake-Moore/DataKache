@@ -12,7 +12,6 @@ import java.util.UUID
 
 @Suppress("unused")
 class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
-
     init {
         describe("PlayerDocCache Delete Operations") {
 
@@ -20,13 +19,14 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
                 val uuid = UUID.randomUUID()
 
                 // Create a PlayerDoc with custom data
-                val createResult = cache.create(uuid) { doc ->
-                    doc.copy(
-                        name = "TestPlayer",
-                        balance = 100.0,
-                        list = listOf("item1", "item2")
-                    )
-                }
+                val createResult =
+                    cache.create(uuid) { doc ->
+                        doc.copy(
+                            name = "TestPlayer",
+                            balance = 100.0,
+                            list = listOf("item1", "item2"),
+                        )
+                    }
                 createResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val originalDoc = createResult.value
 
@@ -74,13 +74,14 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
                 initialDoc.username.shouldBe("TestPlayer1")
 
                 // Update it with custom data
-                val updateResult = cache.update(player) { doc ->
-                    doc.copy(
-                        name = "UpdatedPlayer",
-                        balance = 500.0,
-                        list = listOf("updated1", "updated2", "updated3")
-                    )
-                }
+                val updateResult =
+                    cache.update(player) { doc ->
+                        doc.copy(
+                            name = "UpdatedPlayer",
+                            balance = 500.0,
+                            list = listOf("updated1", "updated2", "updated3"),
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val updatedDoc = updateResult.value
                 updatedDoc.name.shouldBe("UpdatedPlayer")
@@ -159,18 +160,20 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
                 cache.read(player).shouldBeInstanceOf<Success<TestPlayerDoc>>()
 
                 // Perform multiple clear operations
-                val clearResults = (1..5).map { index ->
-                    // Update with some data first
-                    cache.update(player.uniqueId) { doc ->
-                        doc.copy(
-                            name = "UpdatedPlayer$index",
-                            balance = index * 100.0
-                        )
-                    }.shouldBeInstanceOf<Success<TestPlayerDoc>>()
+                val clearResults =
+                    (1..5).map { index ->
+                        // Update with some data first
+                        cache
+                            .update(player.uniqueId) { doc ->
+                                doc.copy(
+                                    name = "UpdatedPlayer$index",
+                                    balance = index * 100.0,
+                                )
+                            }.shouldBeInstanceOf<Success<TestPlayerDoc>>()
 
-                    // Clear the document
-                    cache.delete(player.uniqueId)
-                }
+                        // Clear the document
+                        cache.delete(player.uniqueId)
+                    }
 
                 clearResults.forEach { result ->
                     result.shouldBeInstanceOf<Success<Boolean>>()
@@ -219,13 +222,14 @@ class TestPlayerDocDeleteOperations : AbstractDataKacheTest() {
                 val uuid = UUID.randomUUID()
 
                 // Create a PlayerDoc with custom data
-                val createResult = cache.create(uuid) { doc ->
-                    doc.copy(
-                        name = "PersistentPlayer",
-                        balance = 750.0,
-                        list = listOf("persistent1", "persistent2", "persistent3")
-                    )
-                }
+                val createResult =
+                    cache.create(uuid) { doc ->
+                        doc.copy(
+                            name = "PersistentPlayer",
+                            balance = 750.0,
+                            list = listOf("persistent1", "persistent2", "persistent3"),
+                        )
+                    }
                 createResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val originalDoc = createResult.value
 

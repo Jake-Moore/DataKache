@@ -39,15 +39,16 @@ class DataKachePlugin : JavaPlugin() {
             context = ctx ?: DataKachePluginContext(plugin)
 
             // Enable DataKache Internals
-            val success = runBlocking {
-                if (!DataKache.onEnable(context)) {
-                    plugin.logger.severe("Failed to enable DataKache! Shutting down...")
-                    plugin.server.pluginManager.disablePlugin(plugin)
-                    Bukkit.shutdown()
-                    return@runBlocking false
+            val success =
+                runBlocking {
+                    if (!DataKache.onEnable(context)) {
+                        plugin.logger.severe("Failed to enable DataKache! Shutting down...")
+                        plugin.server.pluginManager.disablePlugin(plugin)
+                        Bukkit.shutdown()
+                        return@runBlocking false
+                    }
+                    return@runBlocking true
                 }
-                return@runBlocking true
-            }
             if (!success) return false
 
             // Register Additional Plugin Services
@@ -69,21 +70,22 @@ class DataKachePlugin : JavaPlugin() {
             }
 
             // Disable DataKache Internals
-            val success = runBlocking {
-                if (!DataKache.onDisable()) {
-                    plugin.logger.severe("Failed to disable DataKache! Some services may not have shut down properly.")
-                    return@runBlocking false
-                } else {
-                    return@runBlocking true
+            val success =
+                runBlocking {
+                    if (!DataKache.onDisable()) {
+                        plugin.logger.severe(
+                            "Failed to disable DataKache! Some services may not have shut down properly.",
+                        )
+                        return@runBlocking false
+                    } else {
+                        return@runBlocking true
+                    }
                 }
-            }
 
             controller = null
             return success
         }
 
-        fun getController(): JavaPlugin? {
-            return controller
-        }
+        fun getController(): JavaPlugin? = controller
     }
 }

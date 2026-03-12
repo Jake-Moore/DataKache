@@ -15,7 +15,9 @@ import java.util.concurrent.TimeUnit
 /**
  * Listens to MongoDB cluster events and server heartbeats to monitor connection status and ping times.
  */
-internal class MongoListener(private val service: MongoDatabaseService) : ClusterListener, ServerMonitorListener {
+internal class MongoListener(private val service: MongoDatabaseService) :
+    ClusterListener,
+    ServerMonitorListener {
     internal val listenerID: UUID = UUID.randomUUID()
 
     /**
@@ -90,18 +92,20 @@ internal class MongoListener(private val service: MongoDatabaseService) : Cluste
     }
 
     // Map <server address, ping rolling average>
-    private val pingAverages: Cache<String, RollingAverage> = CacheBuilder
-        .newBuilder()
-        .expireAfterWrite(5, TimeUnit.MINUTES)
-        .build()
+    private val pingAverages: Cache<String, RollingAverage> =
+        CacheBuilder
+            .newBuilder()
+            .expireAfterWrite(5, TimeUnit.MINUTES)
+            .build()
 
     private fun updateClusterServerPings(servers: List<ServerDescription>) {
         if (service.activeListener != listenerID) return // This listener is not the active one, ignore the event
 
         for (server in servers) {
-            val rolling = pingAverages.asMap().computeIfAbsent(server.address.toString()) {
-                RollingAverage(30)
-            }
+            val rolling =
+                pingAverages.asMap().computeIfAbsent(server.address.toString()) {
+                    RollingAverage(30)
+                }
             rolling.add(server.roundTripTimeNanos)
         }
         recalculateAveragePing()
@@ -125,10 +129,11 @@ internal class MongoListener(private val service: MongoDatabaseService) : Cluste
         }
 
         // Set average ping nanos
-        this.service.averagePingNanos = if (count > 0) {
-            sumNanos / count
-        } else {
-            -1L // No servers available, set to -1 to indicate no ping
-        }
+        this.service.averagePingNanos =
+            if (count > 0) {
+                sumNanos / count
+            } else {
+                -1L // No servers available, set to -1 to indicate no ping
+            }
     }
 }

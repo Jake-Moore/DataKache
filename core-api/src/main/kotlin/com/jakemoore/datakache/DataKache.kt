@@ -75,11 +75,11 @@ object DataKache {
             DataKacheAPI.registrations.forEach {
                 logger.warning(
                     "DataKacheRegistration for ${it.databaseName} " +
-                        "(backed by plugin '${it.client.name}') was not shutdown before plugin disable."
+                        "(backed by plugin '${it.client.name}') was not shutdown before plugin disable.",
                 )
                 logger.warning(
                     "Manually shutting it down! " +
-                        "(PLEASE CONTACT AUTHORS OF ${it.client.name} TO FIX THIS)"
+                        "(PLEASE CONTACT AUTHORS OF ${it.client.name} TO FIX THIS)",
                 )
                 it.shutdown()
             }
@@ -150,7 +150,5 @@ object DataKache {
     /**
      * @return If DataKache debug logging is enabled
      */
-    fun isDebug(): Boolean {
-        return config.debug
-    }
+    fun isDebug(): Boolean = config.debug
 }

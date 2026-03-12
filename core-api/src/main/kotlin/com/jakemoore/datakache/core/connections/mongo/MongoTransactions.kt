@@ -75,15 +75,16 @@ object MongoTransactions : CoroutineScope {
         val startMark = TimeSource.Monotonic.markNow()
 
         // retryExecutionHelper may throw an exception, which is handled by the caller
-        val updatedDoc: D = recursiveRetryUpdate(
-            client,
-            collection,
-            docCache,
-            doc,
-            updateFunction,
-            0,
-            bypassValidation,
-        )
+        val updatedDoc: D =
+            recursiveRetryUpdate(
+                client,
+                collection,
+                docCache,
+                doc,
+                updateFunction,
+                0,
+                bypassValidation,
+            )
 
         val elapsedMillis = startMark.elapsedNow().inWholeMilliseconds
         // METRICS
@@ -118,7 +119,7 @@ object MongoTransactions : CoroutineScope {
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdateTransactionLimitReached)
 
             throw TransactionRetriesExceededException(
-                "Failed to execute update after $MAX_TRANSACTION_ATTEMPTS attempts."
+                "Failed to execute update after $MAX_TRANSACTION_ATTEMPTS attempts.",
             )
         }
 
@@ -138,14 +139,15 @@ object MongoTransactions : CoroutineScope {
             var sessionResolved = false
             try {
                 // Fetch Version prior to updates
-                val result = getTransactionResult(
-                    session,
-                    collection,
-                    docCache,
-                    doc,
-                    updateFunction,
-                    bypassValidation
-                )
+                val result =
+                    getTransactionResult(
+                        session,
+                        collection,
+                        docCache,
+                        doc,
+                        updateFunction,
+                        bypassValidation,
+                    )
 
                 // Receiving a database document indicates failure
                 if (result.databaseDoc != null) {
@@ -224,47 +226,46 @@ object MongoTransactions : CoroutineScope {
         }
 
         val errorMessage = e.message ?: ""
-        val index = extractIndexNameFromError(errorMessage)?.lowercase() ?: run {
-            DataKacheFileLogger.warn(
-                "Failed to extract index name from MongoDB error message: '$errorMessage'. " +
-                    "This may indicate a new or unexpected error format. Please report this issue.",
-                e,
-            )
-            return
-        }
+        val index =
+            extractIndexNameFromError(errorMessage)?.lowercase() ?: run {
+                DataKacheFileLogger.warn(
+                    "Failed to extract index name from MongoDB error message: '$errorMessage'. " +
+                        "This may indicate a new or unexpected error format. Please report this issue.",
+                    e,
+                )
+                return
+            }
 
-        when {
-            index == "_id" || index == "_id_" -> {
-                // Primary key violation (duplicate _id)
-                throw DuplicateDocumentKeyException(
-                    docCache = docCache,
-                    keyString = docCache.keyToString(doc.key),
-                    operation = operation,
-                    fullMessage = errorMessage,
-                    cause = e,
-                )
-            }
-            else -> {
-                // Unique index violation (duplicate value in a unique index)
-                throw DuplicateUniqueIndexException(
-                    docCache = docCache,
-                    index = index,
-                    operation = operation,
-                    fullMessage = errorMessage,
-                    cause = e,
-                )
-            }
+        if (index == "_id" || index == "_id_") {
+            // Primary key violation (duplicate _id)
+            throw DuplicateDocumentKeyException(
+                docCache = docCache,
+                keyString = docCache.keyToString(doc.key),
+                operation = operation,
+                fullMessage = errorMessage,
+                cause = e,
+            )
+        } else {
+            // Unique index violation (duplicate value in a unique index)
+            throw DuplicateUniqueIndexException(
+                docCache = docCache,
+                index = index,
+                operation = operation,
+                fullMessage = errorMessage,
+                cause = e,
+            )
         }
     }
 
     @Suppress("RegExpSimplifiable", "RegExpRedundantEscape")
     private fun extractIndexNameFromError(errorMessage: String): String? {
         // More robust regex patterns for different error message formats
-        val patterns = listOf(
-            Regex("""index:\s*([^\s]+)"""), // Standard format
-            Regex("""index\s+"([^"]+)""""), // Quoted index names
-            Regex("""dup key:\s*\{\s*:\s*([^}]+)\}""") // Alternative format
-        )
+        val patterns =
+            listOf(
+                Regex("""index:\s*([^\s]+)"""), // Standard format
+                Regex("""index\s+"([^"]+)""""), // Quoted index names
+                Regex("""dup key:\s*\{\s*:\s*([^}]+)\}"""), // Alternative format
+            )
 
         for (pattern in patterns) {
             pattern.find(errorMessage)?.let { match ->
@@ -319,8 +320,9 @@ object MongoTransactions : CoroutineScope {
         if (updatedDoc.version != nextVersion) {
             throw InvalidDocCopyHelperException(
                 docNamespace = namespace,
-                message = "The copyHelper did not return a document with the expected version. " +
-                    "Expected version: $nextVersion, but got: ${updatedDoc.version}."
+                message =
+                "The copyHelper did not return a document with the expected version. " +
+                    "Expected version: $nextVersion, but got: ${updatedDoc.version}.",
             )
         }
 
@@ -332,35 +334,39 @@ object MongoTransactions : CoroutineScope {
 
         val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
         val verFieldName = SerializationUtil.getSerialNameForVersion(docCache)
-        val result = collection.replaceOne(
-            session,
-            Filters.and(
-                // Filters serve as a compare-and-swap mechanism
-                //  to ensure we only update the document if it matches the expected id and version.
-                // (Optimistic Versioning)
-                Filters.eq(keyFieldName, id),
-                Filters.eq(verFieldName, currentVersion),
-            ),
-            updatedDoc
-        )
+        val result =
+            collection.replaceOne(
+                session,
+                Filters.and(
+                    // Filters serve as a compare-and-swap mechanism
+                    //  to ensure we only update the document if it matches the expected id and version.
+                    // (Optimistic Versioning)
+                    Filters.eq(keyFieldName, id),
+                    Filters.eq(verFieldName, currentVersion),
+                ),
+                updatedDoc,
+            )
 
         // If no documents were modified, then the compare-and-swap failed, we must retry
         if (result.modifiedCount == 0L) {
             DataKache.logger.debug(
                 "Failed to update Doc in MongoDB Layer " +
-                    "(Could not find document with id: '$namespace' and version: $currentVersion)"
+                    "(Could not find document with id: '$namespace' and version: $currentVersion)",
             )
 
             // If update failed, fetch current version
-            val databaseDoc: D = collection.find(session).filter(
-                Filters.eq(keyFieldName, id)
-            ).firstOrNull() ?: run {
-                throw DocumentNotFoundException(
-                    keyString = id,
-                    docCache = docCache,
-                    operation = Operation.UPDATE,
-                )
-            }
+            val databaseDoc: D =
+                collection
+                    .find(session)
+                    .filter(
+                        Filters.eq(keyFieldName, id),
+                    ).firstOrNull() ?: run {
+                    throw DocumentNotFoundException(
+                        keyString = id,
+                        docCache = docCache,
+                        operation = Operation.UPDATE,
+                    )
+                }
 
             // Update our working copy with latest version and retry
             return TransactionResult(null, databaseDoc)
@@ -408,14 +414,20 @@ object MongoTransactions : CoroutineScope {
         launch {
             if ((currentAttempt + 1) < LOG_WRITE_CONFLICT_AFTER) return@launch
 
-            val msg = "Write Conflict, attempt " + (currentAttempt + 1) +
-                " of " + MAX_TRANSACTION_ATTEMPTS + " for coll " + docCache.cacheName +
-                " with id " + docCache.keyToString(doc.key)
+            val msg =
+                "Write Conflict, attempt " +
+                    (currentAttempt + 1) +
+                    " of " +
+                    MAX_TRANSACTION_ATTEMPTS +
+                    " for coll " +
+                    docCache.cacheName +
+                    " with id " +
+                    docCache.keyToString(doc.key)
             if ((currentAttempt + 1) % LOG_WRITE_CONFLICT_FREQUENCY == 0) {
                 DataKacheFileLogger.debug(
                     msg,
                     mE,
-                    DataKacheFileLogger.randomWriteExceptionFile
+                    DataKacheFileLogger.randomWriteExceptionFile,
                 )
             } else {
                 DataKache.logger.info(msg)

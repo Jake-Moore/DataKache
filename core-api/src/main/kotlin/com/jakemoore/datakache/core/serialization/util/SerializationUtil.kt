@@ -8,15 +8,12 @@ import kotlin.reflect.full.findAnnotation
 
 @Suppress("unused")
 internal object SerializationUtil {
-    fun getSerialNameFromProperty(property: KProperty<*>): String {
-        return property.findAnnotation<SerialName>()?.value ?: property.name
-    }
+    fun getSerialNameFromProperty(property: KProperty<*>): String =
+        property.findAnnotation<SerialName>()?.value ?: property.name
 
-    fun <K : Any, D : Doc<K, D>> getSerialNameForKey(docCache: DocCache<K, D>): String {
-        return getSerialNameFromProperty(docCache.getKeyKProperty())
-    }
+    fun <K : Any, D : Doc<K, D>> getSerialNameForKey(docCache: DocCache<K, D>): String =
+        getSerialNameFromProperty(docCache.getKeyKProperty())
 
-    fun <K : Any, D : Doc<K, D>> getSerialNameForVersion(docCache: DocCache<K, D>): String {
-        return getSerialNameFromProperty(docCache.getVersionKProperty())
-    }
+    fun <K : Any, D : Doc<K, D>> getSerialNameForVersion(docCache: DocCache<K, D>): String =
+        getSerialNameFromProperty(docCache.getVersionKProperty())
 }

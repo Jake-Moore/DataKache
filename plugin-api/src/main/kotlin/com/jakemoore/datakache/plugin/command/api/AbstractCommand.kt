@@ -15,22 +15,20 @@ internal abstract class AbstractCommand(
     /**
      * Optional Description of this command.
      */
-    protected val description: String? = null
+    protected val description: String? = null,
 ) {
-    protected val subCommands: MutableList<AbstractCommand> = kotlin.collections.ArrayList()
+    protected val subCommands: MutableList<AbstractCommand> = ArrayList()
 
     protected fun sendUsage(sender: CommandSender) {
         sender.sendMessage(
             Color.t(
-                "&4Not enough command input. &cYou should use it like this:"
-            )
+                "&4Not enough command input. &cYou should use it like this:",
+            ),
         )
         sender.sendMessage(getCommandUsage(this))
     }
 
-    protected fun getCommandUsage(): String {
-        return getCommandUsage(this)
-    }
+    protected fun getCommandUsage(): String = getCommandUsage(this)
 
     protected fun sendNoPerm(sender: CommandSender) {
         sender.sendMessage(Color.t(NO_PERM))
@@ -47,10 +45,12 @@ internal abstract class AbstractCommand(
         // Attempt to run a subcommand first
         if (args.isNotEmpty()) {
             val subCommandName = args[0]
-            val subCommand = subCommands.stream()
-                .filter { sub -> sub.commandName.equals(subCommandName, ignoreCase = true) }
-                .findFirst()
-                .orElse(null)
+            val subCommand =
+                subCommands
+                    .stream()
+                    .filter { sub -> sub.commandName.equals(subCommandName, ignoreCase = true) }
+                    .findFirst()
+                    .orElse(null)
             if (subCommand != null) {
                 // Check subcommand permission
                 if (!sender.hasPermission(subCommand.permission)) {
@@ -90,9 +90,10 @@ internal abstract class AbstractCommand(
     // Basic tab completion processor to find subcommands and provide completions
     @Suppress("unused")
     protected open fun processTabComplete(sender: CommandSender, args: Array<String>): List<String> {
-        val subNames = subCommands
-            .map { it.commandName }
-            .toSet()
+        val subNames =
+            subCommands
+                .map { it.commandName }
+                .toSet()
 
         // return subcommand names (if no arg stem has started)
         if (args.isEmpty()) {
@@ -105,15 +106,15 @@ internal abstract class AbstractCommand(
             return subNames
                 .filter { subCommand: String ->
                     subCommand.lowercase().startsWith(subCommandStem.lowercase())
-                }
-                .toList()
+                }.toList()
         }
 
         // We have more than 2 arg provided, we should ask for tab completions on that subcommand
         val subCommandName = args[0]
-        val subCommand = subCommands.firstOrNull { sub ->
-            sub.commandName.equals(subCommandName, ignoreCase = true)
-        } ?: return listOf()
+        val subCommand =
+            subCommands.firstOrNull { sub ->
+                sub.commandName.equals(subCommandName, ignoreCase = true)
+            } ?: return listOf()
 
         // We have 2+ args and a subcommand, ask the subcommand for tab completions
         // (array copy is safe, size is >= 2)
@@ -133,16 +134,18 @@ internal abstract class AbstractCommand(
             }
             commandStems.reverse() // Reverse so that "command" is last, after all of its parents
 
-            val argsDescription = if (command.argsDescription.isNullOrEmpty()) {
-                ""
-            } else {
-                " &3" + command.argsDescription
-            }
-            val description = if (command.description.isNullOrEmpty()) {
-                ""
-            } else {
-                " &7- &f" + command.description
-            }
+            val argsDescription =
+                if (command.argsDescription.isNullOrEmpty()) {
+                    ""
+                } else {
+                    " &3" + command.argsDescription
+                }
+            val description =
+                if (command.description.isNullOrEmpty()) {
+                    ""
+                } else {
+                    " &7- &f" + command.description
+                }
 
             // Join the command stems with spaces (includes current command name)
             val commandStem = commandStems.joinToString(" ")

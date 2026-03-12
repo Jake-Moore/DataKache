@@ -16,15 +16,14 @@ import kotlinx.serialization.json.Json
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 
-internal class CmdReadDocument(
-    parent: DataKacheCommand,
-) : AbstractCommand(
-    parent = parent,
-    commandName = "read-document",
-    permission = "datakache.command.read",
-    description = "Read A Database Document.",
-    argsDescription = "<database> <cache> <document_id>",
-),
+internal class CmdReadDocument(parent: DataKacheCommand) :
+    AbstractCommand(
+        parent = parent,
+        commandName = "read-document",
+        permission = "datakache.command.read",
+        description = "Read A Database Document.",
+        argsDescription = "<database> <cache> <document_id>",
+    ),
     DataKacheScope {
     override fun processCommand(sender: CommandSender, args: Array<String>) {
         if (args.size < 3) {
@@ -54,7 +53,7 @@ internal class CmdReadDocument(
         registration: DataKacheRegistration,
         cacheName: String,
         sender: CommandSender,
-        args: Array<String>
+        args: Array<String>,
     ) {
         val docCache: DocCache<*, *>? = getCacheFromRegistration(registration, cacheName)
         if (docCache == null) {
@@ -68,7 +67,7 @@ internal class CmdReadDocument(
     private suspend fun <K : Any, D : Doc<K, D>> processReadDocument(
         args: Array<String>,
         docCache: DocCache<K, D>,
-        sender: CommandSender
+        sender: CommandSender,
     ) {
         val docKeyString = args[2]
         try {
@@ -85,8 +84,8 @@ internal class CmdReadDocument(
                 runSync {
                     sender.sendMessage(
                         Color.t(
-                            "&cError reading document from cache: &e${cacheException.message}"
-                        )
+                            "&cError reading document from cache: &e${cacheException.message}",
+                        ),
                     )
                 }
                 return
@@ -104,8 +103,8 @@ internal class CmdReadDocument(
                 runSync {
                     sender.sendMessage(
                         Color.t(
-                            "&cError reading document from database: &e${dbException.message}"
-                        )
+                            "&cError reading document from database: &e${dbException.message}",
+                        ),
                     )
                 }
                 return
@@ -126,7 +125,7 @@ internal class CmdReadDocument(
         docCache: DocCache<K, D>,
         key: K,
         cacheDoc: D?,
-        dbDoc: D?
+        dbDoc: D?,
     ) {
         require(Bukkit.isPrimaryThread()) {
             "This method must be called on the main server thread."
@@ -142,7 +141,7 @@ internal class CmdReadDocument(
             sender.sendMessage(Color.t("&8(&7See console for full document data.&8)"))
             val jsonStr = json.encodeToString(docCache.getKSerializer(), cacheDoc)
             requireNotNull(DataKachePlugin.getController()).logger.info(
-                "Read Cache Document: ${namespace}\n" + jsonStr
+                "Read Cache Document: ${namespace}\n" + jsonStr,
             )
         } else {
             sender.sendMessage(Color.t("&7Document in Cache: &cNot Found"))
@@ -153,7 +152,7 @@ internal class CmdReadDocument(
             sender.sendMessage(Color.t("&8(&7See console for full document data.&8)"))
             val jsonStr = json.encodeToString(docCache.getKSerializer(), dbDoc)
             requireNotNull(DataKachePlugin.getController()).logger.info(
-                "Read Database Document: ${namespace}\n" + jsonStr
+                "Read Database Document: ${namespace}\n" + jsonStr,
             )
         } else {
             sender.sendMessage(Color.t("&7Document in Database: &cNot Found"))
@@ -170,7 +169,8 @@ internal class CmdReadDocument(
     override fun processTabComplete(sender: CommandSender, args: Array<String>): List<String> {
         if (args.size <= 1) {
             // Provide tab completion for database names
-            return DataKacheAPI.listRegistrations()
+            return DataKacheAPI
+                .listRegistrations()
                 .map { it.databaseName }
                 .filter { it.startsWith(args.firstOrNull() ?: "", ignoreCase = true) }
                 .sorted()
@@ -178,9 +178,11 @@ internal class CmdReadDocument(
         } else if (args.size == 2) {
             // Provide tab completion for cache names in the specified database
             val dbName = args[0]
-            val registration = getRegistrationFromDatabase(dbName)
-                ?: return emptyList() // No database found, no cache names to complete
-            return registration.getDocCaches()
+            val registration =
+                getRegistrationFromDatabase(dbName)
+                    ?: return emptyList() // No database found, no cache names to complete
+            return registration
+                .getDocCaches()
                 .map { it.cacheName }
                 .filter { it.startsWith(args[1], ignoreCase = true) }
                 .sorted()
@@ -190,22 +192,19 @@ internal class CmdReadDocument(
         return emptyList()
     }
 
-    private fun getRegistrationFromDatabase(
-        databaseName: String,
-    ): DataKacheRegistration? {
-        return DataKacheAPI.listRegistrations()
-            .firstOrNull { it.databaseName == databaseName }
-    }
+    private fun getRegistrationFromDatabase(databaseName: String): DataKacheRegistration? =
+        DataKacheAPI
+        .listRegistrations()
+        .firstOrNull { it.databaseName == databaseName }
 
     @Suppress("UNCHECKED_CAST")
-    private fun getCacheFromRegistration(
-        registration: DataKacheRegistration,
-        cacheName: String,
-    ): DocCache<*, *>? {
+    private fun getCacheFromRegistration(registration: DataKacheRegistration, cacheName: String): DocCache<*, *>? {
         // Attempt 1 - try an exact name match
-        registration.getDocCaches().find {
-            it.cacheName.equals(cacheName, ignoreCase = false)
-        }?.let { return it }
+        registration
+            .getDocCaches()
+            .find {
+                it.cacheName.equals(cacheName, ignoreCase = false)
+            }?.let { return it }
 
         // Attempt 2 - try a case-insensitive match
         return registration.getDocCaches().firstOrNull {
@@ -214,10 +213,11 @@ internal class CmdReadDocument(
     }
 
     companion object {
-        private val json = Json {
-            encodeDefaults = true
-            explicitNulls = true
-            prettyPrint = true
-        }
+        private val json =
+            Json {
+                encodeDefaults = true
+                explicitNulls = true
+                prettyPrint = true
+            }
     }
 }

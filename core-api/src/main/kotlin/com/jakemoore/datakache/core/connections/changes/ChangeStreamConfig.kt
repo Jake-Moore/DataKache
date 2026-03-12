@@ -14,19 +14,15 @@ data class ChangeStreamConfig private constructor(
     // Retry Configuration
     /** Initial delay before the first retry attempt. Must be positive. */
     val initialRetryDelay: Duration,
-
     /** Maximum delay between retry attempts. Must be >= initialRetryDelay. */
     val maxRetryDelay: Duration,
-
     /** Maximum number of retry attempts. Use Int.MAX_VALUE for unlimited retries. */
     val maxRetries: Int,
-
     // Event Processing Configuration
     /** Timeout for processing individual change events. Must be positive. */
     val eventProcessingTimeout: Duration,
-
     /** Maximum events to buffer before applying backpressure. Must be positive. */
-    val maxBufferedEvents: Int
+    val maxBufferedEvents: Int,
 ) {
     init {
         validateConfiguration()
@@ -67,24 +63,23 @@ data class ChangeStreamConfig private constructor(
          *
          * @return ChangeStreamConfig optimized for MongoDB
          */
-        fun forMongoDB(production: Boolean = true): ChangeStreamConfig {
-            return if (production) {
-                ChangeStreamConfig(
-                    initialRetryDelay = 2.seconds,
-                    maxRetryDelay = 60.seconds,
-                    maxRetries = Int.MAX_VALUE,
-                    eventProcessingTimeout = 30.seconds,
-                    maxBufferedEvents = 1000
-                )
-            } else {
-                ChangeStreamConfig(
-                    initialRetryDelay = 500.milliseconds,
-                    maxRetryDelay = 5.seconds,
-                    maxRetries = 20,
-                    eventProcessingTimeout = 10.seconds,
-                    maxBufferedEvents = 100
-                )
-            }
+        fun forMongoDB(production: Boolean = true): ChangeStreamConfig =
+            if (production) {
+            ChangeStreamConfig(
+                initialRetryDelay = 2.seconds,
+                maxRetryDelay = 60.seconds,
+                maxRetries = Int.MAX_VALUE,
+                eventProcessingTimeout = 30.seconds,
+                maxBufferedEvents = 1000,
+            )
+        } else {
+            ChangeStreamConfig(
+                initialRetryDelay = 500.milliseconds,
+                maxRetryDelay = 5.seconds,
+                maxRetries = 20,
+                eventProcessingTimeout = 10.seconds,
+                maxBufferedEvents = 100,
+            )
         }
 
         /** Exponential backoff multiplier - hardcoded to optimal value */

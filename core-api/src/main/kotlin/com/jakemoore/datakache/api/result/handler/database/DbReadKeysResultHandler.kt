@@ -9,12 +9,11 @@ import kotlinx.coroutines.flow.Flow
 internal object DbReadKeysResultHandler {
     internal suspend fun <K : Any> wrap(
         // Work may return a null document, which indicates that the document was not found.
-        work: suspend () -> Flow<K>
-    ): DefiniteResult<Flow<K>> {
-        return try {
+        work: suspend () -> Flow<K>,
+    ): DefiniteResult<Flow<K>> =
+        try {
             Success(work())
         } catch (e: Exception) {
             Failure(ResultExceptionWrapper("DB Read Keys operation failed.", e))
         }
-    }
 }

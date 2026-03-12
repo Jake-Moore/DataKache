@@ -1,7 +1,7 @@
 @file:Suppress("RedundantSuppression")
 
+import dev.detekt.gradle.Detekt
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-
 
 plugins {
     // Java Build Plugins
@@ -10,7 +10,7 @@ plugins {
     id("maven-publish")
 
     // Detekt Code Quality Plugin
-    id("io.gitlab.arturbosch.detekt") version "1.23.8"
+    id("dev.detekt") version "2.0.0-alpha.2"
 
     // Kotlin Plugins
     kotlin("jvm")
@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.4.4"
+val VERSION = "0.4.5-SNAPSHOT"
 
 ext {
     // KotlinX
@@ -51,6 +51,7 @@ ext {
     set("kotest-property", "io.kotest:kotest-property:${kotestVer}")
     set("kotest-framework-datatest", "io.kotest:kotest-framework-datatest:${kotestVer}")
 
+    set("junit-jupiter-engine", "org.junit.jupiter:junit-jupiter-engine:5.11.4")
     set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:1.21.3")
     // NOTE: the MongoDB container automatically sets up its own single-node replica set
     //       This means it supports retryable writes and transactions automatically.
@@ -67,7 +68,7 @@ allprojects {
     apply(plugin = "java")
     apply(plugin = "java-library")
     apply(plugin = "maven-publish")
-    apply(plugin = "io.gitlab.arturbosch.detekt")
+    apply(plugin = "dev.detekt")
 
     // Provision Java 21
     java {
@@ -75,7 +76,7 @@ allprojects {
     }
 
     dependencies {
-        detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:1.23.8")
+        detektPlugins("dev.detekt:detekt-rules-ktlint-wrapper:2.0.0-alpha.2")
 
         // Annotations
         compileOnly("org.jetbrains:annotations:26.0.2")
@@ -125,23 +126,26 @@ allprojects {
     // Configure detekt
     val detektConfig = rootProject.layout.projectDirectory.file(".detekt/detekt.yml").asFile
 
-    @Suppress("deprecation")
     detekt {
         allRules = true
         autoCorrect = true
         buildUponDefaultConfig = true
         parallel = true
 
-        reports {
-            html.required.set(false)
-            xml.required.set(false)
-            txt.required.set(false)
-            sarif.required.set(false)
-        }
-
         // Use the detekt.yml file from the classpath
         config.setFrom(detektConfig)
     }
+
+    tasks.withType<Detekt>().configureEach {
+        autoCorrect = true
+        reports {
+            html.required.set(false)
+            sarif.required.set(false)
+            checkstyle.required.set(false)
+            markdown.required.set(false)
+        }
+    }
+
 }
 
 subprojects {

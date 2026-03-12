@@ -10,7 +10,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 internal object DbReadUniqueIndexResultHandler {
     internal suspend fun <K : Any, D : Doc<K, D>> wrap(
         // Work may return a null document, which indicates that the document was not found.
-        work: suspend () -> D?
+        work: suspend () -> D?,
     ): OptionalResult<D> {
         try {
             val value = work()
@@ -23,8 +23,8 @@ internal object DbReadUniqueIndexResultHandler {
             return Failure(
                 ResultExceptionWrapper(
                     "DB Unique Index Read operation failed.",
-                    e
-                )
+                    e,
+                ),
             )
         }
     }

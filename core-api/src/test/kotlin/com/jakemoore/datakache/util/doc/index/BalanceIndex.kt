@@ -4,15 +4,12 @@ import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.util.doc.TestGenericDoc
 import com.jakemoore.datakache.util.doc.TestGenericDocCache
 
-class BalanceIndex(
-    cache: TestGenericDocCache
-) : DocUniqueIndex<String, TestGenericDoc, Double>(
-    docCache = cache,
-    kProperty = TestGenericDoc::balance,
-) {
+class BalanceIndex(cache: TestGenericDocCache) :
+    DocUniqueIndex<String, TestGenericDoc, Double>(
+        docCache = cache,
+        kProperty = TestGenericDoc::balance,
+    ) {
     override fun equals(a: Double?, b: Double?): Boolean = a == b
 
-    override fun extractValue(doc: TestGenericDoc): Double {
-        return doc.balance
-    }
+    override fun extractValue(doc: TestGenericDoc): Double = doc.balance
 }

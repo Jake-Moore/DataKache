@@ -15,6 +15,7 @@ object DataKachePluginConfig {
     // -------------------------------------------------- //
     //                 CONFIGURABLE VALUES                //
     // -------------------------------------------------- //
+
     /**
      * A supplier that provides the [StandaloneConfig] used to configure the DataKache client.
      * This defaults to trying to find the DataKache.yml file on the filesystem, but can be
@@ -22,14 +23,15 @@ object DataKachePluginConfig {
      *
      * This value must be set BEFORE enabling [com.jakemoore.datakache.DataKachePlugin]
      */
-    var configSupplier: Function<JavaPlugin, ConfigurationMethods<*>> = Function { plugin ->
-        val file = File(plugin.dataFolder, PLUGIN_CONFIG_FILE)
-        // Configure a standalone config that points to the on-disk file for yaml configuration
-        StandaloneConfig(DataKachePluginConfigLogger, file) {
-            // Use the plugin's embedded resource as the default configuration
-            plugin.getResource(PLUGIN_CONFIG_FILE)
+    var configSupplier: Function<JavaPlugin, ConfigurationMethods<*>> =
+        Function { plugin ->
+            val file = File(plugin.dataFolder, PLUGIN_CONFIG_FILE)
+            // Configure a standalone config that points to the on-disk file for yaml configuration
+            StandaloneConfig(DataKachePluginConfigLogger, file) {
+                // Use the plugin's embedded resource as the default configuration
+                plugin.getResource(PLUGIN_CONFIG_FILE)
+            }
         }
-    }
 
     /**
      * An optional override for the database namespace specified in the configuration file.
@@ -48,7 +50,6 @@ object DataKachePluginConfig {
             databaseNamespace = namespace,
             debug = config.getBoolean("debug", true),
             storageMode = StorageMode.valueOf(config.getString("storage.mode")),
-
             // Load MongoDB Connection Details
             mongoURI = config.getString("storage.MONGODB.uri", "mongodb://localhost:27017"),
         )
@@ -58,15 +59,22 @@ object DataKachePluginConfig {
         val config = getCachedConfig(plugin)
         val defaults = DataKachePluginLang()
         return DataKachePluginLang(
-            joinDeniedDatabaseNotReady = config.getString("language.joinDenied.databaseNotReady")
+            joinDeniedDatabaseNotReady =
+            config.getString("language.joinDenied.databaseNotReady")
                 ?: defaults.joinDeniedDatabaseNotReady,
-            preloadPlayerDocTimeout = config.getInt("joinOptions.preloadPlayerDocTimeoutMS", -1)
-                .takeIf { it > 0 }?.milliseconds ?: defaults.preloadPlayerDocTimeout,
-            joinDeniedPlayerDocTimeout = config.getString("language.joinDenied.playerDocTimeout")
+            preloadPlayerDocTimeout =
+            config
+                .getInt("joinOptions.preloadPlayerDocTimeoutMS", -1)
+                .takeIf { it > 0 }
+                ?.milliseconds ?: defaults.preloadPlayerDocTimeout,
+            joinDeniedPlayerDocTimeout =
+            config.getString("language.joinDenied.playerDocTimeout")
                 ?: defaults.joinDeniedPlayerDocTimeout,
-            joinDeniedPlayerDocException = config.getString("language.joinDenied.playerDocException")
+            joinDeniedPlayerDocException =
+            config.getString("language.joinDenied.playerDocException")
                 ?: defaults.joinDeniedPlayerDocException,
-            joinDeniedEarlyJoin = config.getString("language.joinDenied.earlyJoin")
+            joinDeniedEarlyJoin =
+            config.getString("language.joinDenied.earlyJoin")
                 ?: defaults.joinDeniedEarlyJoin,
         )
     }
@@ -82,12 +90,8 @@ object DataKachePluginConfig {
     }
 
     object DataKachePluginConfigLogger : LoggerService() {
-        override fun getLoggerName(): String {
-            return "DataKachePluginConfigLogger"
-        }
+        override fun getLoggerName(): String = "DataKachePluginConfigLogger"
 
-        override fun isDebug(): Boolean {
-            return true
-        }
+        override fun isDebug(): Boolean = true
     }
 }

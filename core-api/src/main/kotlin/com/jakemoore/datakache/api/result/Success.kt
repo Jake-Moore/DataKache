@@ -3,9 +3,10 @@ package com.jakemoore.datakache.api.result
 /**
  * Success state ([value] is available, no exceptions or rejections occurred).
  */
-class Success<T>(
-    val value: T
-) : DefiniteResult<T>, OptionalResult<T>, RejectableResult<T> {
+class Success<T>(val value: T) :
+    DefiniteResult<T>,
+    OptionalResult<T>,
+    RejectableResult<T> {
     /**
      * @return true (this is a success state).
      */

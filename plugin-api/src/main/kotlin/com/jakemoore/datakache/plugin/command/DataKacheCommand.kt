@@ -17,7 +17,6 @@ internal class DataKacheCommand :
         permission = "datakache.command",
     ),
     TabExecutor {
-
     init {
         subCommands.add(CmdStatus(this))
         subCommands.add(CmdListDatabases(this))
@@ -31,7 +30,6 @@ internal class DataKacheCommand :
         return true
     }
 
-    override fun onTabComplete(sender: CommandSender, cmd: Command, label: String, args: Array<String>): List<String> {
-        return super.processTabComplete(sender, args)
-    }
+    override fun onTabComplete(sender: CommandSender, cmd: Command, label: String, args: Array<String>): List<String> =
+        super.processTabComplete(sender, args)
 }

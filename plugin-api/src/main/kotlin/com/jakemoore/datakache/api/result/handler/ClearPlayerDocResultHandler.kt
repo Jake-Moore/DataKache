@@ -10,7 +10,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 internal object ClearPlayerDocResultHandler {
     internal suspend fun wrap(
         // Work returns either success or failure (true or false) no other state is allowed.
-        work: suspend () -> Boolean
+        work: suspend () -> Boolean,
     ): DefiniteResult<Boolean> {
         try {
             // METRICS
@@ -25,8 +25,8 @@ internal object ClearPlayerDocResultHandler {
             return Failure(
                 ResultExceptionWrapper(
                     "PlayerDoc delete operation failed.",
-                    e
-                )
+                    e,
+                ),
             )
         }
     }

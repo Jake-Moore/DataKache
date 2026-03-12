@@ -13,43 +13,49 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import kotlin.reflect.KProperty
 
-class TestGenericDocCache internal constructor(
-    registration: DataKacheRegistration,
-) : GenericDocCache<TestGenericDoc>(
-    registration = registration,
-    cacheName = "TestGenericDocs",
-    docClass = TestGenericDoc::class.java,
-    instantiator = ::TestGenericDoc,
-    config = DocCacheConfig.default<String, TestGenericDoc>()
-        .copy(enableMassDestructiveOps = true),
-) {
+class TestGenericDocCache internal constructor(registration: DataKacheRegistration) :
+    GenericDocCache<TestGenericDoc>(
+        registration = registration,
+        cacheName = "TestGenericDocs",
+        docClass = TestGenericDoc::class.java,
+        instantiator = ::TestGenericDoc,
+        config =
+        DocCacheConfig
+            .default<String, TestGenericDoc>()
+            .copy(enableMassDestructiveOps = true),
+    ) {
     internal val nameField = NameIndex(this@TestGenericDocCache)
     internal val balanceField = BalanceIndex(this@TestGenericDocCache)
 
     init {
         // Register indexes
-        val exception = runBlocking {
-            registerUniqueIndex(nameField).exceptionOrNull()?.let {
-                return@runBlocking it
+        val exception =
+            runBlocking {
+                registerUniqueIndex(nameField).exceptionOrNull()?.let {
+                    return@runBlocking it
+                }
+                registerUniqueIndex(balanceField).exceptionOrNull()?.let {
+                    return@runBlocking it
+                }
             }
-            registerUniqueIndex(balanceField).exceptionOrNull()?.let {
-                return@runBlocking it
-            }
-        }
         exception?.let {
             throw RuntimeException("Failed to register indexes for TestGenericDocCache", it)
         }
     }
 
     override fun getKSerializer(): KSerializer<TestGenericDoc> = TestGenericDoc.serializer()
+
     override fun getKeyKProperty(): KProperty<String> = TestGenericDoc::key
+
     override fun getVersionKProperty(): KProperty<Long> = TestGenericDoc::version
 
-    fun readByName(name: String?): OptionalResult<TestGenericDoc> {
-        return name?.let { readByUniqueIndex(this.nameField, it) } ?: Empty()
-    }
+    fun readByName(name: String?): OptionalResult<TestGenericDoc> =
+        name?.let {
+        readByUniqueIndex(this.nameField, it)
+    } ?: Empty()
 
-    fun readByBalance(balance: Double?): OptionalResult<TestGenericDoc> {
-        return balance?.let { readByUniqueIndex(this.balanceField, it) } ?: Empty()
-    }
+    fun readByBalance(balance: Double?): OptionalResult<TestGenericDoc> =
+        balance?.let {
+        readByUniqueIndex(this.balanceField, it)
+    } ?: Empty()
 }

@@ -6,5 +6,5 @@ class IllegalDocumentUsernameModificationException(
     val foundUsername: String?,
     val expectedUsername: String?,
 ) : DocumentUpdateException(
-    "[$docNamespace] Updated doc username mismatch! Found: '$foundUsername', Expected: '$expectedUsername'"
+    "[$docNamespace] Updated doc username mismatch! Found: '$foundUsername', Expected: '$expectedUsername'",
 )

@@ -7,11 +7,13 @@ import com.jakemoore.datakache.core.connections.changes.ChangeStreamState
 import com.mongodb.client.model.changestream.ChangeStreamDocument
 import com.mongodb.client.model.changestream.OperationType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
@@ -28,9 +30,8 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     private val context: ChangeStreamContext<K, D>,
     private val stateManager: ChangeStreamStateManager<K, D>,
     private val errorHandler: ChangeStreamErrorHandler<K, D>,
-    private val resumeTokenManager: ResumeTokenManager<K, D>
+    private val resumeTokenManager: ResumeTokenManager<K, D>,
 ) {
-
     // Event processing with backpressure - recreated in start()
     private var eventChannel: Channel<ChangeStreamDocument<D>>? = null
 
@@ -62,71 +63,72 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      * Starts the event processor that handles events from the channel with timeout and backpressure.
      */
     @OptIn(ExperimentalCoroutinesApi::class, DelicateCoroutinesApi::class)
-    fun startEventProcessing(scope: kotlinx.coroutines.CoroutineScope): Job {
-        return scope.launch {
-            context.logger.debug("Event processor started")
+    fun startEventProcessing(scope: CoroutineScope): Job =
+        scope.launch {
+        context.logger.debug("Event processor started")
 
-            try {
-                while (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN) {
-                    try {
-                        // Prevent excessive CPU usage with very small timeouts
-                        val baseInterval = context.config.eventProcessingTimeout.inWholeMilliseconds / 10
-                        val checkInterval = minOf(maxOf(baseInterval, 100), 5000) // Min 100ms, max 5s
+        try {
+            while (stateManager.getCurrentState() != ChangeStreamState.SHUTDOWN) {
+                try {
+                    // Prevent excessive CPU usage with very small timeouts
+                    val baseInterval = context.config.eventProcessingTimeout.inWholeMilliseconds / 10
+                    val checkInterval = minOf(maxOf(baseInterval, 100), 5000) // Min 100ms, max 5s
 
-                        val currentChannel = eventChannel
-                        val event = select {
+                    val currentChannel = eventChannel
+                    val event =
+                        select {
                             if (currentChannel != null && !currentChannel.isClosedForReceive) {
                                 currentChannel.onReceive { it }
                             }
                             onTimeout(checkInterval) { null }
                         }
 
-                        if (event != null) {
-                            withTimeout(context.config.eventProcessingTimeout) {
-                                processChangeEventSafely(event)
+                    if (event != null) {
+                        withTimeout(context.config.eventProcessingTimeout) {
+                            processChangeEventSafely(event)
 
-                                // Update resume tokens after successful processing
-                                resumeTokenManager.updateTokens(event.resumeToken)
+                            // Update resume tokens after successful processing
+                            resumeTokenManager.updateTokens(event.resumeToken)
 
-                                totalEventsProcessed = if (totalEventsProcessed >= Long.MAX_VALUE - 1) {
+                            totalEventsProcessed =
+                                if (totalEventsProcessed >= Long.MAX_VALUE - 1) {
                                     context.logger.debug("Events counter approaching max value, resetting to 0")
                                     0L
                                 } else {
                                     totalEventsProcessed + 1
                                 }
 
-                                // Periodic cleanup
-                                performPeriodicMaintenance()
-                            }
-                        }
-                    } catch (_: TimeoutCancellationException) {
-                        context.logger.debug(
-                            "Event processing timeout"
-                        )
-                    } catch (_: CancellationException) {
-                        context.logger.debug(
-                            "Event processor cancelled"
-                        )
-                        break
-                    } catch (e: Exception) {
-                        // Classify exceptions to determine if processor should continue
-                        if (errorHandler.shouldEventProcessorStop(e)) {
-                            context.logger.error(
-                                e,
-                                "Fatal error in event processor, stopping."
-                            )
-                            break
-                        } else {
-                            context.logger.error(
-                                e,
-                                "Recoverable error in event processor"
-                            )
+                            // Periodic cleanup
+                            performPeriodicMaintenance()
                         }
                     }
+                } catch (_: TimeoutCancellationException) {
+                    context.logger.debug(
+                        "Event processing timeout",
+                    )
+                } catch (_: CancellationException) {
+                    context.logger.debug(
+                        "Event processor cancelled",
+                    )
+                    break
+                } catch (e: Exception) {
+                    // Classify exceptions to determine if processor should continue
+                    if (errorHandler.shouldEventProcessorStop(e)) {
+                        context.logger.error(
+                            e,
+                            "Fatal error in event processor, stopping.",
+                        )
+                        break
+                    } else {
+                        context.logger.error(
+                            e,
+                            "Recoverable error in event processor",
+                        )
+                    }
                 }
-            } finally {
-                context.logger.debug("Event processor stopped")
             }
+        } finally {
+            context.logger.debug("Event processor stopped")
         }
     }
 
@@ -147,9 +149,10 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     // Event sent successfully
                     return true
                 }
+
                 sendResult.isFailure -> {
                     val exception = sendResult.exceptionOrNull()
-                    if (exception is kotlinx.coroutines.channels.ClosedSendChannelException) {
+                    if (exception is ClosedSendChannelException) {
                         context.logger.debug("Channel closed, stopping event processing")
                         return false
                     }
@@ -157,7 +160,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     // Channel is full - implement enhanced backpressure with fallback
                     context.logger.warn(
                         "Event channel full (${context.config.maxBufferedEvents} events), " +
-                            "implementing backpressure strategy"
+                            "implementing backpressure strategy",
                     )
 
                     // Try a few times with short delays, then implement fallback
@@ -166,7 +169,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             }
         } else {
             context.logger.error(
-                "Event lost from invalid channel, operation: ${change.operationType}, attempting fallback"
+                "Event lost from invalid channel, operation: ${change.operationType}, attempting fallback",
             )
             // Also handle this as a potential event loss scenario
             handleEventLoss(change)
@@ -181,7 +184,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     @OptIn(DelicateCoroutinesApi::class)
     private suspend fun handleBackpressure(
         change: ChangeStreamDocument<D>,
-        channel: Channel<ChangeStreamDocument<D>>
+        channel: Channel<ChangeStreamDocument<D>>,
     ): Boolean {
         var retryCount = 0
         val maxRetries = 3
@@ -197,7 +200,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
 
         // Implement fallback strategy
         context.logger.error(
-            "Event lost due to backpressure, operation: ${change.operationType}, attempting fallback"
+            "Event lost due to backpressure, operation: ${change.operationType}, attempting fallback",
         )
         handleEventLoss(change)
         return false
@@ -210,11 +213,12 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      * @return true if processing succeeded, false if it failed
      */
     private suspend fun processEventCore(change: ChangeStreamDocument<D>, isRecoveryMode: Boolean = false): Boolean {
-        val operationType = mapOperationType(
-            requireNotNull(change.operationType) {
-                $$"ChangeStreamDocument operationType cannot be null! Are you using $changeStreamSplitLargeEvent ?"
-            }
-        )
+        val operationType =
+            mapOperationType(
+                requireNotNull(change.operationType) {
+                    $$"ChangeStreamDocument operationType cannot be null! Are you using $changeStreamSplitLargeEvent ?"
+                },
+            )
 
         when (operationType) {
             ChangeOperationType.INSERT, ChangeOperationType.REPLACE, ChangeOperationType.UPDATE -> {
@@ -229,15 +233,17 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     }
                     return true
                 } else {
-                    val message = if (isRecoveryMode) {
-                        "Cannot recover from lost event - no fullDocument available"
-                    } else {
-                        "No fullDocument for $operationType operation"
-                    }
+                    val message =
+                        if (isRecoveryMode) {
+                            "Cannot recover from lost event - no fullDocument available"
+                        } else {
+                            "No fullDocument for $operationType operation"
+                        }
                     context.logger.error(message)
                     return false
                 }
             }
+
             ChangeOperationType.DELETE -> {
                 val documentKey = change.documentKey
                 if (documentKey != null) {
@@ -251,17 +257,19 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         }
                         return true
                     } else {
-                        val message = if (isRecoveryMode) {
-                            "Could not extract ID from delete operation during recovery"
-                        } else {
-                            "Could not extract ID from delete operation"
-                        }
+                        val message =
+                            if (isRecoveryMode) {
+                                "Could not extract ID from delete operation during recovery"
+                            } else {
+                                "Could not extract ID from delete operation"
+                            }
                         context.logger.warn(message)
                         return false
                     }
                 }
                 return false
             }
+
             ChangeOperationType.DROP -> {
                 context.eventHandler.onCollectionDropped()
                 if (isRecoveryMode) {
@@ -271,6 +279,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 }
                 return true
             }
+
             ChangeOperationType.RENAME -> {
                 context.eventHandler.onCollectionRenamed()
                 if (isRecoveryMode) {
@@ -280,6 +289,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 }
                 return true
             }
+
             ChangeOperationType.DROP_DATABASE -> {
                 context.eventHandler.onDatabaseDropped()
                 if (isRecoveryMode) {
@@ -289,6 +299,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 }
                 return true
             }
+
             ChangeOperationType.INVALIDATE -> {
                 context.eventHandler.onChangeStreamInvalidated()
                 if (isRecoveryMode) {
@@ -298,6 +309,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 }
                 return true
             }
+
             ChangeOperationType.UNKNOWN -> {
                 context.eventHandler.onUnknownOperation()
                 if (isRecoveryMode) {
@@ -319,7 +331,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
         } catch (e: Exception) {
             context.logger.error(
                 e,
-                "Failed to recover from lost event - cache consistency may be compromised"
+                "Failed to recover from lost event - cache consistency may be compromised",
             )
         }
     }
@@ -352,54 +364,88 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     /**
      * Converts MongoDB's OperationType to our database-agnostic ChangeOperationType.
      */
-    private fun mapOperationType(mongoOperationType: OperationType): ChangeOperationType {
-        return when (mongoOperationType) {
-            OperationType.INSERT -> ChangeOperationType.INSERT
-            OperationType.UPDATE -> ChangeOperationType.UPDATE
-            OperationType.REPLACE -> ChangeOperationType.REPLACE
-            OperationType.DELETE -> ChangeOperationType.DELETE
-            OperationType.DROP -> ChangeOperationType.DROP
-            OperationType.RENAME -> ChangeOperationType.RENAME
-            OperationType.DROP_DATABASE -> ChangeOperationType.DROP_DATABASE
-            OperationType.INVALIDATE -> ChangeOperationType.INVALIDATE
-            OperationType.OTHER -> {
-                // OTHER is used for mongodb operations that this driver does not recognize
-                //   Must be resolved by upgrading the driver to a newer version
-                context.logger.warn("Unknown MongoDB operation type: $mongoOperationType, mapping to UNKNOWN")
-                ChangeOperationType.UNKNOWN
-            }
+    private fun mapOperationType(mongoOperationType: OperationType): ChangeOperationType =
+        when (mongoOperationType) {
+        OperationType.INSERT -> {
+            ChangeOperationType.INSERT
+        }
+
+        OperationType.UPDATE -> {
+            ChangeOperationType.UPDATE
+        }
+
+        OperationType.REPLACE -> {
+            ChangeOperationType.REPLACE
+        }
+
+        OperationType.DELETE -> {
+            ChangeOperationType.DELETE
+        }
+
+        OperationType.DROP -> {
+            ChangeOperationType.DROP
+        }
+
+        OperationType.RENAME -> {
+            ChangeOperationType.RENAME
+        }
+
+        OperationType.DROP_DATABASE -> {
+            ChangeOperationType.DROP_DATABASE
+        }
+
+        OperationType.INVALIDATE -> {
+            ChangeOperationType.INVALIDATE
+        }
+
+        OperationType.OTHER -> {
+            // OTHER is used for mongodb operations that this driver does not recognize
+            //   Must be resolved by upgrading the driver to a newer version
+            context.logger.warn("Unknown MongoDB operation type: $mongoOperationType, mapping to UNKNOWN")
+            ChangeOperationType.UNKNOWN
         }
     }
 
     /**
      * Extracts the document ID (as a [String]) from a change stream document key.
      */
-    private fun extractIdFromDocumentKey(documentKey: BsonDocument): String? {
-        return try {
-            val bsonValue = documentKey["_id"]
-            when {
-                bsonValue?.isObjectId == true -> bsonValue.asObjectId().value.toHexString()
-                bsonValue?.isString == true -> bsonValue.asString().value
-                bsonValue?.isInt32 == true -> bsonValue.asInt32().value.toString()
-                bsonValue?.isInt64 == true -> bsonValue.asInt64().value.toString()
-                else -> {
-                    context.logger.warn("Unsupported ID type in document key: ${bsonValue?.bsonType}")
-                    null
-                }
+    private fun extractIdFromDocumentKey(documentKey: BsonDocument): String? =
+        try {
+        val bsonValue = documentKey["_id"]
+        when {
+            bsonValue?.isObjectId == true -> {
+                bsonValue.asObjectId().value.toHexString()
             }
-        } catch (_: NoSuchElementException) {
-            context.logger.error("Document key missing '_id' field")
-            null
-        } catch (e: ClassCastException) {
-            context.logger.error("Type conversion error extracting ID: ${e.message}")
-            null
-        } catch (e: IllegalArgumentException) {
-            context.logger.error(e, "Error extracting ID from document key")
-            null
-        } catch (e: Exception) {
-            context.logger.error(e, "Unknown Error extracting ID from document key")
-            null
+
+            bsonValue?.isString == true -> {
+                bsonValue.asString().value
+            }
+
+            bsonValue?.isInt32 == true -> {
+                bsonValue.asInt32().value.toString()
+            }
+
+            bsonValue?.isInt64 == true -> {
+                bsonValue.asInt64().value.toString()
+            }
+
+            else -> {
+                context.logger.warn("Unsupported ID type in document key: ${bsonValue?.bsonType}")
+                null
+            }
         }
+    } catch (_: NoSuchElementException) {
+        context.logger.error("Document key missing '_id' field")
+        null
+    } catch (e: ClassCastException) {
+        context.logger.error("Type conversion error extracting ID: ${e.message}")
+        null
+    } catch (e: IllegalArgumentException) {
+        context.logger.error(e, "Error extracting ID from document key")
+        null
+    } catch (e: Exception) {
+        context.logger.error(e, "Unknown Error extracting ID from document key")
+        null
     }
 
     /**

@@ -13,9 +13,8 @@ import org.bson.BsonTimestamp
  */
 internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     private val context: ChangeStreamContext<K, D>,
-    private val errorHandler: ChangeStreamErrorHandler<K, D>
+    private val errorHandler: ChangeStreamErrorHandler<K, D>,
 ) {
-
     // Resume token management with proper fallback chain
     private var resumeToken: BsonDocument? = null
     private var lastResumeToken: BsonDocument? = null
@@ -27,7 +26,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     fun setEffectiveStartTime(startTime: BsonTimestamp?) {
         this.effectiveStartTime = startTime
         context.logger.debug(
-            "Set effective start time: $startTime"
+            "Set effective start time: $startTime",
         )
     }
 
@@ -46,7 +45,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
         resumeToken = null
         lastResumeToken = null
         context.logger.debug(
-            "Cleared resume tokens."
+            "Cleared resume tokens.",
         )
     }
 
@@ -59,7 +58,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
         lastResumeToken = null
         effectiveStartTime = null
         context.logger.debug(
-            "Cleared all tokens."
+            "Cleared all tokens.",
         )
     }
 
@@ -83,19 +82,18 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     private fun tryConfigureStream(
         description: String,
         handleResumeErrors: Boolean = true,
-        configAction: () -> Unit
-    ): Boolean {
-        return try {
-            configAction()
-            context.logger.debug(description)
-            true
-        } catch (e: Exception) {
-            context.logger.warn("$description failed: ${e.message}")
-            if (handleResumeErrors) {
-                handleSpecificResumeTokenError(e)
-            }
-            false
+        configAction: () -> Unit,
+    ): Boolean =
+        try {
+        configAction()
+        context.logger.debug(description)
+        true
+    } catch (e: Exception) {
+        context.logger.warn("$description failed: ${e.message}")
+        if (handleResumeErrors) {
+            handleSpecificResumeTokenError(e)
         }
+        false
     }
 
     /**
@@ -105,49 +103,53 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     @Suppress("KotlinConstantConditions")
     fun configureChangeStream(): Flow<ChangeStreamDocument<D>> {
         // NEVER USE $changeStreamSplitLargeEvent IN THE PIPELINE CONFIGURATION!
-        val watchBuilder = context.collection.watch(pipeline = emptyList<BsonDocument>()).apply {
-            try {
-                // Always enable full document retrieval for UPDATE operations (improves cache accuracy)
-                fullDocument(FullDocument.UPDATE_LOOKUP)
-            } catch (e: Exception) {
-                context.logger.warn("Could not set fullDocument mode, proceeding without it: ${e.message}")
-            }
+        val watchBuilder =
+            context.collection.watch(pipeline = emptyList<BsonDocument>()).apply {
+                try {
+                    // Always enable full document retrieval for UPDATE operations (improves cache accuracy)
+                    fullDocument(FullDocument.UPDATE_LOOKUP)
+                } catch (e: Exception) {
+                    context.logger.warn("Could not set fullDocument mode, proceeding without it: ${e.message}")
+                }
 
-            // Enhanced fallback chain for stream positioning
-            var configured = false
+                // Enhanced fallback chain for stream positioning
+                var configured = false
 
-            // First try: Current resume token
-            val resumeToken = resumeToken
-            if (!configured && resumeToken != null) {
-                configured = tryConfigureStream(description = "Resuming change stream from current resume token") {
-                    resumeAfter(resumeToken)
+                // First try: Current resume token
+                val resumeToken = resumeToken
+                if (!configured && resumeToken != null) {
+                    configured =
+                        tryConfigureStream(description = "Resuming change stream from current resume token") {
+                            resumeAfter(resumeToken)
+                        }
+                }
+
+                // Second try: Last resume token fallback
+                val lastResumeToken = lastResumeToken
+                if (!configured && lastResumeToken != null) {
+                    configured =
+                        tryConfigureStream(description = "Resuming change stream from last resume token") {
+                            resumeAfter(lastResumeToken)
+                        }
+                }
+
+                // Third try: Operation time fallback
+                val effectiveStartTime = effectiveStartTime
+                if (!configured && effectiveStartTime != null) {
+                    configured =
+                        tryConfigureStream(
+                            description = "Starting change stream from operation time $effectiveStartTime",
+                            handleResumeErrors = false,
+                        ) { startAtOperationTime(effectiveStartTime) }
+                }
+
+                // Last resort: Current time
+                if (!configured) {
+                    context.logger.warn(
+                        "All fallback options failed, starting change stream from current time",
+                    )
                 }
             }
-
-            // Second try: Last resume token fallback
-            val lastResumeToken = lastResumeToken
-            if (!configured && lastResumeToken != null) {
-                configured = tryConfigureStream(description = "Resuming change stream from last resume token") {
-                    resumeAfter(lastResumeToken)
-                }
-            }
-
-            // Third try: Operation time fallback
-            val effectiveStartTime = effectiveStartTime
-            if (!configured && effectiveStartTime != null) {
-                configured = tryConfigureStream(
-                    description = "Starting change stream from operation time $effectiveStartTime",
-                    handleResumeErrors = false
-                ) { startAtOperationTime(effectiveStartTime) }
-            }
-
-            // Last resort: Current time
-            if (!configured) {
-                context.logger.warn(
-                    "All fallback options failed, starting change stream from current time"
-                )
-            }
-        }
 
         return watchBuilder
     }
@@ -162,9 +164,10 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
             // Specific resume token errors that require token clearing
             errorMessage.contains("resume point may no longer be in the oplog") ||
                 errorMessage.contains("invalid resume point") ||
-                errorMessage.contains("resume token") && errorMessage.contains("invalid") -> {
+                errorMessage.contains("resume token") &&
+                errorMessage.contains("invalid") -> {
                 context.logger.warn(
-                    "Resume token invalidated due to specific error, clearing tokens: ${e.message}"
+                    "Resume token invalidated due to specific error, clearing tokens: ${e.message}",
                 )
                 clearTokensOnly()
             }
@@ -174,21 +177,21 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
                 errorMessage.contains("timeout") ||
                 errorMessage.contains("network") -> {
                 context.logger.warn(
-                    "Network error with resume token, keeping tokens for retry: ${e.message}"
+                    "Network error with resume token, keeping tokens for retry: ${e.message}",
                 )
             }
 
             // Unknown resume token error - be conservative and clear
             errorMessage.contains("resume") -> {
                 context.logger.warn(
-                    "Unknown resume token error, clearing tokens: ${e.message}"
+                    "Unknown resume token error, clearing tokens: ${e.message}",
                 )
                 clearTokensOnly()
             }
 
             else -> {
                 context.logger.warn(
-                    "General error with change stream configuration: ${e.message}"
+                    "General error with change stream configuration: ${e.message}",
                 )
             }
         }
@@ -203,7 +206,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
         if (eventsProcessed % 1000 == 0L && resumeToken != null) {
             lastResumeToken = null // Clear very old token
             context.logger.debug(
-                "Performed token cleanup"
+                "Performed token cleanup",
             )
         }
     }

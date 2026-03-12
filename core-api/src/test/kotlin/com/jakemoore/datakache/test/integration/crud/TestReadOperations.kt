@@ -12,19 +12,20 @@ import io.kotest.matchers.types.shouldNotBeInstanceOf
 
 @Suppress("unused")
 class TestReadOperations : AbstractDataKacheTest() {
-
     init {
         describe("Read Operations") {
 
             it("should read existing document") {
 
                 // Create a document first
-                val createdDoc = cache.create("readTestKey") { doc ->
-                    doc.copy(
-                        name = "Read Test Document",
-                        balance = 150.0
-                    )
-                }.getOrThrow()
+                val createdDoc =
+                    cache
+                        .create("readTestKey") { doc ->
+                            doc.copy(
+                                name = "Read Test Document",
+                                balance = 150.0,
+                            )
+                        }.getOrThrow()
 
                 // Read the document
                 val readResult = cache.read("readTestKey")
@@ -56,17 +57,23 @@ class TestReadOperations : AbstractDataKacheTest() {
             it("should read all documents from populated cache") {
 
                 // Create multiple documents
-                val doc1 = cache.create("key1") { doc ->
-                    doc.copy(name = "Document 1", balance = 100.0)
-                }.getOrThrow()
+                val doc1 =
+                    cache
+                        .create("key1") { doc ->
+                            doc.copy(name = "Document 1", balance = 100.0)
+                        }.getOrThrow()
 
-                val doc2 = cache.create("key2") { doc ->
-                    doc.copy(name = "Document 2", balance = 200.0)
-                }.getOrThrow()
+                val doc2 =
+                    cache
+                        .create("key2") { doc ->
+                            doc.copy(name = "Document 2", balance = 200.0)
+                        }.getOrThrow()
 
-                val doc3 = cache.create("key3") { doc ->
-                    doc.copy(name = "Document 3", balance = 300.0)
-                }.getOrThrow()
+                val doc3 =
+                    cache
+                        .create("key3") { doc ->
+                            doc.copy(name = "Document 3", balance = 300.0)
+                        }.getOrThrow()
 
                 // Read all documents
                 val allDocs = cache.readAll()
@@ -102,9 +109,10 @@ class TestReadOperations : AbstractDataKacheTest() {
                 cache.isCached("nonExistentKey").shouldBe(false)
 
                 // Create a document
-                cache.create("cachedKey") { doc ->
-                    doc.copy(name = "Cached Document")
-                }.getOrThrow()
+                cache
+                    .create("cachedKey") { doc ->
+                        doc.copy(name = "Cached Document")
+                    }.getOrThrow()
 
                 // Check existing key
                 cache.isCached("cachedKey").shouldBe(true)
@@ -128,16 +136,17 @@ class TestReadOperations : AbstractDataKacheTest() {
 
             it("should read document with complex data") {
 
-                cache.create("complexKey") { doc ->
-                    doc.copy(
-                        name = "Complex Document",
-                        balance = 500.0,
-                        list = listOf("item1", "item2", "item3"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key1" to MyData.createRandom())
-                    )
-                }.getOrThrow()
+                cache
+                    .create("complexKey") { doc ->
+                        doc.copy(
+                            name = "Complex Document",
+                            balance = 500.0,
+                            list = listOf("item1", "item2", "item3"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key1" to MyData.createRandom()),
+                        )
+                    }.getOrThrow()
 
                 val readResult = cache.read("complexKey")
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -154,16 +163,17 @@ class TestReadOperations : AbstractDataKacheTest() {
 
             it("should read document with null values") {
 
-                cache.create("nullKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }.getOrThrow()
+                cache
+                    .create("nullKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }.getOrThrow()
 
                 val readResult = cache.read("nullKey")
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
@@ -180,9 +190,10 @@ class TestReadOperations : AbstractDataKacheTest() {
 
             it("should read document with empty string key") {
 
-                cache.create("") { doc ->
-                    doc.copy(name = "Empty Key Document")
-                }.getOrThrow()
+                cache
+                    .create("") { doc ->
+                        doc.copy(name = "Empty Key Document")
+                    }.getOrThrow()
 
                 val readResult = cache.read("")
                 readResult.shouldBeInstanceOf<Success<TestGenericDoc>>()

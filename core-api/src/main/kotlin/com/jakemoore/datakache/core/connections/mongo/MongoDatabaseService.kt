@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.withContext
+import org.bson.BsonTimestamp
 import org.bson.Document
 import org.bson.UuidRepresentation
 import org.bson.types.ObjectId
@@ -53,15 +54,15 @@ import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
 
 internal class MongoDatabaseService : DatabaseService() {
-
     // ------------------------------------------------------------ //
     //                     Mongo Service Properties                 //
     // ------------------------------------------------------------ //
     override var averagePingNanos: Long = -1 // Initial value 0
-    override val serverPingMap: Cache<String, Long> = CacheBuilder
-        .newBuilder()
-        .expireAfterWrite(5, TimeUnit.MINUTES)
-        .build()
+    override val serverPingMap: Cache<String, Long> =
+        CacheBuilder
+            .newBuilder()
+            .expireAfterWrite(5, TimeUnit.MINUTES)
+            .build()
 
     internal var mongoClient: MongoClient? = null
     internal var mongoConnected: Boolean = false
@@ -141,6 +142,7 @@ internal class MongoDatabaseService : DatabaseService() {
     // ------------------------------------------------------------ //
     //                       MongoDB Connection                     //
     // ------------------------------------------------------------ //
+
     /**
      * @return If the connection to MongoDB was successful.
      */
@@ -156,10 +158,12 @@ internal class MongoDatabaseService : DatabaseService() {
             this.activeListener = listener.listenerID
 
             // Configure Mongo Connection Settings
-            val settings = MongoClientSettings.builder()
-                .uuidRepresentation(UuidRepresentation.STANDARD)
-                .applyToClusterSettings { it.addClusterListener(listener) }
-                .applyToServerSettings { it.addServerMonitorListener(listener) }
+            val settings =
+                MongoClientSettings
+                    .builder()
+                    .uuidRepresentation(UuidRepresentation.STANDARD)
+                    .applyToClusterSettings { it.addClusterListener(listener) }
+                    .applyToServerSettings { it.addServerMonitorListener(listener) }
 
             // Connect via URI
             settings.applyConnectionString(ConnectionString(MongoConfig.get().uri))
@@ -189,10 +193,11 @@ internal class MongoDatabaseService : DatabaseService() {
             this.info("&aConnection to MongoDB Succeeded! Current namespace Databases:")
             // Only print the databases that are within our current namespace
             //  This means any admin databases or other network databases are not shown
-            val viewable = databaseNames
-                .filter {
-                    it.lowercase().startsWith(DataKache.databaseNamespace.lowercase() + "_")
-                }
+            val viewable =
+                databaseNames
+                    .filter {
+                        it.lowercase().startsWith(DataKache.databaseNamespace.lowercase() + "_")
+                    }
             this.info(viewable.joinToString(", ", prefix = "[", postfix = "]"))
         } catch (timeout: MongoTimeoutException) {
             this.error(timeout, "Connection to MongoDB Timed Out!")
@@ -249,64 +254,63 @@ internal class MongoDatabaseService : DatabaseService() {
             }
         }
         docCache.getLoggerInternal().debug(
-            "Created Collection: ${docCache.cacheName} in Database: ${docCache.databaseName}"
+            "Created Collection: ${docCache.cacheName} in Database: ${docCache.databaseName}",
         )
     }
 
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    override suspend fun <K : Any, D : Doc<K, D>> insertInternal(
-        docCache: DocCache<K, D>,
-        doc: D,
-    ) = withContext(Dispatchers.IO) {
-        // MongoDB uses "_id" as the ID field, ensure the id property is serializing correctly
-        val tempIdName = SerializationUtil.getSerialNameForKey(docCache)
-        if (tempIdName != "_id") {
-            throw IllegalStateException(
-                "MongoDB uses '_id' as the ID field! " +
-                    "Ensure your Doc.id property is annotated with @SerialName(\"_id\"). " +
-                    "Your current ID field is set to serialize as: '$tempIdName'"
-            )
-        }
+    override suspend fun <K : Any, D : Doc<K, D>> insertInternal(docCache: DocCache<K, D>, doc: D) =
+        withContext(Dispatchers.IO) {
+            // MongoDB uses "_id" as the ID field, ensure the id property is serializing correctly
+            val tempIdName = SerializationUtil.getSerialNameForKey(docCache)
+            if (tempIdName != "_id") {
+                throw IllegalStateException(
+                    "MongoDB uses '_id' as the ID field! " +
+                        "Ensure your Doc.id property is annotated with @SerialName(\"_id\"). " +
+                        "Your current ID field is set to serialize as: '$tempIdName'",
+                )
+            }
 
-        val client = requireNotNull(mongoClient) {
-            "MongoClient is not initialized! Could not save Doc to MongoDB!"
-        }
-
-        // Start a transaction session to ensure atomicity while we save the document
-        client.startSession().use { session ->
-            session.startTransaction()
-            var sessionClosed = false
-            try {
-                // Insert the document into the MongoDB collection & commit the transaction
-                getMongoCollection(docCache).insertOne(session, doc)
-
-                session.commitTransaction()
-                sessionClosed = true
-
-                docCache.cacheInternal(doc)
-            } catch (e: MongoWriteException) {
-                if (!sessionClosed && session.hasActiveTransaction()) {
-                    session.abortTransaction()
-                    sessionClosed = true
+            val client =
+                requireNotNull(mongoClient) {
+                    "MongoClient is not initialized! Could not save Doc to MongoDB!"
                 }
 
-                // Transform certain MongoWrite exceptions into standard DataKache exceptions
-                checkDuplicateKeyExceptions(e, docCache, doc, Operation.CREATE)
+            // Start a transaction session to ensure atomicity while we save the document
+            client.startSession().use { session ->
+                session.startTransaction()
+                var sessionClosed = false
+                try {
+                    // Insert the document into the MongoDB collection & commit the transaction
+                    getMongoCollection(docCache).insertOne(session, doc)
 
-                // Any Other WriteException -> Promote to caller (no additional logging needed)
-                throw e
-            } finally {
-                if (!sessionClosed && session.hasActiveTransaction()) {
-                    session.abortTransaction()
-                    docCache.getLoggerInternal().severe(
-                        "Failed to commit transaction (save) for Doc " +
-                            "(${docCache.getKeyNamespace(doc.key)}) in MongoDB. " +
-                            "Transaction has been aborted."
-                    )
+                    session.commitTransaction()
+                    sessionClosed = true
+
+                    docCache.cacheInternal(doc)
+                } catch (e: MongoWriteException) {
+                    if (!sessionClosed && session.hasActiveTransaction()) {
+                        session.abortTransaction()
+                        sessionClosed = true
+                    }
+
+                    // Transform certain MongoWrite exceptions into standard DataKache exceptions
+                    checkDuplicateKeyExceptions(e, docCache, doc, Operation.CREATE)
+
+                    // Any Other WriteException -> Promote to caller (no additional logging needed)
+                    throw e
+                } finally {
+                    if (!sessionClosed && session.hasActiveTransaction()) {
+                        session.abortTransaction()
+                        docCache.getLoggerInternal().severe(
+                            "Failed to commit transaction (save) for Doc " +
+                                "(${docCache.getKeyNamespace(doc.key)}) in MongoDB. " +
+                                "Transaction has been aborted.",
+                        )
+                    }
                 }
             }
         }
-    }
 
     @Throws(
         DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
@@ -320,10 +324,12 @@ internal class MongoDatabaseService : DatabaseService() {
         doc: D,
         updateFunction: (D) -> D,
         bypassValidation: Boolean,
-    ): D = withContext(Dispatchers.IO) {
-        val client = requireNotNull(mongoClient) {
-            "MongoClient is not initialized! Could not update Doc in MongoDB!"
-        }
+    ): D =
+        withContext(Dispatchers.IO) {
+        val client =
+            requireNotNull(mongoClient) {
+                "MongoClient is not initialized! Could not update Doc in MongoDB!"
+            }
         val collection = getMongoCollection(docCache)
         return@withContext MongoTransactions.update(
             client,
@@ -335,225 +341,214 @@ internal class MongoDatabaseService : DatabaseService() {
         )
     }
 
-    override suspend fun <K : Any, D : Doc<K, D>> readInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): D? = withContext(Dispatchers.IO) {
-        try {
-            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
-            return@withContext getMongoCollection(docCache).find(
-                // Find the id field, where the content is the id string
-                Filters.eq(keyFieldName, docCache.keyToString(key))
-            ).firstOrNull()
-        } catch (me: MongoException) {
-            docCache.getLoggerInternal().severe(
-                me,
-                "MongoException reading Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
-            )
-            throw me
-        } catch (e: Exception) {
-            docCache.getLoggerInternal().severe(
-                e,
-                "Exception reading Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
-            )
-            throw e
+    override suspend fun <K : Any, D : Doc<K, D>> readInternal(docCache: DocCache<K, D>, key: K): D? =
+        withContext(Dispatchers.IO) {
+            try {
+                val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+                return@withContext getMongoCollection(docCache)
+                    .find(
+                        // Find the id field, where the content is the id string
+                        Filters.eq(keyFieldName, docCache.keyToString(key)),
+                    ).firstOrNull()
+            } catch (me: MongoException) {
+                docCache.getLoggerInternal().severe(
+                    me,
+                    "MongoException reading Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
+                )
+                throw me
+            } catch (e: Exception) {
+                docCache.getLoggerInternal().severe(
+                    e,
+                    "Exception reading Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
+                )
+                throw e
+            }
         }
-    }
 
-    override suspend fun <K : Any, D : Doc<K, D>> deleteInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // Apply a key filter (guarantees uniqueness by mongo's design)
-            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
-            val filter = Filters.eq(keyFieldName, docCache.keyToString(key))
+    override suspend fun <K : Any, D : Doc<K, D>> deleteInternal(docCache: DocCache<K, D>, key: K): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                // Apply a key filter (guarantees uniqueness by mongo's design)
+                val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+                val filter = Filters.eq(keyFieldName, docCache.keyToString(key))
 
-            // Succeeds if mongo reports at least 1 document deleted
-            return@withContext getMongoCollection(docCache).deleteMany(filter).deletedCount > 0
-        } catch (me: MongoException) {
-            docCache.getLoggerInternal().severe(
-                me,
-                "MongoException deleting Doc (${docCache.getKeyNamespace(key)}) from MongoDB."
-            )
-            throw me
-        } catch (e: Exception) {
-            docCache.getLoggerInternal().severe(
-                e,
-                "Exception deleting Doc (${docCache.getKeyNamespace(key)}) from MongoDB."
-            )
-            throw e
+                // Succeeds if mongo reports at least 1 document deleted
+                return@withContext getMongoCollection(docCache).deleteMany(filter).deletedCount > 0
+            } catch (me: MongoException) {
+                docCache.getLoggerInternal().severe(
+                    me,
+                    "MongoException deleting Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
+                )
+                throw me
+            } catch (e: Exception) {
+                docCache.getLoggerInternal().severe(
+                    e,
+                    "Exception deleting Doc (${docCache.getKeyNamespace(key)}) from MongoDB.",
+                )
+                throw e
+            }
         }
-    }
 
-    override suspend fun <K : Any, D : Doc<K, D>> readAllInternal(
-        docCache: DocCache<K, D>,
-    ): Flow<D> = withContext(Dispatchers.IO) {
-        getMongoCollection(docCache).find().map { doc: D ->
-            // Ensure doc is initialized with its backing cache
-            doc.initializeInternal(docCache)
-            // We read the document again, might as well cache it for consistency
-            docCache.cacheInternal(doc, log = false)
-            doc
+    override suspend fun <K : Any, D : Doc<K, D>> readAllInternal(docCache: DocCache<K, D>): Flow<D> =
+        withContext(Dispatchers.IO) {
+            getMongoCollection(docCache).find().map { doc: D ->
+                // Ensure doc is initialized with its backing cache
+                doc.initializeInternal(docCache)
+                // We read the document again, might as well cache it for consistency
+                docCache.cacheInternal(doc, log = false)
+                doc
+            }
         }
-    }
 
-    override suspend fun <K : Any, D : Doc<K, D>> sizeInternal(
-        docCache: DocCache<K, D>,
-    ): Long = withContext(Dispatchers.IO) {
-        getMongoCollection(docCache).countDocuments()
-    }
-
-    override suspend fun <K : Any, D : Doc<K, D>> hasKeyInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
-            val filter = Filters.eq(keyFieldName, docCache.keyToString(key))
-
-            // Instead of counting with our filter, just try to find 1 matching document
-            //  This is more efficient and avoids the overhead of counting/scanning every document
-            return@withContext getRawCollection(docCache)
-                .find(filter)
-                .limit(1)
-                .firstOrNull() != null
-        } catch (me: MongoException) {
-            docCache.getLoggerInternal().severe(
-                throwable = me,
-                msg = "MongoException on DocCache.hasKey (${docCache.getKeyNamespace(key)})"
-            )
-            throw me
-        } catch (e: Exception) {
-            docCache.getLoggerInternal().severe(
-                throwable = e,
-                msg = "Exception on DocCache.hasKey (${docCache.getKeyNamespace(key)})"
-            )
-            throw e
+    override suspend fun <K : Any, D : Doc<K, D>> sizeInternal(docCache: DocCache<K, D>): Long =
+        withContext(Dispatchers.IO) {
+            getMongoCollection(docCache).countDocuments()
         }
-    }
 
-    override suspend fun <K : Any, D : Doc<K, D>> clearInternal(
-        docCache: DocCache<K, D>,
-    ): Long = withContext(Dispatchers.IO) {
-        try {
-            // Delete with NO FILTER!
-            return@withContext getMongoCollection(docCache)
-                .deleteMany(Filters.empty())
-                .deletedCount
-        } catch (me: MongoException) {
-            docCache.getLoggerInternal().info(
-                throwable = me,
-                msg = "MongoException on DocCache.clear (${docCache.cacheName})"
-            )
-            throw me
-        } catch (e: Exception) {
-            docCache.getLoggerInternal().info(
-                throwable = e,
-                msg = "Exception on DocCache.clear (${docCache.cacheName})"
-            )
-            throw e
+    override suspend fun <K : Any, D : Doc<K, D>> hasKeyInternal(docCache: DocCache<K, D>, key: K): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+                val filter = Filters.eq(keyFieldName, docCache.keyToString(key))
+
+                // Instead of counting with our filter, just try to find 1 matching document
+                //  This is more efficient and avoids the overhead of counting/scanning every document
+                return@withContext getRawCollection(docCache)
+                    .find(filter)
+                    .limit(1)
+                    .firstOrNull() != null
+            } catch (me: MongoException) {
+                docCache.getLoggerInternal().severe(
+                    throwable = me,
+                    msg = "MongoException on DocCache.hasKey (${docCache.getKeyNamespace(key)})",
+                )
+                throw me
+            } catch (e: Exception) {
+                docCache.getLoggerInternal().severe(
+                    throwable = e,
+                    msg = "Exception on DocCache.hasKey (${docCache.getKeyNamespace(key)})",
+                )
+                throw e
+            }
         }
-    }
 
-    override suspend fun <K : Any, D : Doc<K, D>> readKeysInternal(
-        docCache: DocCache<K, D>,
-    ): Flow<K> = withContext(Dispatchers.IO) {
-        try {
-            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
-
-            getRawCollection(docCache)
-                .find()
-                .projection(Projections.include(keyFieldName))
-                .mapNotNull { getKeyByRawDocument(it, keyFieldName, docCache) }
-        } catch (me: MongoException) {
-            docCache.getLoggerInternal().info(
-                throwable = me,
-                msg = "MongoException on DocCache.clear (${docCache.cacheName})"
-            )
-            throw me
-        } catch (e: Exception) {
-            docCache.getLoggerInternal().info(
-                throwable = e,
-                msg = "Exception on DocCache.clear (${docCache.cacheName})"
-            )
-            throw e
+    override suspend fun <K : Any, D : Doc<K, D>> clearInternal(docCache: DocCache<K, D>): Long =
+        withContext(Dispatchers.IO) {
+            try {
+                // Delete with NO FILTER!
+                return@withContext getMongoCollection(docCache)
+                    .deleteMany(Filters.empty())
+                    .deletedCount
+            } catch (me: MongoException) {
+                docCache.getLoggerInternal().info(
+                    throwable = me,
+                    msg = "MongoException on DocCache.clear (${docCache.cacheName})",
+                )
+                throw me
+            } catch (e: Exception) {
+                docCache.getLoggerInternal().info(
+                    throwable = e,
+                    msg = "Exception on DocCache.clear (${docCache.cacheName})",
+                )
+                throw e
+            }
         }
-    }
+
+    override suspend fun <K : Any, D : Doc<K, D>> readKeysInternal(docCache: DocCache<K, D>): Flow<K> =
+        withContext(Dispatchers.IO) {
+            try {
+                val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+
+                getRawCollection(docCache)
+                    .find()
+                    .projection(Projections.include(keyFieldName))
+                    .mapNotNull { getKeyByRawDocument(it, keyFieldName, docCache) }
+            } catch (me: MongoException) {
+                docCache.getLoggerInternal().info(
+                    throwable = me,
+                    msg = "MongoException on DocCache.clear (${docCache.cacheName})",
+                )
+                throw me
+            } catch (e: Exception) {
+                docCache.getLoggerInternal().info(
+                    throwable = e,
+                    msg = "Exception on DocCache.clear (${docCache.cacheName})",
+                )
+                throw e
+            }
+        }
 
     @Throws(DocumentNotFoundException::class)
-    override suspend fun <K : Any, D : Doc<K, D>> replaceInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-        update: D,
-    ) = withContext(Dispatchers.IO) {
-        val k1 = docCache.keyToString(key)
-        val k2 = docCache.keyToString(update.key)
-        require(k1 == k2) {
-            "Key mismatch! Cannot replace document with key '$k1' using document with key '$k2'. " +
-                "Ensure the keys match before replacing."
-        }
-
-        try {
-            val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
-            val filter = Filters.eq(keyFieldName, k1)
-
-            // upsert=false means it will not insert a new document if the key does not exist
-            val options = ReplaceOptions().upsert(false)
-            val result = getMongoCollection(docCache)
-                .replaceOne(filter, update, options)
-
-            // Fail State - No Document Replaced
-            if (result.matchedCount == 0L) {
-                val keyString = docCache.keyToString(key)
-                throw DocumentNotFoundException(
-                    keyString = keyString,
-                    docCache = docCache,
-                    operation = Operation.REPLACE,
-                )
+    override suspend fun <K : Any, D : Doc<K, D>> replaceInternal(docCache: DocCache<K, D>, key: K, update: D) =
+        withContext(Dispatchers.IO) {
+            val k1 = docCache.keyToString(key)
+            val k2 = docCache.keyToString(update.key)
+            require(k1 == k2) {
+                "Key mismatch! Cannot replace document with key '$k1' using document with key '$k2'. " +
+                    "Ensure the keys match before replacing."
             }
-        } catch (e: DocumentNotFoundException) {
-            // don't log, this is fine, promote to caller
-            throw e
-        } catch (me: MongoException) {
-            docCache.getLoggerInternal().info(
-                throwable = me,
-                msg = "MongoException on DocCache.replace (${docCache.cacheName})"
-            )
-            throw me
-        } catch (e: Exception) {
-            docCache.getLoggerInternal().info(
-                throwable = e,
-                msg = "Exception on DocCache.replace (${docCache.cacheName})"
-            )
-            throw e
+
+            try {
+                val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
+                val filter = Filters.eq(keyFieldName, k1)
+
+                // upsert=false means it will not insert a new document if the key does not exist
+                val options = ReplaceOptions().upsert(false)
+                val result =
+                    getMongoCollection(docCache)
+                        .replaceOne(filter, update, options)
+
+                // Fail State - No Document Replaced
+                if (result.matchedCount == 0L) {
+                    val keyString = docCache.keyToString(key)
+                    throw DocumentNotFoundException(
+                        keyString = keyString,
+                        docCache = docCache,
+                        operation = Operation.REPLACE,
+                    )
+                }
+            } catch (e: DocumentNotFoundException) {
+                // don't log, this is fine, promote to caller
+                throw e
+            } catch (me: MongoException) {
+                docCache.getLoggerInternal().info(
+                    throwable = me,
+                    msg = "MongoException on DocCache.replace (${docCache.cacheName})",
+                )
+                throw me
+            } catch (e: Exception) {
+                docCache.getLoggerInternal().info(
+                    throwable = e,
+                    msg = "Exception on DocCache.replace (${docCache.cacheName})",
+                )
+                throw e
+            }
         }
-    }
 
     // ------------------------------------------------------------ //
     //                         Unique Indexes                       //
     // ------------------------------------------------------------ //
     override suspend fun <K : Any, D : Doc<K, D>, T> registerUniqueIndexInternal(
         docCache: DocCache<K, D>,
-        index: DocUniqueIndex<K, D, T>
+        index: DocUniqueIndex<K, D, T>,
     ) = withContext(Dispatchers.IO) {
         try {
             // Create the new index (as unique)
             getMongoCollection(docCache).createIndex(
                 Document(index.fieldName, 1),
-                IndexOptions().unique(true)
+                IndexOptions().unique(true),
             )
             return@withContext
         } catch (me: MongoException) {
             docCache.getLoggerInternal().info(
                 throwable = me,
-                msg = "MongoException on registerUniqueIndex (${docCache.cacheName})"
+                msg = "MongoException on registerUniqueIndex (${docCache.cacheName})",
             )
             throw me
         } catch (e: Exception) {
             docCache.getLoggerInternal().info(
                 throwable = e,
-                msg = "Exception on registerUniqueIndex (${docCache.cacheName})"
+                msg = "Exception on registerUniqueIndex (${docCache.cacheName})",
             )
             throw e
         }
@@ -562,20 +557,22 @@ internal class MongoDatabaseService : DatabaseService() {
     override suspend fun <K : Any, D : Doc<K, D>, T> readByUniqueIndexInternal(
         docCache: DocCache<K, D>,
         index: DocUniqueIndex<K, D, T>,
-        value: T
-    ): D? = withContext(Dispatchers.IO) {
+        value: T,
+    ): D? =
+        withContext(Dispatchers.IO) {
         try {
             val indexFilter = Filters.eq(index.fieldName, value)
-            val doc: D = getMongoCollection(docCache)
-                .find(indexFilter)
-                .firstOrNull() ?: return@withContext null
+            val doc: D =
+                getMongoCollection(docCache)
+                    .find(indexFilter)
+                    .firstOrNull() ?: return@withContext null
 
             val v2 = index.extractValue(doc)
             if (!index.equals(value, v2)) {
                 warn(
                     "Index mismatch! " +
                         "The value '$value' does not match the index value '$v2' " +
-                        "for document with key '${doc.key}' in DocCache '${docCache.cacheName}'."
+                        "for document with key '${doc.key}' in DocCache '${docCache.cacheName}'.",
                 )
                 return@withContext null
             }
@@ -583,13 +580,13 @@ internal class MongoDatabaseService : DatabaseService() {
         } catch (me: MongoException) {
             docCache.getLoggerInternal().info(
                 throwable = me,
-                msg = "MongoException on readByUniqueIndex (${docCache.cacheName})"
+                msg = "MongoException on readByUniqueIndex (${docCache.cacheName})",
             )
             throw me
         } catch (e: Exception) {
             docCache.getLoggerInternal().info(
                 throwable = e,
-                msg = "Exception on readByUniqueIndex (${docCache.cacheName})"
+                msg = "Exception on readByUniqueIndex (${docCache.cacheName})",
             )
             throw e
         }
@@ -598,11 +595,9 @@ internal class MongoDatabaseService : DatabaseService() {
     // ------------------------------------------------------------ //
     //                            MISC API                          //
     // ------------------------------------------------------------ //
-    override fun isDatabaseReadyForWrites(): Boolean {
-        // Must have a successful first connection from the Listener
-        //  AND must be currently connected to MongoDB
-        return mongoFirstConnect && mongoConnected
-    }
+    // Must have a successful first connection from the Listener
+    //  AND must be currently connected to MongoDB
+    override fun isDatabaseReadyForWrites(): Boolean = mongoFirstConnect && mongoConnected
 
     // ------------------------------------------------------------ //
     //                   MongoCollection Management                 //
@@ -612,9 +607,10 @@ internal class MongoDatabaseService : DatabaseService() {
     private val rawCollections = ConcurrentHashMap<String, MongoCollection<Document>>() // Map<Name, MongoCollection>
 
     private fun <K : Any, D : Doc<K, D>> getDatabase(docCache: DocCache<K, D>): MongoDatabase {
-        val client = requireNotNull(this.mongoClient) {
-            "MongoClient is not initialized! Could not fetch MongoCollection!"
-        }
+        val client =
+            requireNotNull(this.mongoClient) {
+                "MongoClient is not initialized! Could not fetch MongoCollection!"
+            }
 
         // Create or Get the current Database from MongoDB
         return databases.computeIfAbsent(docCache.databaseName) { name: String ->
@@ -652,34 +648,34 @@ internal class MongoDatabaseService : DatabaseService() {
     }
 
     @Suppress("CanConvertToMultiDollarString")
-    override suspend fun getCurrentOperationTime(): Any? {
-        return try {
-            val client = requireNotNull(this.mongoClient) {
+    override suspend fun getCurrentOperationTime(): Any? =
+        try {
+        val client =
+            requireNotNull(this.mongoClient) {
                 "MongoClient is not initialized! Could not get current operation time!"
             }
 
-            // Get cluster time by running a simple operation
-            val adminDatabase = client.getDatabase("admin")
-            val result = adminDatabase.runCommand(Document("hello", 1))
+        // Get cluster time by running a simple operation
+        val adminDatabase = client.getDatabase("admin")
+        val result = adminDatabase.runCommand(Document("hello", 1))
 
-            // Extract cluster time from the result
-            val clusterTimeDoc = result["\$clusterTime"] as? Document
-            clusterTimeDoc?.get("clusterTime") as? org.bson.BsonTimestamp
-        } catch (e: Exception) {
-            this.warn("Failed to get current operation time: ${e.message}")
-            null
-        }
+        // Extract cluster time from the result
+        val clusterTimeDoc = result["\$clusterTime"] as? Document
+        clusterTimeDoc?.get("clusterTime") as? BsonTimestamp
+    } catch (e: Exception) {
+        this.warn("Failed to get current operation time: ${e.message}")
+        null
     }
 
     override suspend fun <K : Any, D : Doc<K, D>> createChangeStreamManager(
         docCache: DocCache<K, D>,
-        eventHandler: ChangeEventHandler<K, D>
+        eventHandler: ChangeEventHandler<K, D>,
     ): ChangeStreamManager<K, D> {
         val collection = getMongoCollection(docCache)
         return MongoChangeStreamManager(
             collection = collection,
             eventHandler = eventHandler,
-            logger = this
+            logger = this,
         )
     }
 
@@ -689,22 +685,27 @@ internal class MongoDatabaseService : DatabaseService() {
     private fun <D : Doc<K, D>, K : Any> getKeyByRawDocument(
         document: Document,
         keyFieldName: String,
-        docCache: DocCache<K, D>
-    ): K? {
-        return when (val field = document.get(keyFieldName)) {
-            is String -> docCache.keyFromString(field)
-            is ObjectId -> docCache.keyFromString(field.toHexString())
-            else -> {
-                docCache.getLoggerInternal().warning(
-                    "[#readKeys] Unexpected key type for DocCache '${docCache.cacheName}': " +
-                        "Expected String or ObjectId, got ${field?.javaClass?.simpleName ?: "null"}"
-                )
-                null
-            }
+        docCache: DocCache<K, D>,
+    ): K? =
+        when (val field = document.get(keyFieldName)) {
+        is String -> {
+            docCache.keyFromString(field)
+        }
+
+        is ObjectId -> {
+            docCache.keyFromString(field.toHexString())
+        }
+
+        else -> {
+            docCache.getLoggerInternal().warning(
+                "[#readKeys] Unexpected key type for DocCache '${docCache.cacheName}': " +
+                    "Expected String or ObjectId, got ${field?.javaClass?.simpleName ?: "null"}",
+            )
+            null
         }
     }
 
     companion object {
-        internal const val DUPLICATE_KEY_VIOLATION_CODE = 11000
+        internal const val DUPLICATE_KEY_VIOLATION_CODE = 11_000
     }
 }

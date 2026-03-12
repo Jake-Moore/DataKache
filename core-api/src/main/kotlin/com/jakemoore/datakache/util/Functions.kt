@@ -8,7 +8,7 @@ import kotlin.time.Duration.Companion.seconds
 suspend fun <T> eventually(
     timeout: Duration = 10.seconds,
     interval: Duration = 200.milliseconds,
-    block: suspend () -> T
+    block: suspend () -> T,
 ): T {
     val deadline = System.nanoTime() + timeout.inWholeNanoseconds
     var lastError: Throwable? = null

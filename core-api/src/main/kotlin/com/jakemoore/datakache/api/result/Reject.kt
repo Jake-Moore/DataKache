@@ -6,9 +6,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 /**
  * Reject state (when an update is rejected from the updateFunction).
  */
-class Reject<T>(
-    val exception: RejectUpdateException,
-) : RejectableResult<T> {
+class Reject<T>(val exception: RejectUpdateException) : RejectableResult<T> {
     /**
      * @return false (not a success)
      */
@@ -32,7 +30,8 @@ class Reject<T>(
     /**
      * @return A [ResultExceptionWrapper] containing the rejection exception.
      */
-    override fun exceptionOrNull(): ResultExceptionWrapper = ResultExceptionWrapper(
+    override fun exceptionOrNull(): ResultExceptionWrapper =
+        ResultExceptionWrapper(
         message = "Update operation rejected.",
         exception = exception,
     )

@@ -21,7 +21,6 @@ import java.util.UUID
 
 @Suppress("unused")
 class TestPlayerDocReadOperations : AbstractDataKacheTest() {
-
     init {
         describe("PlayerDocCache Read Operations") {
 
@@ -44,11 +43,15 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 // Disconnect the player to simulate offline state
                 player.disconnect()
 
-                val e = shouldThrow<InvalidPlayerException> {
-                    cache.read(player)
-                }
+                val e =
+                    shouldThrow<InvalidPlayerException> {
+                        cache.read(player)
+                    }
                 e.operation.shouldBe(Operation.READ)
-                e.message.shouldNotBeNull().lowercase().shouldContain("not online or valid")
+                e.message
+                    .shouldNotBeNull()
+                    .lowercase()
+                    .shouldContain("not online or valid")
 
                 // Should read Success because the player did connect initially
                 //  which created their PlayerDoc immediately
@@ -82,20 +85,22 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
             it("should handle multiple online players") {
 
                 // Add multiple players
-                val players = listOf(
-                    addPlayer("TestPlayer6"),
-                    addPlayer("TestPlayer7"),
-                    addPlayer("TestPlayer8"),
-                    addPlayer("TestPlayer9"),
-                    addPlayer("TestPlayer10")
-                )
+                val players =
+                    listOf(
+                        addPlayer("TestPlayer6"),
+                        addPlayer("TestPlayer7"),
+                        addPlayer("TestPlayer8"),
+                        addPlayer("TestPlayer9"),
+                        addPlayer("TestPlayer10"),
+                    )
 
                 // Read all players individually
-                val docs = players.map { player ->
-                    val result = cache.read(player)
-                    result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
-                    result.value
-                }
+                val docs =
+                    players.map { player ->
+                        val result = cache.read(player)
+                        result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
+                        result.value
+                    }
 
                 docs.size.shouldBe(5)
                 docs.forEachIndexed { index, doc ->
@@ -107,7 +112,7 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val allOnline = cache.readAllOnline()
                 allOnline.size.shouldBe(5)
                 allOnline.map { it.username }.toSet().shouldBe(
-                    setOf("TestPlayer6", "TestPlayer7", "TestPlayer8", "TestPlayer9", "TestPlayer10")
+                    setOf("TestPlayer6", "TestPlayer7", "TestPlayer8", "TestPlayer9", "TestPlayer10"),
                 )
             }
 
@@ -124,13 +129,17 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 // Disconnect one player
                 player1.disconnect()
                 cache.readAllOnline().size.shouldBe(1)
-                cache.readAllOnline().first().username.shouldBe("TestPlayer12")
+                cache
+                    .readAllOnline()
+                    .first()
+                    .username
+                    .shouldBe("TestPlayer12")
 
                 // Reconnect the first player
                 player1.reconnect()
                 cache.readAllOnline().size.shouldBe(2)
                 cache.readAllOnline().map { it.username }.toSet().shouldBe(
-                    setOf("TestPlayer11", "TestPlayer12")
+                    setOf("TestPlayer11", "TestPlayer12"),
                 )
             }
 
@@ -138,13 +147,15 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val player = addPlayer("TestPlayer13")
 
                 // Launch 10 concurrent reads
-                val results = kotlinx.coroutines.coroutineScope {
-                    (1..10).map {
-                        async(Dispatchers.IO) {
-                            cache.read(player)
-                        }
-                    }.awaitAll()
-                }
+                val results =
+                    kotlinx.coroutines.coroutineScope {
+                        (1..10)
+                            .map {
+                                async(Dispatchers.IO) {
+                                    cache.read(player)
+                                }
+                            }.awaitAll()
+                    }
 
                 results.forEach { result ->
                     result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
@@ -168,11 +179,12 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 doc2.version.shouldBe(initialVersion)
 
                 // Update the document to change version
-                val updateResult = cache.update(player) {
-                    it.copy(
-                        name = "UpdatedName",
-                    )
-                }
+                val updateResult =
+                    cache.update(player) {
+                        it.copy(
+                            name = "UpdatedName",
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val updatedDoc = updateResult.value
                 updatedDoc.version.shouldBe(initialVersion + 1)
@@ -225,16 +237,17 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val doc = result.value
 
                 // Update with custom data
-                val updateResult = cache.update(player) { doc ->
-                    doc.copy(
-                        name = "CustomName",
-                        balance = 100.0,
-                        list = listOf("item1", "item2", "item3"),
-                        customList = listOf(MyData.createRandom()),
-                        customSet = setOf(MyData.createRandom()),
-                        customMap = mapOf("key1" to MyData.createRandom())
-                    )
-                }
+                val updateResult =
+                    cache.update(player) { doc ->
+                        doc.copy(
+                            name = "CustomName",
+                            balance = 100.0,
+                            list = listOf("item1", "item2", "item3"),
+                            customList = listOf(MyData.createRandom()),
+                            customSet = setOf(MyData.createRandom()),
+                            customMap = mapOf("key1" to MyData.createRandom()),
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val updatedDoc = updateResult.value
 
@@ -262,11 +275,12 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 doc1.version.shouldBe(doc2.version)
 
                 // Update one document
-                val updateResult = cache.update(player) {
-                    it.copy(
-                        name = "UpdatedName"
-                    )
-                }
+                val updateResult =
+                    cache.update(player) {
+                        it.copy(
+                            name = "UpdatedName",
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val updatedDoc = updateResult.value
 
@@ -317,14 +331,15 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val largeCustomMap = (1..20).associate { "key$it" to MyData.createRandom() }
 
                 // Update with large data
-                val updateResult = cache.update(player) { doc ->
-                    doc.copy(
-                        list = largeList,
-                        customList = largeCustomList,
-                        customSet = largeCustomSet,
-                        customMap = largeCustomMap
-                    )
-                }
+                val updateResult =
+                    cache.update(player) { doc ->
+                        doc.copy(
+                            list = largeList,
+                            customList = largeCustomList,
+                            customSet = largeCustomSet,
+                            customMap = largeCustomMap,
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val updatedDoc = updateResult.value
 
@@ -410,11 +425,12 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val doc1 = result1.value
 
                 // Update the document
-                val updateResult = cache.update(player) {
-                    it.copy(
-                        name = "UpdatedName",
-                    )
-                }
+                val updateResult =
+                    cache.update(player) {
+                        it.copy(
+                            name = "UpdatedName",
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
 
                 // Read again - should get the updated version
@@ -432,11 +448,12 @@ class TestPlayerDocReadOperations : AbstractDataKacheTest() {
                 val players = (1..10).map { addPlayer("TestPlayer${26 + it}") }
 
                 // Read all players
-                val docs = players.map { player ->
-                    val result = cache.read(player)
-                    result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
-                    result.value
-                }
+                val docs =
+                    players.map { player ->
+                        val result = cache.read(player)
+                        result.shouldBeInstanceOf<Success<TestPlayerDoc>>()
+                        result.value
+                    }
 
                 // All documents should be readable
                 docs.size.shouldBe(10)

@@ -22,18 +22,16 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
     //                          API Methods                         //
     // ------------------------------------------------------------ //
     private lateinit var docCache: PlayerDocCache<D>
-    override fun getDocCache(): DocCache<UUID, D> {
-        return docCache
-    }
+
+    override fun getDocCache(): DocCache<UUID, D> = docCache
 
     @ApiStatus.Internal
-    override fun hasDocCacheInternal(): Boolean {
-        return ::docCache.isInitialized
-    }
+    override fun hasDocCacheInternal(): Boolean = ::docCache.isInitialized
 
     // ------------------------------------------------------------ //
     //                       Data Class Helpers                     //
     // ------------------------------------------------------------ //
+
     /**
      * Produces a new instance of this document with its username updated.
      *
@@ -56,9 +54,7 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
      *
      * Alias for `Bukkit.getPlayer(UUID)`.
      */
-    fun getPlayer(): Player? {
-        return Bukkit.getPlayer(this.uniqueId)
-    }
+    fun getPlayer(): Player? = Bukkit.getPlayer(this.uniqueId)
 
     /**
      * Checks if the [Player] behind this [PlayerDoc] is online AND alive.
@@ -89,9 +85,7 @@ abstract class PlayerDoc<D : PlayerDoc<D>> : Doc<UUID, D> {
         }
     }
 
-    override fun hashCode(): Int {
-        return Objects.hashCode(this.key)
-    }
+    override fun hashCode(): Int = Objects.hashCode(this.key)
 
     override fun equals(other: Any?): Boolean {
         if (other === this) return true

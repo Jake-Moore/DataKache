@@ -16,7 +16,9 @@ open class DefaultLoggerService : LoggerService {
         // Simple console logging
         when (level) {
             LoggerService.LogLevel.WARNING,
-            LoggerService.LogLevel.SEVERE -> System.err.println("[$loggerName] [$level] $msg")
+            LoggerService.LogLevel.SEVERE,
+            -> System.err.println("[$loggerName] [$level] $msg")
+
             else -> println("[$loggerName] [$level] $msg")
         }
     }

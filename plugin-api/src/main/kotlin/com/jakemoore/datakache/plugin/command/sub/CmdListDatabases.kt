@@ -7,16 +7,14 @@ import com.jakemoore.datakache.plugin.command.api.AbstractCommand
 import com.jakemoore.datakache.util.Color
 import org.bukkit.command.CommandSender
 
-internal class CmdListDatabases(
-    parent: DataKacheCommand,
-) : AbstractCommand(
-    parent = parent,
-    commandName = "list-databases",
-    permission = "datakache.command.list.databases",
-    argsDescription = "",
-    description = "View Registered Databases.",
-) {
-
+internal class CmdListDatabases(parent: DataKacheCommand) :
+    AbstractCommand(
+        parent = parent,
+        commandName = "list-databases",
+        permission = "datakache.command.list.databases",
+        argsDescription = "",
+        description = "View Registered Databases.",
+    ) {
     override fun processCommand(sender: CommandSender, args: Array<String>) {
         val storage = DataKache.storageMode
         val readyState = if (storage.isDatabaseReadyForWrites()) "&aConnected" else "&cDisconnected"
@@ -27,7 +25,8 @@ internal class CmdListDatabases(
         sender.sendMessage(Color.t("&7Storage Service: $readyState"))
 
         sender.sendMessage(Color.t("&7Databases:"))
-        DataKacheAPI.listDatabases()
+        DataKacheAPI
+            .listDatabases()
             .map { registration -> registration.databaseName }
             .forEach { dbName -> sender.sendMessage(Color.t("&7 - &f$dbName")) }
     }

@@ -2,9 +2,7 @@ package com.jakemoore.datakache.util
 
 import kotlin.math.roundToLong
 
-internal class RollingAverage(
-    private val size: Int,
-) {
+internal class RollingAverage(private val size: Int) {
     private val readings = ArrayDeque<Long>()
     private var sum: Long = 0L
 
@@ -17,7 +15,5 @@ internal class RollingAverage(
         }
     }
 
-    fun average(): Long {
-        return if (readings.isEmpty()) 0L else (sum / readings.size.toDouble()).roundToLong()
-    }
+    fun average(): Long = if (readings.isEmpty()) 0L else (sum / readings.size.toDouble()).roundToLong()
 }

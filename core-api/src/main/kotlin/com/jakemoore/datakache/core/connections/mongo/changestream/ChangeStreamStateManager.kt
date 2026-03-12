@@ -12,10 +12,7 @@ import java.util.concurrent.atomic.AtomicReference
  * Manages the state and lifecycle of change stream connections.
  * Handles thread-safe state transitions and job lifecycle management.
  */
-internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
-    private val context: ChangeStreamContext<K, D>
-) {
-
+internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(private val context: ChangeStreamContext<K, D>) {
     private val state = AtomicReference(ChangeStreamState.DISCONNECTED)
     private val stateMutex = Mutex()
 
@@ -34,14 +31,13 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
      * @param newState The new state to transition to
      * @return true if the transition was successful, false otherwise
      */
-    fun transitionTo(expectedState: ChangeStreamState?, newState: ChangeStreamState): Boolean {
-        return if (expectedState != null) {
+    fun transitionTo(expectedState: ChangeStreamState?, newState: ChangeStreamState): Boolean =
+        if (expectedState != null) {
             state.compareAndSet(expectedState, newState)
         } else {
             state.set(newState)
             true
         }
-    }
 
     /**
      * Checks if the current state allows starting the change stream.
@@ -51,7 +47,9 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
         return when (currentState) {
             ChangeStreamState.DISCONNECTED,
             ChangeStreamState.FAILED,
-            ChangeStreamState.SHUTDOWN -> true
+            ChangeStreamState.SHUTDOWN,
+            -> true
+
             else -> false
         }
     }
@@ -64,7 +62,9 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
         return when (currentState) {
             ChangeStreamState.CONNECTED,
             ChangeStreamState.CONNECTING,
-            ChangeStreamState.RECONNECTING -> true
+            ChangeStreamState.RECONNECTING,
+            -> true
+
             else -> false
         }
     }
@@ -73,9 +73,7 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
      * Executes an action while holding the state lock.
      * This ensures thread-safe state management operations.
      */
-    suspend fun <T> withStateLock(action: suspend () -> T): T {
-        return stateMutex.withLock { action() }
-    }
+    suspend fun <T> withStateLock(action: suspend () -> T): T = stateMutex.withLock { action() }
 
     /**
      * Sets the job references for lifecycle management.
@@ -123,33 +121,54 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
     /**
      * Validates if a state transition is allowed.
      */
-    fun isValidTransition(from: ChangeStreamState, to: ChangeStreamState): Boolean {
-        return when (from) {
-            ChangeStreamState.DISCONNECTED -> to in setOf(
-                ChangeStreamState.CONNECTING,
-                ChangeStreamState.SHUTDOWN
-            )
-            ChangeStreamState.CONNECTING -> to in setOf(
-                ChangeStreamState.CONNECTED,
-                ChangeStreamState.FAILED,
-                ChangeStreamState.SHUTDOWN
-            )
-            ChangeStreamState.CONNECTED -> to in setOf(
-                ChangeStreamState.RECONNECTING,
-                ChangeStreamState.FAILED,
-                ChangeStreamState.SHUTDOWN
-            )
-            ChangeStreamState.RECONNECTING -> to in setOf(
-                ChangeStreamState.CONNECTED,
-                ChangeStreamState.FAILED,
-                ChangeStreamState.SHUTDOWN
-            )
-            ChangeStreamState.FAILED -> to in setOf(
-                ChangeStreamState.CONNECTING,
-                ChangeStreamState.SHUTDOWN
-            )
-            ChangeStreamState.SHUTDOWN -> false // No transitions from shutdown
+    fun isValidTransition(from: ChangeStreamState, to: ChangeStreamState): Boolean =
+        when (from) {
+        ChangeStreamState.DISCONNECTED -> {
+            to in
+                setOf(
+                    ChangeStreamState.CONNECTING,
+                    ChangeStreamState.SHUTDOWN,
+                )
         }
+
+        ChangeStreamState.CONNECTING -> {
+            to in
+                setOf(
+                    ChangeStreamState.CONNECTED,
+                    ChangeStreamState.FAILED,
+                    ChangeStreamState.SHUTDOWN,
+                )
+        }
+
+        ChangeStreamState.CONNECTED -> {
+            to in
+                setOf(
+                    ChangeStreamState.RECONNECTING,
+                    ChangeStreamState.FAILED,
+                    ChangeStreamState.SHUTDOWN,
+                )
+        }
+
+        ChangeStreamState.RECONNECTING -> {
+            to in
+                setOf(
+                    ChangeStreamState.CONNECTED,
+                    ChangeStreamState.FAILED,
+                    ChangeStreamState.SHUTDOWN,
+                )
+        }
+
+        ChangeStreamState.FAILED -> {
+            to in
+                setOf(
+                    ChangeStreamState.CONNECTING,
+                    ChangeStreamState.SHUTDOWN,
+                )
+        }
+
+        ChangeStreamState.SHUTDOWN -> {
+            false
+        } // No transitions from shutdown
     }
 
     /**
@@ -162,7 +181,7 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
             state.compareAndSet(currentState, newState)
         } else {
             context.logger.warn(
-                "Invalid state transition attempted from $currentState to $newState"
+                "Invalid state transition attempted from $currentState to $newState",
             )
             false
         }
@@ -171,8 +190,5 @@ internal class ChangeStreamStateManager<K : Any, D : Doc<K, D>>(
     /**
      * Checks if the change stream job, and the event processor job are both active.
      */
-    fun areJobsActive(): Boolean {
-        // both jobs must be non-null and active
-        return changeStreamJob?.isActive == true && eventProcessorJob?.isActive == true
-    }
+    fun areJobsActive(): Boolean = changeStreamJob?.isActive == true && eventProcessorJob?.isActive == true
 }

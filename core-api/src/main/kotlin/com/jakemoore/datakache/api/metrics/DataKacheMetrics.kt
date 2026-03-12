@@ -32,9 +32,8 @@ object DataKacheMetrics {
      * Throws an [IllegalArgumentException] if a receiver with the same ID is already registered.
      */
     @Throws(IllegalArgumentException::class)
-    fun registerReceiver(client: DataKacheClient, receiver: MetricsReceiver) {
-        return registerReceiverByID(client.name, receiver)
-    }
+    fun registerReceiver(client: DataKacheClient, receiver: MetricsReceiver) =
+        registerReceiverByID(client.name, receiver)
 
     /**
      * Register a custom [MetricsReceiver] with a specific ID.
@@ -59,18 +58,14 @@ object DataKacheMetrics {
      *
      * @return true if the receiver was successfully removed, false if no receiver with that ID was found.
      */
-    fun unregisterReceiverByID(receiverID: String): Boolean {
-        return receiverMap.remove(receiverID) != null
-    }
+    fun unregisterReceiverByID(receiverID: String): Boolean = receiverMap.remove(receiverID) != null
 
     /**
      * Unregister a [MetricsReceiver] by its [DataKacheClient.name].
      *
      * @return true if the receiver was successfully removed, false if no receiver with that name was found.
      */
-    fun unregisterReceiver(client: DataKacheClient): Boolean {
-        return unregisterReceiverByID(client.name)
-    }
+    fun unregisterReceiver(client: DataKacheClient): Boolean = unregisterReceiverByID(client.name)
 
     /**
      * READ-ONLY access to the registered [MetricsReceiver]s.
@@ -78,7 +73,5 @@ object DataKacheMetrics {
      * FOR INTERNAL USE ONLY.
      */
     @ApiStatus.Internal
-    fun getReceiversInternal(): Collection<MetricsReceiver> {
-        return receivers
-    }
+    fun getReceiversInternal(): Collection<MetricsReceiver> = receivers
 }

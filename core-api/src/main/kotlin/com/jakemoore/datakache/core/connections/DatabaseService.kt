@@ -32,7 +32,9 @@ import kotlin.math.roundToLong
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
  */
 @Suppress("unused")
-internal abstract class DatabaseService : LoggerService, Service {
+internal abstract class DatabaseService :
+    LoggerService,
+    Service {
     /**
      * The average ROUND-TRIP ping to the storage service (database) in nanoseconds.
      */
@@ -43,10 +45,11 @@ internal abstract class DatabaseService : LoggerService, Service {
      */
     abstract val serverPingMap: Cache<String, Long>
 
-    private val updateQueueManagerDelegate = lazy {
-        // This is a delegate to ensure the UpdateQueueManager is only initialized when needed
-        UpdateQueueManager(this)
-    }
+    private val updateQueueManagerDelegate =
+        lazy {
+            // This is a delegate to ensure the UpdateQueueManager is only initialized when needed
+            UpdateQueueManager(this)
+        }
 
     /**
      * Manager for per-document update queues to eliminate database-level conflicts.
@@ -77,12 +80,13 @@ internal abstract class DatabaseService : LoggerService, Service {
 
         // Base timeout: 5x the average ping time (converted to milliseconds)
         // This accounts for the database round-trip plus processing overhead
-        val baseTimeoutMs = if (averagePingNanos > 0) {
-            pingMs * 5
-        } else {
-            // Fallback if ping is not available: 250ms
-            250L
-        }
+        val baseTimeoutMs =
+            if (averagePingNanos > 0) {
+                pingMs * 5
+            } else {
+                // Fallback if ping is not available: 250ms
+                250L
+            }
 
         // Get the actual queue size for this specific document
         //  Add one so that if the current document is in 'processing', it still counts as part of the queue
@@ -102,6 +106,7 @@ internal abstract class DatabaseService : LoggerService, Service {
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
     // ------------------------------------------------------------ //
+
     /**
      * Ensure the backing collection for the given [docCache] exists in the database.
      *
@@ -118,10 +123,7 @@ internal abstract class DatabaseService : LoggerService, Service {
      * - [DuplicateUniqueIndexException]
      */
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    suspend fun <K : Any, D : Doc<K, D>> insert(
-        docCache: DocCache<K, D>,
-        doc: D,
-    ) {
+    suspend fun <K : Any, D : Doc<K, D>> insert(docCache: DocCache<K, D>, doc: D) {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseInsert)
@@ -135,10 +137,7 @@ internal abstract class DatabaseService : LoggerService, Service {
     }
 
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> insertInternal(
-        docCache: DocCache<K, D>,
-        doc: D,
-    )
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> insertInternal(docCache: DocCache<K, D>, doc: D)
 
     /**
      * Update the given document in the database using the provided update function.
@@ -178,13 +177,14 @@ internal abstract class DatabaseService : LoggerService, Service {
 
             // Use the queue system to serialize updates to the same document
             // This eliminates database-level conflicts and improves FIFO ordering
-            val deferred = updateQueueManager.enqueueUpdate(
-                docCache = docCache,
-                doc = doc,
-                updateFunction = updateFunction,
-                updateExecutor = ::updateInternal,
-                bypassValidation = bypassValidation,
-            )
+            val deferred =
+                updateQueueManager.enqueueUpdate(
+                    docCache = docCache,
+                    doc = doc,
+                    updateFunction = updateFunction,
+                    updateExecutor = ::updateInternal,
+                    bypassValidation = bypassValidation,
+                )
 
             // Apply timeout to prevent indefinite blocking
             timeoutMS = calculateUpdateTimeoutMs(updateQueueManager, docCache, doc.key)
@@ -194,7 +194,7 @@ internal abstract class DatabaseService : LoggerService, Service {
         } catch (e: TimeoutCancellationException) {
             error(
                 "UPDATE for document with key '${doc.key}' in cache '${docCache.cacheName}' timed out! " +
-                    "Waited for ${timeoutMS}ms, but the queue did not process the update in time. "
+                    "Waited for ${timeoutMS}ms, but the queue did not process the update in time. ",
             )
             throw e
         } catch (e: CancellationException) {
@@ -225,10 +225,7 @@ internal abstract class DatabaseService : LoggerService, Service {
      *
      * @return The document [D] if it exists, or null if it does not.
      */
-    suspend fun <K : Any, D : Doc<K, D>> read(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): D? {
+    suspend fun <K : Any, D : Doc<K, D>> read(docCache: DocCache<K, D>, key: K): D? {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseRead)
@@ -241,20 +238,14 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> readInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): D?
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> readInternal(docCache: DocCache<K, D>, key: K): D?
 
     /**
      * Remove the document with the given [key] from the database.
      *
      * @return True if the document was successfully deleted, false if it did not exist.
      */
-    suspend fun <K : Any, D : Doc<K, D>> delete(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): Boolean {
+    suspend fun <K : Any, D : Doc<K, D>> delete(docCache: DocCache<K, D>, key: K): Boolean {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseDelete)
@@ -267,17 +258,12 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> deleteInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): Boolean
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> deleteInternal(docCache: DocCache<K, D>, key: K): Boolean
 
     /**
      * Read all documents from the given [docCache] as a kotlin [Flow].
      */
-    suspend fun <K : Any, D : Doc<K, D>> readAll(
-        docCache: DocCache<K, D>,
-    ): Flow<D> {
+    suspend fun <K : Any, D : Doc<K, D>> readAll(docCache: DocCache<K, D>): Flow<D> {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseReadAll)
@@ -290,16 +276,12 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> readAllInternal(
-        docCache: DocCache<K, D>,
-    ): Flow<D>
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> readAllInternal(docCache: DocCache<K, D>): Flow<D>
 
     /**
      * Fetches the size (total count of all documents) of the given [docCache].
      */
-    suspend fun <K : Any, D : Doc<K, D>> size(
-        docCache: DocCache<K, D>,
-    ): Long {
+    suspend fun <K : Any, D : Doc<K, D>> size(docCache: DocCache<K, D>): Long {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseSize)
@@ -312,19 +294,14 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> sizeInternal(
-        docCache: DocCache<K, D>,
-    ): Long
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> sizeInternal(docCache: DocCache<K, D>): Long
 
     /**
      * Checks if a document with the given [key] exists in the [docCache].
      *
      * @return True if the document exists, false otherwise.
      */
-    suspend fun <K : Any, D : Doc<K, D>> hasKey(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): Boolean {
+    suspend fun <K : Any, D : Doc<K, D>> hasKey(docCache: DocCache<K, D>, key: K): Boolean {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseHasKey)
@@ -337,19 +314,14 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> hasKeyInternal(
-        docCache: DocCache<K, D>,
-        key: K,
-    ): Boolean
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> hasKeyInternal(docCache: DocCache<K, D>, key: K): Boolean
 
     /**
      * Clears the entire [docCache] from the database.
      *
      * @return The number of documents removed from the database.
      */
-    suspend fun <K : Any, D : Doc<K, D>> clear(
-        docCache: DocCache<K, D>,
-    ): Long {
+    suspend fun <K : Any, D : Doc<K, D>> clear(docCache: DocCache<K, D>): Long {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseClear)
@@ -362,16 +334,12 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> clearInternal(
-        docCache: DocCache<K, D>,
-    ): Long
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> clearInternal(docCache: DocCache<K, D>): Long
 
     /**
      * Read all keys from the given [docCache] as a kotlin [Flow].
      */
-    suspend fun <K : Any, D : Doc<K, D>> readKeys(
-        docCache: DocCache<K, D>,
-    ): Flow<K> {
+    suspend fun <K : Any, D : Doc<K, D>> readKeys(docCache: DocCache<K, D>): Flow<K> {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseReadKeys)
@@ -384,9 +352,7 @@ internal abstract class DatabaseService : LoggerService, Service {
         }
     }
 
-    protected abstract suspend fun <K : Any, D : Doc<K, D>> readKeysInternal(
-        docCache: DocCache<K, D>,
-    ): Flow<K>
+    protected abstract suspend fun <K : Any, D : Doc<K, D>> readKeysInternal(docCache: DocCache<K, D>): Flow<K>
 
     /**
      * Fully overwrite and replace the document with the given [key] using the provided [update] document.
@@ -397,11 +363,7 @@ internal abstract class DatabaseService : LoggerService, Service {
      * @throws DocumentNotFoundException if the document with the given key does not exist.
      */
     @Throws(DocumentNotFoundException::class)
-    suspend fun <K : Any, D : Doc<K, D>> replace(
-        docCache: DocCache<K, D>,
-        key: K,
-        update: D,
-    ) {
+    suspend fun <K : Any, D : Doc<K, D>> replace(docCache: DocCache<K, D>, key: K, update: D) {
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseReplace)
@@ -424,6 +386,7 @@ internal abstract class DatabaseService : LoggerService, Service {
     // ------------------------------------------------------------ //
     //                         Unique Indexes                       //
     // ------------------------------------------------------------ //
+
     /**
      * Register a custom index for this cache.
      *
@@ -484,6 +447,7 @@ internal abstract class DatabaseService : LoggerService, Service {
     // ------------------------------------------------------------ //
     //                            MISC API                          //
     // ------------------------------------------------------------ //
+
     /**
      * @return If the database service is finished starting up and is ready to accept requests.
      */
@@ -507,7 +471,7 @@ internal abstract class DatabaseService : LoggerService, Service {
      */
     abstract suspend fun <K : Any, D : Doc<K, D>> createChangeStreamManager(
         docCache: DocCache<K, D>,
-        eventHandler: ChangeEventHandler<K, D>
+        eventHandler: ChangeEventHandler<K, D>,
     ): ChangeStreamManager<K, D>
 
     /**

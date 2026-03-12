@@ -12,7 +12,5 @@ import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
  * @param message The detail message explaining the exception.
  */
 @Suppress("unused")
-class InvalidDocCopyHelperException(
-    val docNamespace: String,
-    message: String,
-) : DocumentUpdateException("[$docNamespace] $message")
+class InvalidDocCopyHelperException(val docNamespace: String, message: String) :
+    DocumentUpdateException("[$docNamespace] $message")

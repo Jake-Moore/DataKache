@@ -26,9 +26,7 @@ interface DataKacheScope : CoroutineScope {
     companion object {
         val EXCEPTION_CONSUMERS: MutableList<ExceptionConsumer> = mutableListOf()
 
-        fun runningCoroutinesCount(): Int {
-            return GlobalDataKacheScope.coroutineContext[Job]?.children?.count() ?: 0
-        }
+        fun runningCoroutinesCount(): Int = GlobalDataKacheScope.coroutineContext[Job]?.children?.count() ?: 0
     }
 }
 
@@ -37,19 +35,19 @@ interface DataKacheScope : CoroutineScope {
  */
 @Suppress("MemberVisibilityCanBePrivate")
 internal object GlobalDataKacheScope : CoroutineScope {
-
     // SupervisorJob ensures that a child coroutine failure won't cancel the parent job or other child coroutines.
     private var supervisorJob = SupervisorJob()
 
     // CoroutineExceptionHandler to log errors
-    private var exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        if (EXCEPTION_CONSUMERS.isEmpty()) {
-            DataKache.logger.severe("Unhandled coroutine error: $throwable")
-            throwable.printStackTrace()
-        } else {
-            EXCEPTION_CONSUMERS.forEach { it.accept(throwable) }
+    private var exceptionHandler =
+        CoroutineExceptionHandler { _, throwable ->
+            if (EXCEPTION_CONSUMERS.isEmpty()) {
+                DataKache.logger.severe("Unhandled coroutine error: $throwable")
+                throwable.printStackTrace()
+            } else {
+                EXCEPTION_CONSUMERS.forEach { it.accept(throwable) }
+            }
         }
-    }
 
     // Create the Context (from IO Dispatcher, with SupervisorJob and CoroutineExceptionHandler)
     override val coroutineContext: CoroutineContext
@@ -66,14 +64,15 @@ internal object GlobalDataKacheScope : CoroutineScope {
         }
         // Create a fresh job and handler
         supervisorJob = SupervisorJob()
-        exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-            if (EXCEPTION_CONSUMERS.isEmpty()) {
-                DataKache.logger.severe("Unhandled coroutine error: $throwable")
-                throwable.printStackTrace()
-            } else {
-                EXCEPTION_CONSUMERS.forEach { it.accept(throwable) }
+        exceptionHandler =
+            CoroutineExceptionHandler { _, throwable ->
+                if (EXCEPTION_CONSUMERS.isEmpty()) {
+                    DataKache.logger.severe("Unhandled coroutine error: $throwable")
+                    throwable.printStackTrace()
+                } else {
+                    EXCEPTION_CONSUMERS.forEach { it.accept(throwable) }
+                }
             }
-        }
     }
 
     // Terminate all scopes and coroutines
@@ -123,7 +122,7 @@ internal object GlobalDataKacheScope : CoroutineScope {
                 "\tChild Job: " +
                     "isActive=${childJob.isActive}, " +
                     "isCompleted=${childJob.isCompleted}, " +
-                    "isCancelled=${childJob.isCancelled}"
+                    "isCancelled=${childJob.isCancelled}",
             )
         }
     }

@@ -19,29 +19,31 @@ import io.kotest.matchers.types.shouldNotBeInstanceOf
 
 @Suppress("unused")
 class TestUpdateOperations : AbstractDataKacheTest() {
-
     init {
         describe("Update Operations") {
 
             it("should update existing document") {
 
                 // Create a document
-                val originalDoc = cache.create("updateKey") { doc ->
-                    doc.copy(
-                        name = "Original Document",
-                        balance = 100.0
-                    )
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("updateKey") { doc ->
+                            doc.copy(
+                                name = "Original Document",
+                                balance = 100.0,
+                            )
+                        }.getOrThrow()
 
                 val originalVersion = originalDoc.version
 
                 // Update the document
-                val updateResult = cache.update("updateKey") { doc ->
-                    doc.copy(
-                        name = "Updated Document",
-                        balance = 200.0
-                    )
-                }
+                val updateResult =
+                    cache.update("updateKey") { doc ->
+                        doc.copy(
+                            name = "Updated Document",
+                            balance = 200.0,
+                        )
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Failure<TestGenericDoc>>()
@@ -56,9 +58,10 @@ class TestUpdateOperations : AbstractDataKacheTest() {
 
             it("should fail when updating non-existent document") {
 
-                val updateResult = cache.update("nonExistentKey") { doc ->
-                    doc.copy(name = "This should fail")
-                }
+                val updateResult =
+                    cache.update("nonExistentKey") { doc ->
+                        doc.copy(name = "This should fail")
+                    }
 
                 updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
@@ -71,27 +74,30 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should update document with complex transformation") {
 
                 // Create a document with simple data
-                val originalDoc = cache.create("complexUpdateKey") { doc ->
-                    doc.copy(
-                        name = "Simple Document",
-                        balance = 50.0,
-                        list = emptyList()
-                    )
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("complexUpdateKey") { doc ->
+                            doc.copy(
+                                name = "Simple Document",
+                                balance = 50.0,
+                                list = emptyList(),
+                            )
+                        }.getOrThrow()
 
                 val myData = MyData.createRandom()
 
                 // Update with complex data
-                val updateResult = cache.update("complexUpdateKey") { doc ->
-                    doc.copy(
-                        name = "Complex Updated Document",
-                        balance = 750.0,
-                        list = listOf("new1", "new2", "new3"),
-                        customList = listOf(myData),
-                        customSet = setOf(myData),
-                        customMap = mapOf("complexKey" to myData)
-                    )
-                }
+                val updateResult =
+                    cache.update("complexUpdateKey") { doc ->
+                        doc.copy(
+                            name = "Complex Updated Document",
+                            balance = 750.0,
+                            list = listOf("new1", "new2", "new3"),
+                            customList = listOf(myData),
+                            customSet = setOf(myData),
+                            customMap = mapOf("complexKey" to myData),
+                        )
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -109,14 +115,17 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should update document via document instance") {
 
                 // Create a document
-                val originalDoc = cache.create("docInstanceKey") { doc ->
-                    doc.copy(name = "Original", balance = 100.0)
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("docInstanceKey") { doc ->
+                            doc.copy(name = "Original", balance = 100.0)
+                        }.getOrThrow()
 
                 // Update via document instance
-                val updateResult = cache.update(originalDoc) { doc ->
-                    doc.copy(name = "Updated via Instance", balance = 300.0)
-                }
+                val updateResult =
+                    cache.update(originalDoc) { doc ->
+                        doc.copy(name = "Updated via Instance", balance = 300.0)
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -130,14 +139,16 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should reject update with RejectUpdateException") {
 
                 // Create a document
-                cache.create("rejectKey") { doc ->
-                    doc.copy(name = "Original", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("rejectKey") { doc ->
+                        doc.copy(name = "Original", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to update with rejection
-                val updateResult = cache.updateRejectable("rejectKey") { doc ->
-                    throw RejectUpdateException("Update rejected for testing")
-                }
+                val updateResult =
+                    cache.updateRejectable("rejectKey") { doc ->
+                        throw RejectUpdateException("Update rejected for testing")
+                    }
 
                 updateResult.shouldBeInstanceOf<Reject<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
@@ -147,14 +158,17 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should successfully update with rejectable update") {
 
                 // Create a document
-                val originalDoc = cache.create("rejectableKey") { doc ->
-                    doc.copy(name = "Original", balance = 100.0)
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("rejectableKey") { doc ->
+                            doc.copy(name = "Original", balance = 100.0)
+                        }.getOrThrow()
 
                 // Update successfully with rejectable update
-                val updateResult = cache.updateRejectable("rejectableKey") { doc ->
-                    doc.copy(name = "Updated Successfully", balance = 250.0)
-                }
+                val updateResult =
+                    cache.updateRejectable("rejectableKey") { doc ->
+                        doc.copy(name = "Updated Successfully", balance = 250.0)
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Reject<TestGenericDoc>>()
@@ -169,9 +183,10 @@ class TestUpdateOperations : AbstractDataKacheTest() {
 
             it("should fail rejectable update for non-existent document") {
 
-                val updateResult = cache.updateRejectable("nonExistentRejectKey") { doc ->
-                    doc.copy(name = "This should fail")
-                }
+                val updateResult =
+                    cache.updateRejectable("nonExistentRejectKey") { doc ->
+                        doc.copy(name = "This should fail")
+                    }
 
                 updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
@@ -185,24 +200,32 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should update document multiple times") {
 
                 // Create initial document
-                val doc1 = cache.create("multiUpdateKey") { doc ->
-                    doc.copy(name = "First", balance = 100.0)
-                }.getOrThrow()
+                val doc1 =
+                    cache
+                        .create("multiUpdateKey") { doc ->
+                            doc.copy(name = "First", balance = 100.0)
+                        }.getOrThrow()
 
                 // First update
-                val doc2 = cache.update("multiUpdateKey") { doc ->
-                    doc.copy(name = "Second", balance = 200.0)
-                }.getOrThrow()
+                val doc2 =
+                    cache
+                        .update("multiUpdateKey") { doc ->
+                            doc.copy(name = "Second", balance = 200.0)
+                        }.getOrThrow()
 
                 // Second update
-                val doc3 = cache.update("multiUpdateKey") { doc ->
-                    doc.copy(name = "Third", balance = 300.0)
-                }.getOrThrow()
+                val doc3 =
+                    cache
+                        .update("multiUpdateKey") { doc ->
+                            doc.copy(name = "Third", balance = 300.0)
+                        }.getOrThrow()
 
                 // Third update
-                val doc4 = cache.update("multiUpdateKey") { doc ->
-                    doc.copy(name = "Fourth", balance = 400.0)
-                }.getOrThrow()
+                val doc4 =
+                    cache
+                        .update("multiUpdateKey") { doc ->
+                            doc.copy(name = "Fourth", balance = 400.0)
+                        }.getOrThrow()
 
                 // Verify version progression
                 doc1.version shouldBe 0L
@@ -219,21 +242,24 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should update document with null values") {
 
                 // Create document with data
-                val originalDoc = cache.create("nullUpdateKey") { doc ->
-                    doc.copy(name = "Has Data", balance = 100.0)
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("nullUpdateKey") { doc ->
+                            doc.copy(name = "Has Data", balance = 100.0)
+                        }.getOrThrow()
 
                 // Update with null values
-                val updateResult = cache.update("nullUpdateKey") { doc ->
-                    doc.copy(
-                        name = null,
-                        balance = 0.0,
-                        list = emptyList(),
-                        customList = emptyList(),
-                        customSet = emptySet(),
-                        customMap = emptyMap()
-                    )
-                }
+                val updateResult =
+                    cache.update("nullUpdateKey") { doc ->
+                        doc.copy(
+                            name = null,
+                            balance = 0.0,
+                            list = emptyList(),
+                            customList = emptyList(),
+                            customSet = emptySet(),
+                            customMap = emptyMap(),
+                        )
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -251,14 +277,17 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should update document with empty string key") {
 
                 // Create document with empty key
-                val originalDoc = cache.create("") { doc ->
-                    doc.copy(name = "Original Empty Key")
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("") { doc ->
+                            doc.copy(name = "Original Empty Key")
+                        }.getOrThrow()
 
                 // Update document with empty key
-                val updateResult = cache.update("") { doc ->
-                    doc.copy(name = "Updated Empty Key")
-                }
+                val updateResult =
+                    cache.update("") { doc ->
+                        doc.copy(name = "Updated Empty Key")
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -272,14 +301,17 @@ class TestUpdateOperations : AbstractDataKacheTest() {
                 val specialKey = "test-key_with.special@chars#123"
 
                 // Create document with special key
-                val originalDoc = cache.create(specialKey) { doc ->
-                    doc.copy(name = "Original Special Key")
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create(specialKey) { doc ->
+                            doc.copy(name = "Original Special Key")
+                        }.getOrThrow()
 
                 // Update document with special key
-                val updateResult = cache.update(specialKey) { doc ->
-                    doc.copy(name = "Updated Special Key")
-                }
+                val updateResult =
+                    cache.update(specialKey) { doc ->
+                        doc.copy(name = "Updated Special Key")
+                    }
 
                 updateResult.shouldBeInstanceOf<Success<TestGenericDoc>>()
 
@@ -292,14 +324,16 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should fail when update function returns same instance") {
 
                 // Create a document
-                cache.create("sameInstanceKey") { doc ->
-                    doc.copy(name = "Original Document", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("sameInstanceKey") { doc ->
+                        doc.copy(name = "Original Document", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to update with function that returns same instance
-                val updateResult = cache.update("sameInstanceKey") { doc ->
-                    doc // Return same instance - should fail
-                }
+                val updateResult =
+                    cache.update("sameInstanceKey") { doc ->
+                        doc // Return same instance - should fail
+                    }
 
                 updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
@@ -312,14 +346,16 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should fail when update function modifies document key") {
 
                 // Create a document
-                cache.create("keyModificationKey") { doc ->
-                    doc.copy(name = "Original Document", balance = 100.0)
-                }.getOrThrow()
+                cache
+                    .create("keyModificationKey") { doc ->
+                        doc.copy(name = "Original Document", balance = 100.0)
+                    }.getOrThrow()
 
                 // Try to update with function that modifies the key
-                val updateResult = cache.update("keyModificationKey") { doc ->
-                    doc.copy(key = "modifiedKey") // Modify key - should fail
-                }
+                val updateResult =
+                    cache.update("keyModificationKey") { doc ->
+                        doc.copy(key = "modifiedKey") // Modify key - should fail
+                    }
 
                 updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()
@@ -334,14 +370,17 @@ class TestUpdateOperations : AbstractDataKacheTest() {
             it("should fail when update function modifies document version") {
 
                 // Create a document
-                val originalDoc = cache.create("versionModificationKey") { doc ->
-                    doc.copy(name = "Original Document", balance = 100.0)
-                }.getOrThrow()
+                val originalDoc =
+                    cache
+                        .create("versionModificationKey") { doc ->
+                            doc.copy(name = "Original Document", balance = 100.0)
+                        }.getOrThrow()
 
                 // Try to update with function that modifies the version
-                val updateResult = cache.update("versionModificationKey") { doc ->
-                    doc.copy(version = 999L) // Modify version - should fail
-                }
+                val updateResult =
+                    cache.update("versionModificationKey") { doc ->
+                        doc.copy(version = 999L) // Modify version - should fail
+                    }
 
                 updateResult.shouldBeInstanceOf<Failure<TestGenericDoc>>()
                 updateResult.shouldNotBeInstanceOf<Success<TestGenericDoc>>()

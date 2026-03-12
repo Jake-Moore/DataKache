@@ -9,7 +9,6 @@ class DataKacheConfig(
     val databaseNamespace: String = "global",
     val debug: Boolean = false,
     val storageMode: StorageMode,
-
     // MongoDB Connection Details
     val mongoURI: String = "mongodb://localhost:27017",
 )

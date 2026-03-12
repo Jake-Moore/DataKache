@@ -23,12 +23,7 @@ data class TestPlayerDoc(
     val customSet: Set<MyData> = emptySet(),
     val customMap: Map<String, MyData> = emptyMap(),
 ) : PlayerDoc<TestPlayerDoc>() {
+    override fun copyHelper(version: Long): TestPlayerDoc = this.copy(version = version)
 
-    override fun copyHelper(version: Long): TestPlayerDoc {
-        return this.copy(version = version)
-    }
-
-    override fun copyHelper(username: String?): TestPlayerDoc {
-        return this.copy(username = username)
-    }
+    override fun copyHelper(username: String?): TestPlayerDoc = this.copy(username = username)
 }

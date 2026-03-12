@@ -11,6 +11,7 @@ import kotlin.coroutines.suspendCoroutine
 // -------------------------------------------------------------------------------- //
 //                      Extension functions for DataKacheScope                     //
 // -------------------------------------------------------------------------------- //
+
 /**
  * Runs the given [runnable] synchronously on the main server thread.
  *
@@ -26,16 +27,15 @@ fun DataKacheScope.runSync(runnable: Runnable) {
  *
  * WAITS for the block to complete before returning.
  */
-suspend fun DataKacheScope.runSyncBlocking(block: () -> Unit) {
-    return suspendCoroutine { continuation ->
-        val plugin = requireNotNull(DataKachePlugin.getController())
-        Bukkit.getScheduler().runTask(plugin) {
-            try {
-                block()
-                continuation.resume(Unit)
-            } catch (e: Exception) {
-                continuation.resumeWithException(e)
-            }
+suspend fun DataKacheScope.runSyncBlocking(block: () -> Unit) =
+    suspendCoroutine { continuation ->
+    val plugin = requireNotNull(DataKachePlugin.getController())
+    Bukkit.getScheduler().runTask(plugin) {
+        try {
+            block()
+            continuation.resume(Unit)
+        } catch (e: Exception) {
+            continuation.resumeWithException(e)
         }
     }
 }
@@ -45,16 +45,15 @@ suspend fun DataKacheScope.runSyncBlocking(block: () -> Unit) {
  *
  * WAITS for the block to complete before returning result [T].
  */
-suspend fun <T> DataKacheScope.runSyncFetching(block: () -> T): T {
-    return suspendCoroutine { continuation ->
-        val plugin = requireNotNull(DataKachePlugin.getController())
-        Bukkit.getScheduler().runTask(plugin) {
-            try {
-                val result: T = block()
-                continuation.resume(result)
-            } catch (e: Exception) {
-                continuation.resumeWithException(e)
-            }
+suspend fun <T> DataKacheScope.runSyncFetching(block: () -> T): T =
+    suspendCoroutine { continuation ->
+    val plugin = requireNotNull(DataKachePlugin.getController())
+    Bukkit.getScheduler().runTask(plugin) {
+        try {
+            val result: T = block()
+            continuation.resume(result)
+        } catch (e: Exception) {
+            continuation.resumeWithException(e)
         }
     }
 }

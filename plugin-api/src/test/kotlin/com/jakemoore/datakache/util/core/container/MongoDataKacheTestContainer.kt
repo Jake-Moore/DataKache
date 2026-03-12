@@ -25,10 +25,7 @@ import java.io.File
  * Manages MongoDB container lifecycle and provides access to test resources.
  */
 @Suppress("UnusedVariable", "unused")
-class MongoDataKacheTestContainer(
-    private val dbNameShort: String = "TestDatabase"
-) : DataKacheTestContainer {
-
+class MongoDataKacheTestContainer(private val dbNameShort: String = "TestDatabase") : DataKacheTestContainer {
     private lateinit var mongoClient: MongoClient
 
     private lateinit var config: DataKacheConfig
@@ -52,10 +49,11 @@ class MongoDataKacheTestContainer(
         mongoClient = MongoClient.create(settings.build())
 
         // Create context factory and context
-        config = DataKacheConfig(
-            storageMode = StorageMode.MONGODB,
-            mongoURI = container.connectionString
-        )
+        config =
+            DataKacheConfig(
+                storageMode = StorageMode.MONGODB,
+                mongoURI = container.connectionString,
+            )
     }
 
     override suspend fun beforeEach() {
@@ -64,18 +62,21 @@ class MongoDataKacheTestContainer(
         val pluginYml = File(resource.toURI())
 
         // Start the MockBukkit server
-        val server = MockBukkit.mock().also {
-            mockServer = it
-        }
-        val plugin = MockBukkit.loadWith(TestPlugin::class.java, pluginYml).also {
-            mockPlugin = it
-        }
+        val server =
+            MockBukkit.mock().also {
+                mockServer = it
+            }
+        val plugin =
+            MockBukkit.loadWith(TestPlugin::class.java, pluginYml).also {
+                mockPlugin = it
+            }
 
-        val context = DataKachePluginContext(
-            plugin = plugin,
-            config = config,
-            lang = DataKachePluginLang(),
-        )
+        val context =
+            DataKachePluginContext(
+                plugin = plugin,
+                config = config,
+                lang = DataKachePluginLang(),
+            )
 
         // Initialize DataKache
         require(DataKachePlugin.enableDataKache(plugin, context)) {
@@ -90,18 +91,21 @@ class MongoDataKacheTestContainer(
     }
 
     private val databaseName: String
-        get() = requireNotNull(_registration) {
-            "Registration is not initialized. Ensure beforeEach is called."
-        }.databaseName
+        get() =
+            requireNotNull(_registration) {
+                "Registration is not initialized. Ensure beforeEach is called."
+            }.databaseName
 
     override suspend fun afterEach() {
         // Shut down registration and cache
-        val cache = requireNotNull(this._cache) {
-            "Cache is not initialized. Ensure beforeEach is called."
-        }
-        val reg = requireNotNull(_registration) {
-            "Registration is not initialized. Ensure beforeEach is called."
-        }
+        val cache =
+            requireNotNull(this._cache) {
+                "Cache is not initialized. Ensure beforeEach is called."
+            }
+        val reg =
+            requireNotNull(_registration) {
+                "Registration is not initialized. Ensure beforeEach is called."
+            }
 
         try {
             // Drop the database so the next test starts with a clean slate
@@ -114,12 +118,14 @@ class MongoDataKacheTestContainer(
             _registration = null
 
             // Shutdown DataKache
-            val server = requireNotNull(mockServer) {
-                "Server is not initialized. Ensure beforeEach is called."
-            }
-            val plugin = requireNotNull(mockPlugin) {
-                "Plugin is not initialized. Ensure beforeEach is called."
-            }
+            val server =
+                requireNotNull(mockServer) {
+                    "Server is not initialized. Ensure beforeEach is called."
+                }
+            val plugin =
+                requireNotNull(mockPlugin) {
+                    "Plugin is not initialized. Ensure beforeEach is called."
+                }
             require(DataKachePlugin.disableDataKache(plugin)) {
                 "Failed to disable DataKache after test"
             }
@@ -166,13 +172,16 @@ class MongoDataKacheTestContainer(
 
     companion object {
         private var _container: MongoDBContainer? = null
+
         internal fun startContainers() {
             runCatching {
                 _container?.stop()
             }
 
-            this._container = MongoDBContainer(DockerImageName.parse("mongo:8.0"))
-                .withReuse(false).also { it.start() }
+            this._container =
+                MongoDBContainer(DockerImageName.parse("mongo:8.0"))
+                    .withReuse(false)
+                    .also { it.start() }
         }
 
         internal fun stopContainers() {
@@ -183,8 +192,9 @@ class MongoDataKacheTestContainer(
         }
 
         internal val container: MongoDBContainer
-            get() = requireNotNull(_container) {
-                "MongoDB container is not initialized. Call startContainers() before accessing."
-            }
+            get() =
+                requireNotNull(_container) {
+                    "MongoDB container is not initialized. Call startContainers() before accessing."
+                }
     }
 }

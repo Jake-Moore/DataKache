@@ -28,4 +28,9 @@ class Empty<T> : OptionalResult<T> {
      * @return null (no exception)
      */
     override fun exceptionOrNull(): Throwable? = null
+
+    /**
+     * Always throws [NoSuchElementException] as this result is empty.
+     */
+    override fun getOrThrow(): T = throw NoSuchElementException("Result is empty")
 }

@@ -8,7 +8,7 @@ import com.jakemoore.datakache.api.result.exception.ResultExceptionWrapper
 internal object DbRegisterUniqueIndexResultHandler {
     internal suspend fun wrap(
         // Work may return a null document, which indicates that the document was not found.
-        work: suspend () -> Unit
+        work: suspend () -> Unit,
     ): DefiniteResult<Unit> {
         try {
             work()
@@ -17,8 +17,8 @@ internal object DbRegisterUniqueIndexResultHandler {
             return Failure(
                 ResultExceptionWrapper(
                     "DB Register Unique Index operation failed.",
-                    e
-                )
+                    e,
+                ),
             )
         }
     }

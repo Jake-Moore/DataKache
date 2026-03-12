@@ -10,6 +10,7 @@ import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
+import com.jakemoore.datakache.api.java.ThrowingUnaryOperator
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
@@ -19,9 +20,13 @@ import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.api.result.RejectableResult
 import com.jakemoore.datakache.api.result.Success
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.future.future
 import kotlinx.serialization.KSerializer
 import org.jetbrains.annotations.ApiStatus
 import org.jetbrains.annotations.NonBlocking
+import java.util.concurrent.CompletableFuture
+import java.util.function.UnaryOperator
 import kotlin.reflect.KProperty
 
 @Suppress("unused")
@@ -30,12 +35,15 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     //                     Kotlin Reflect Access                    //
     // ------------------------------------------------------------ //
     fun getKSerializer(): KSerializer<D>
+
     fun getKeyKProperty(): KProperty<K>
+
     fun getVersionKProperty(): KProperty<Long>
 
     // ------------------------------------------------------------ //
     //                          API Methods                         //
     // ------------------------------------------------------------ //
+
     /**
      * Returns the status of a document based on its version and the current state of the cache.
      * Possible Status Values:
@@ -52,9 +60,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * - [Status.STALE]: Cache contains a different version of the document. Data is outdated.
      * - [Status.DELETED]: Cache does not contain the document at all. Data is considered deleted.
      */
-    fun getStatus(doc: D): Status {
-        return getStatus(doc.key, doc.version)
-    }
+    fun getStatus(doc: D): Status = getStatus(doc.key, doc.version)
 
     // ------------------------------------------------------------ //
     //                          CRUD Methods                        //
@@ -105,6 +111,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
                 // Likewise, if we encountered a failure exception, pass it through
                 result
             }
+
             is Empty -> {
                 // Time to create the document
                 create(key, initializer)
@@ -136,9 +143,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * - [DuplicateUniqueIndexException]: The update operation violates a unique index constraint.
      * - [TransactionRetriesExceededException]: The update operation failed after exceeding allowed transaction retries.
      */
-    suspend fun update(doc: D, updateFunction: (D) -> D): DefiniteResult<D> {
-        return update(doc.key, updateFunction)
-    }
+    suspend fun update(doc: D, updateFunction: (D) -> D): DefiniteResult<D> = update(doc.key, updateFunction)
 
     /**
      * Modify a document by its key, allowing the operation to gracefully be rejected within the [updateFunction].
@@ -166,9 +171,8 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * - or a rejection state if the update was rejected by the [updateFunction]
      */
     @Throws(DocumentNotFoundException::class)
-    suspend fun updateRejectable(doc: D, updateFunction: (D) -> D): RejectableResult<D> {
-        return updateRejectable(doc.key, updateFunction)
-    }
+    suspend fun updateRejectable(doc: D, updateFunction: (D) -> D): RejectableResult<D> =
+        updateRejectable(doc.key, updateFunction)
 
     /**
      * See parent implementations for details on the behavior of this method:
@@ -181,9 +185,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * See [DocCache.delete] for more information.
      */
-    suspend fun delete(doc: D): DefiniteResult<Boolean> {
-        return delete(doc.key)
-    }
+    suspend fun delete(doc: D): DefiniteResult<Boolean> = delete(doc.key)
 
     /**
      * Fetch all documents from the cache.
@@ -235,6 +237,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                     CRUD Database Methods                    //
     // ------------------------------------------------------------ //
+
     /**
      * Fetch a document from the **database** (skipping cache).
      *
@@ -285,6 +288,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                        DocCache Methods                      //
     // ------------------------------------------------------------ //
+
     /**
      * The name of this cache of documents. This name will be used to create a collection in the backing database.
      *
@@ -319,6 +323,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                    Key Manipulation Methods                  //
     // ------------------------------------------------------------ //
+
     /**
      * Converts this key type [K] to a string representation.
      *
@@ -342,13 +347,12 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * Form: "databaseName.cacheName@key"
      */
-    fun getKeyNamespace(key: K): String {
-        return "${registration.databaseName}.$cacheName@${keyToString(key)}"
-    }
+    fun getKeyNamespace(key: K): String = "${registration.databaseName}.$cacheName@${keyToString(key)}"
 
     // ------------------------------------------------------------ //
     //                         Unique Indexes                       //
     // ------------------------------------------------------------ //
+
     /**
      * Register a custom index for this cache.
      *
@@ -358,9 +362,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * @return A [DefiniteResult] indicating success or failure of the registration.
      */
-    suspend fun <T> registerUniqueIndex(
-        index: DocUniqueIndex<K, D, T>,
-    ): DefiniteResult<Unit>
+    suspend fun <T> registerUniqueIndex(index: DocUniqueIndex<K, D, T>): DefiniteResult<Unit>
 
     /**
      * Attempts to read a document from the cache by a unique index. (ONLY checks cache)
@@ -370,10 +372,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * @return The [OptionalResult] containing the document if found, or empty if it does not.
      */
-    fun <T> readByUniqueIndex(
-        index: DocUniqueIndex<K, D, T>,
-        value: T,
-    ): OptionalResult<D>
+    fun <T> readByUniqueIndex(index: DocUniqueIndex<K, D, T>, value: T): OptionalResult<D>
 
     /**
      * Attempts to read a document from the **database** by a unique index. (ONLY checks database)
@@ -383,10 +382,7 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      *
      * @return The [OptionalResult] containing the document if found, or empty if it does not.
      */
-    suspend fun <T> readByUniqueIndexFromDatabase(
-        index: DocUniqueIndex<K, D, T>,
-        value: T,
-    ): OptionalResult<D>
+    suspend fun <T> readByUniqueIndexFromDatabase(index: DocUniqueIndex<K, D, T>, value: T): OptionalResult<D>
 
     // ------------------------------------------------------------ //
     //                     Internal Cache Methods                   //
@@ -421,14 +417,86 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      */
     @ApiStatus.Internal
     @Throws(DocumentUpdateException::class)
-    fun isUpdateValidInternal(
-        originalDoc: D,
-        updatedDoc: D,
-    )
+    fun isUpdateValidInternal(originalDoc: D, updatedDoc: D)
 
     /**
      * Checks if the change stream jobs are currently running.
      */
     @ApiStatus.Internal
     fun areChangeStreamJobsRunning(): Boolean
+
+    // ------------------------------------------------------------ //
+    //              Java Compatibility — CompletableFuture API      //
+    // ------------------------------------------------------------ //
+
+    fun createAsync(key: K): CompletableFuture<DefiniteResult<D>> = future { create(key) }
+
+    fun createAsync(key: K, initializer: UnaryOperator<D>): CompletableFuture<DefiniteResult<D>> =
+        future { create(key) { initializer.apply(it) } }
+
+    fun readOrCreateAsync(key: K): CompletableFuture<DefiniteResult<D>> = future { readOrCreate(key) }
+
+    fun readOrCreateAsync(key: K, initializer: UnaryOperator<D>): CompletableFuture<DefiniteResult<D>> =
+        future { readOrCreate(key) { initializer.apply(it) } }
+
+    fun updateAsync(key: K, updateFunction: UnaryOperator<D>): CompletableFuture<DefiniteResult<D>> =
+        future { update(key) { updateFunction.apply(it) } }
+
+    fun updateAsync(doc: D, updateFunction: UnaryOperator<D>): CompletableFuture<DefiniteResult<D>> =
+        future { update(doc) { updateFunction.apply(it) } }
+
+    fun updateRejectableAsync(
+        key: K,
+        updateFunction: ThrowingUnaryOperator<D>,
+    ): CompletableFuture<RejectableResult<D>> = future { updateRejectable(key) { updateFunction.apply(it) } }
+
+    fun updateRejectableAsync(
+        doc: D,
+        updateFunction: ThrowingUnaryOperator<D>,
+    ): CompletableFuture<RejectableResult<D>> = future { updateRejectable(doc) { updateFunction.apply(it) } }
+
+    fun deleteAsync(key: K): CompletableFuture<DefiniteResult<Boolean>> = future { delete(key) }
+
+    fun deleteAsync(doc: D): CompletableFuture<DefiniteResult<Boolean>> = future { delete(doc) }
+
+    fun clearDocsFromDatabasePermanentlyAsync(): CompletableFuture<DefiniteResult<Long>> =
+        future { clearDocsFromDatabasePermanently() }
+
+    fun readFromDatabaseAsync(key: K): CompletableFuture<OptionalResult<D>> = future { readFromDatabase(key) }
+
+    fun readSizeFromDatabaseAsync(): CompletableFuture<DefiniteResult<Long>> = future { readSizeFromDatabase() }
+
+    fun hasKeyInDatabaseAsync(key: K): CompletableFuture<DefiniteResult<Boolean>> = future { hasKeyInDatabase(key) }
+
+    /**
+     * Java-compatible variant of [readAllFromDatabase].
+     *
+     * Collects the [Flow] into a [List] before resolving. For large collections, consider
+     * using the Kotlin [readAllFromDatabase] Flow-returning variant directly.
+     */
+    fun readAllFromDatabaseAsync(): CompletableFuture<DefiniteResult<List<D>>> =
+        future {
+        @Suppress("UNCHECKED_CAST")
+        when (val r = readAllFromDatabase()) {
+            is Success -> Success(r.getOrThrow().toList())
+            is Failure -> r as DefiniteResult<List<D>>
+        }
+    }
+
+    /**
+     * Java-compatible variant of [readKeysFromDatabase].
+     *
+     * Collects the [Flow] into a [List] before resolving.
+     */
+    fun readKeysFromDatabaseAsync(): CompletableFuture<DefiniteResult<List<K>>> =
+        future {
+        @Suppress("UNCHECKED_CAST")
+        when (val r = readKeysFromDatabase()) {
+            is Success -> Success(r.getOrThrow().toList())
+            is Failure -> r as DefiniteResult<List<K>>
+        }
+    }
+
+    fun <T> registerUniqueIndexAsync(index: DocUniqueIndex<K, D, T>): CompletableFuture<DefiniteResult<Unit>> =
+        future { registerUniqueIndex(index) }
 }

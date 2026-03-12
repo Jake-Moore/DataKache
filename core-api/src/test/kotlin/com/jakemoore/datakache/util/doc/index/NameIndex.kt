@@ -4,12 +4,11 @@ import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.util.doc.TestGenericDoc
 import com.jakemoore.datakache.util.doc.TestGenericDocCache
 
-class NameIndex(
-    cache: TestGenericDocCache
-) : DocUniqueIndex<String, TestGenericDoc, String>(
-    docCache = cache,
-    kProperty = TestGenericDoc::name,
-) {
+class NameIndex(cache: TestGenericDocCache) :
+    DocUniqueIndex<String, TestGenericDoc, String>(
+        docCache = cache,
+        kProperty = TestGenericDoc::name,
+    ) {
     override fun equals(a: String?, b: String?): Boolean {
         if (a == null || b == null) {
             return a == null && b == null
@@ -19,7 +18,5 @@ class NameIndex(
         return a.equals(b, ignoreCase = true)
     }
 
-    override fun extractValue(doc: TestGenericDoc): String? {
-        return doc.name
-    }
+    override fun extractValue(doc: TestGenericDoc): String? = doc.name
 }

@@ -16,7 +16,6 @@ import java.util.UUID
  */
 @Suppress("unused")
 class TestPlayerDocUpdateOperations : AbstractDataKacheTest() {
-
     init {
         describe("PlayerDocCache Update Operations") {
 
@@ -28,11 +27,12 @@ class TestPlayerDocUpdateOperations : AbstractDataKacheTest() {
                 createResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
 
                 // Update the PlayerDoc
-                val updateResult = cache.update(uuid) {
-                    it.copy(
-                        name = "UpdatedPlayer",
-                    )
-                }
+                val updateResult =
+                    cache.update(uuid) {
+                        it.copy(
+                            name = "UpdatedPlayer",
+                        )
+                    }
                 updateResult.shouldBeInstanceOf<Success<TestPlayerDoc>>()
                 val updatedDoc = updateResult.value
 
@@ -53,9 +53,10 @@ class TestPlayerDocUpdateOperations : AbstractDataKacheTest() {
                 val namespace = cache.getKeyNamespace(doc.key)
 
                 // Trigger username update failure
-                val updateResult = doc.update {
-                    it.copyHelper(username = "NewUsername")
-                }
+                val updateResult =
+                    doc.update {
+                        it.copyHelper(username = "NewUsername")
+                    }
                 updateResult.shouldBeInstanceOf<Failure<TestPlayerDoc>>()
                 val wrapper = updateResult.exception
                 val exception = wrapper.exception

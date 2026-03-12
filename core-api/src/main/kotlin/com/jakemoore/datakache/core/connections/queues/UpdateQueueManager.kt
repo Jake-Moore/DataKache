@@ -23,10 +23,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * This is a database-agnostic component that works with any
  * [com.jakemoore.datakache.core.connections.DatabaseService] implementation.
  */
-internal class UpdateQueueManager(
-    private val loggerService: LoggerService,
-) : CoroutineScope {
-
+internal class UpdateQueueManager(private val loggerService: LoggerService) : CoroutineScope {
     private val job = SupervisorJob()
     override val coroutineContext = Dispatchers.IO + job
 
@@ -65,7 +62,7 @@ internal class UpdateQueueManager(
         if (isShutdown.get()) {
             val deferred = CompletableDeferred<D>()
             deferred.completeExceptionally(
-                IllegalStateException("UpdateQueueManager is shutdown")
+                IllegalStateException("UpdateQueueManager is shutdown"),
             )
             return deferred
         }
@@ -88,7 +85,7 @@ internal class UpdateQueueManager(
         queueKey: QueueKey,
         documentKey: K,
         docCache: DocCache<K, D>,
-        updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D
+        updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D,
     ): UpdateQueue<K, D> {
         // First check without lock (fast path)
         val existingQueue = queues[queueKey]
@@ -110,7 +107,7 @@ internal class UpdateQueueManager(
 
             docCache.getLoggerInternal().debug(
                 "Created new UpdateQueue for key: ${docCache.keyToString(documentKey)} " +
-                    "(cache: ${docCache.cacheName})"
+                    "(cache: ${docCache.cacheName})",
             )
 
             return@withLock newQueue
@@ -122,10 +119,7 @@ internal class UpdateQueueManager(
      * This method does not create a new queue if one doesn't exist.
      */
     @Suppress("UNCHECKED_CAST")
-    fun <K : Any, D : Doc<K, D>> getQueue(
-        docCache: DocCache<K, D>,
-        docKey: K,
-    ): UpdateQueue<K, D>? {
+    fun <K : Any, D : Doc<K, D>> getQueue(docCache: DocCache<K, D>, docKey: K): UpdateQueue<K, D>? {
         val queueKey = QueueKey(docCache.cacheName, docCache.keyToString(docKey))
         return queues[queueKey] as? UpdateQueue<K, D>
     }
@@ -135,10 +129,7 @@ internal class UpdateQueueManager(
      * Returns 0 if no queue exists for the given key.
      */
     @Suppress("unused")
-    fun <K : Any, D : Doc<K, D>> getQueueSize(
-        docCache: DocCache<K, D>,
-        docKey: K,
-    ): Long {
+    fun <K : Any, D : Doc<K, D>> getQueueSize(docCache: DocCache<K, D>, docKey: K): Long {
         val queue = getQueue(docCache, docKey)
         return queue?.getQueueSize() ?: 0L
     }
@@ -147,10 +138,7 @@ internal class UpdateQueueManager(
      * Gets the total queue size (including currently processing item) for the specified document key.
      * Returns 0 if no queue exists for the given key.
      */
-    fun <K : Any, D : Doc<K, D>> getTotalQueueSize(
-        docCache: DocCache<K, D>,
-        docKey: K,
-    ): Long {
+    fun <K : Any, D : Doc<K, D>> getTotalQueueSize(docCache: DocCache<K, D>, docKey: K): Long {
         val queue = getQueue(docCache, docKey)
         return queue?.getTotalQueueSize() ?: 0L
     }
@@ -197,7 +185,7 @@ internal class UpdateQueueManager(
                                     } catch (e: Exception) {
                                         loggerService.error(
                                             e,
-                                            "Error shutting down queue $queueKey during manager shutdown"
+                                            "Error shutting down queue $queueKey during manager shutdown",
                                         )
                                     }
                                 }
@@ -209,7 +197,7 @@ internal class UpdateQueueManager(
                     val activeQueues = queues.size
                     loggerService.debug(
                         "UpdateQueueManager: Cleaned up ${queuesToRemove.size} idle queues. " +
-                            "Active queues: $activeQueues"
+                            "Active queues: $activeQueues",
                     )
                 }
             } catch (_: CancellationException) {
@@ -258,10 +246,7 @@ internal class UpdateQueueManager(
     /**
      * Internal key class for identifying queues uniquely across different caches.
      */
-    private data class QueueKey(
-        val cacheName: String,
-        val documentKeyString: String
-    ) {
+    private data class QueueKey(val cacheName: String, val documentKeyString: String) {
         override fun toString(): String = "$cacheName::$documentKeyString"
     }
 }
