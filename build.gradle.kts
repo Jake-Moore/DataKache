@@ -29,7 +29,7 @@ ext {
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.10")
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.20")
 
     // KamiCommon standalone-utils
     val kamiCommonVer = "5.0.0-alpha.36"
