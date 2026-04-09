@@ -29,14 +29,14 @@ ext {
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.10")
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.20")
 
     // KamiCommon standalone-utils
     val kamiCommonVer = "5.0.0-alpha.36"
     set("kamicommon-standalone-utils", "com.kamikazejam.kamicommon:standalone-utils:$kamiCommonVer")
 
     // MongoDB Driver + Kotlin Support
-    val mongoVer = "5.6.4"
+    val mongoVer = "5.6.5"
     set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
     set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
     set("slf4j-nop", "org.slf4j:slf4j-nop:2.0.17") // Logging for MongoDB (silent, no-op)
@@ -56,7 +56,7 @@ ext {
     // NOTE: the MongoDB container automatically sets up its own single-node replica set
     //       This means it supports retryable writes and transactions automatically.
     set("testcontainers-mongodb", "org.testcontainers:mongodb:1.21.4")
-    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.3")
+    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.4")
 }
 
 allprojects {
