@@ -10,7 +10,7 @@ plugins {
     id("maven-publish")
 
     // Detekt Code Quality Plugin
-    id("dev.detekt") version "2.0.0-alpha.2"
+    id("dev.detekt") version "2.0.0-alpha.3"
 
     // Kotlin Plugins
     kotlin("jvm")
@@ -22,27 +22,27 @@ val VERSION = "0.4.5"
 
 ext {
     // KotlinX
-    val coroutinesVer = "1.10.2"
+    val coroutinesVer = "1.11.0"
     set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVer")
     set("kotlinx-coroutines-test", "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVer")
-    val serializationVer = "1.10.0"
+    val serializationVer = "1.11.0"
     set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
     set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
     // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.10")
+    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.21")
 
     // KamiCommon standalone-utils
     val kamiCommonVer = "5.0.0-alpha.36"
     set("kamicommon-standalone-utils", "com.kamikazejam.kamicommon:standalone-utils:$kamiCommonVer")
 
     // MongoDB Driver + Kotlin Support
-    val mongoVer = "5.6.4"
+    val mongoVer = "5.7.0"
     set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
     set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
     set("slf4j-nop", "org.slf4j:slf4j-nop:2.0.17") // Logging for MongoDB (silent, no-op)
 
     // Google Guava (for CacheBuilder)
-    set("guava", "com.google.guava:guava:33.5.0-jre")
+    set("guava", "com.google.guava:guava:33.6.0-jre")
 
     // Testing Dependencies
     val kotestVer = "5.9.1"
@@ -56,7 +56,7 @@ ext {
     // NOTE: the MongoDB container automatically sets up its own single-node replica set
     //       This means it supports retryable writes and transactions automatically.
     set("testcontainers-mongodb", "org.testcontainers:mongodb:1.21.4")
-    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.3")
+    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.5")
 }
 
 allprojects {
@@ -76,7 +76,7 @@ allprojects {
     }
 
     dependencies {
-        detektPlugins("dev.detekt:detekt-rules-ktlint-wrapper:2.0.0-alpha.2")
+        detektPlugins("dev.detekt:detekt-rules-ktlint-wrapper:2.0.0-alpha.3")
 
         // Annotations
         compileOnly("org.jetbrains:annotations:26.1.0")
