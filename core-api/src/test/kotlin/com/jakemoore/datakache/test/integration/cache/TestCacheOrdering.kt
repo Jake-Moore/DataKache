@@ -72,17 +72,34 @@ class TestCacheOrdering : AbstractDataKacheTest() {
             }
 
             it("should treat a redelivered event as a no-op") {
-                // A change stream that reconnects resumes from a token and can deliver an event it
-                // has already delivered. Equal times are refused, so this cannot undo later state.
+                // A change stream that reconnects resumes from a token and can redeliver an event
+                // it has already delivered, carrying the SAME operation time rather than an older
+                // one. So the equality half of "not strictly newer" is the one this needs, and it
+                // is the same rule a local write and its own change stream echo rely on: those two
+                // are one write seen twice and quote one identical time, so whichever arrives
+                // second must be refused rather than applied again.
                 val doc = cache.create("orderingRedelivery") { it.copy(balance = 5.0) }.getOrThrow()
-                val redelivered = doc.copy(balance = 5.0)
-                val newer = doc.copy(balance = 7.0)
+                cache.cacheInternal(doc.copy(balance = 5.0), laterThanAnyWrite(50L))
 
-                cache.cacheInternal(redelivered, laterThanAnyWrite(50L))
-                cache.cacheInternal(newer, laterThanAnyWrite(51L))
+                // Equal time, conflicting content: refused, so the content at that position stands.
+                cache.cacheInternal(doc.copy(balance = -1.0), laterThanAnyWrite(50L))
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(5.0)
 
-                cache.cacheInternal(redelivered, laterThanAnyWrite(50L))
+                // A genuinely newer event is still accepted, so the refusal above is the equality
+                // rule rather than the position having become stuck.
+                cache.cacheInternal(doc.copy(balance = 7.0), laterThanAnyWrite(51L))
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(7.0)
 
+                // And redelivery of the earlier event after that is refused too, on the older half.
+                cache.cacheInternal(doc.copy(balance = 5.0), laterThanAnyWrite(50L))
                 cache
                     .read(doc.key)
                     .getOrThrow()
