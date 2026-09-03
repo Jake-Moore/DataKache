@@ -1,0 +1,55 @@
+# Dependency versions for DataKache.
+#
+# These live here rather than in an ext block because Renovate reads a version catalogue natively
+# and does not reliably parse `ext { set("name", "group:artifact:$ver") }`.
+
+[versions]
+kotlinx-coroutines = "1.10.2"
+kotlinx-serialization = "1.10.0"
+kotlin = "2.3.10"
+kamicommon = "5.0.0-alpha.36"
+mongodb = "5.6.4"
+slf4j = "2.0.17"
+guava = "33.5.0-jre"
+kotest = "5.9.1"
+junit-jupiter = "6.0.3"
+testcontainers-modules = "1.21.4"
+testcontainers-core = "2.0.3"
+tacospigot = "1.8.8-R0.2-REDUCED-KC"
+
+[libraries]
+# KotlinX. Anything that shades this library inherits these exact versions and provides them to its
+# own consumers at runtime, so a bump here is a runtime change for code already compiled against the
+# previous one. See renovate.json.
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version.ref = "kotlinx-serialization" }
+kotlinx-serialization-json-jvm = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm", version.ref = "kotlinx-serialization" }
+# Reflect is needed for managing specific KProperty's on Store objects
+kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
+
+kamicommon-standalone-utils = { module = "com.kamikazejam.kamicommon:standalone-utils", version.ref = "kamicommon" }
+
+# MongoDB driver plus Kotlin support
+mongodb-driver-kotlin-coroutine = { module = "org.mongodb:mongodb-driver-kotlin-coroutine", version.ref = "mongodb" }
+bson-kotlinx = { module = "org.mongodb:bson-kotlinx", version.ref = "mongodb" }
+# Logging for MongoDB (silent, no-op)
+slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
+
+# Google Guava (for CacheBuilder)
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+
+# Spigot (modified TacoSpigot 1.8, removing some conflicting classes from the build)
+tacospigot-server = { module = "net.techcable.tacospigot:server", version.ref = "tacospigot" }
+
+# Testing
+kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
+kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest" }
+kotest-framework-datatest = { module = "io.kotest:kotest-framework-datatest", version.ref = "kotest" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
+# The MongoDB container sets up its own single-node replica set, so retryable writes and
+# transactions work without further configuration.
+testcontainers-junit-jupiter = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers-modules" }
+testcontainers-mongodb = { module = "org.testcontainers:mongodb", version.ref = "testcontainers-modules" }
+testcontainers-core = { module = "org.testcontainers:testcontainers", version.ref = "testcontainers-core" }

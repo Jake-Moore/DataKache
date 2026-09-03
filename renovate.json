@@ -1,0 +1,100 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Auto-merge GitHub Actions updates.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github-actions",
+      "groupSlug": "github-actions",
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "minimumReleaseAge": "0 days"
+    },
+    {
+      "description": "Group all non-major updates together and auto-merge. bumpVersions is what stops an auto-merged update releasing over the top of the previous one: the publishing repository accepts redeploys, so a release without a version bump silently replaces the artifact already at that coordinate. This project uses `val VERSION`, plain semver, no prerelease suffix.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "automerge": true,
+      "bumpVersions": [
+        {
+          "filePatterns": [
+            "^build\\.gradle\\.kts$"
+          ],
+          "matchStrings": [
+            "^[\\s]*val\\s+VERSION\\s*=\\s*\"(\\d+\\.\\d+\\.\\d+)\"[\\s]*(?://.*)?$"
+          ],
+          "bumpType": "patch"
+        }
+      ]
+    },
+    {
+      "description": "Require approval for major updates.",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "net.techcable.tacospigot:server is a custom TacoSpigot 1.8 build with conflicting classes removed, not an upstream release line, so there is nothing meaningful to update it to. KamiCommonNMS disables the same artifact.",
+      "matchPackageNames": [
+        "net.techcable.tacospigot:server"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Kotlin, coroutines and serialization are not ordinary dependencies here. Consumers commonly shade this library and provide these to their own plugins at runtime, while those plugins compile against their own pinned copy. A mismatch of that kind compiles cleanly and then fails at runtime: a consumer built against coroutines 1.11.0 emits a call to BuildersKt.runBlockingK$default, which exists only in 1.11.0, and gets a NoSuchMethodError against the 1.10.2 resolved here. A minor bump in this file is therefore a runtime change for every downstream consumer, so it gets a human. Grouped separately rather than merely automerge:false, because a non-automergeable member inside all-minor-patch blocks the entire batch.",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:{/,}**",
+        "org.jetbrains.kotlinx:{/,}**"
+      ],
+      "groupName": "kotlin runtime, inherited by consumers",
+      "groupSlug": "kotlin-runtime",
+      "automerge": false
+    },
+    {
+      "description": "Anything that RUNS the build: the Gradle wrapper and every Gradle plugin, in ONE group. Two rules share a groupName because Renovate ANDs match types within a rule, so manager and depType cannot be expressed as an OR in a single rule. They are grouped because they are coupled: a plugin update commonly needs a newer wrapper than the repository has, so a standalone plugin PR cannot go green until a standalone wrapper PR merges first. What must stay separate is build-system from libraries, because the wrapper update is the one that errors inside Renovate's own container and would otherwise kill the whole grouped batch.",
+      "matchManagers": [
+        "gradle-wrapper"
+      ],
+      "groupName": "build system",
+      "groupSlug": "build-system",
+      "automerge": false
+    },
+    {
+      "description": "The plugin half of the build system group above; same groupName so both land in one PR.",
+      "matchManagers": [
+        "gradle"
+      ],
+      "matchDepTypes": [
+        "plugin"
+      ],
+      "groupName": "build system",
+      "groupSlug": "build-system",
+      "automerge": false
+    },
+    {
+      "description": "gradle/actions stays on the 5.x line. The technical half of this was established on KamiCommonNMS and is paperweight-specific, so it may not apply here. The LICENSING half applies regardless: v6 extracts caching into gradle-actions-caching, a proprietary component not covered by the MIT licence, and its release notes state that upgrading constitutes acceptance of separate Terms of Use. This repository's workflows enable caching, so that component would be in use.",
+      "matchPackageNames": [
+        "gradle/actions"
+      ],
+      "allowedVersions": "<6.0.0"
+    }
+  ],
+  "ignoreUnstable": true,
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "timezone": "America/Los_Angeles",
+  "schedule": [
+    "* 0-6 * * *"
+  ]
+}
