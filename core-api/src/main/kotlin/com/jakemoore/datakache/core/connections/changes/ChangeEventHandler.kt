@@ -2,6 +2,7 @@ package com.jakemoore.datakache.core.connections.changes
 
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.ordering.OperationTime
 
 /**
  * Handles change event processing for the cache.
@@ -12,13 +13,13 @@ interface ChangeEventHandler<K : Any, D : Doc<K, D>> {
      * @param doc The full [Doc] after the change.
      * @param changeType The change operation which produced the document.
      */
-    suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType)
+    suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType, at: OperationTime)
 
     /**
      * Called when a document is deleted.
      * @param keyString The String representation of the key of the deleted [Doc].
      */
-    suspend fun onDocumentDeleted(keyString: String)
+    suspend fun onDocumentDeleted(keyString: String, at: OperationTime)
 
     /**
      * Called when the collection is dropped.

@@ -1,6 +1,7 @@
 package com.jakemoore.datakache.core.connections.changes
 
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.ordering.OperationTime
 
 /**
  * Manages change stream connections for database collections.
@@ -13,7 +14,7 @@ interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
      * @param startAtOperationTime Optional timestamp to start the stream from a specific point in time.
      * @throws Exception if startup fails
      */
-    suspend fun start(startAtOperationTime: Any?)
+    suspend fun start(startAtOperationTime: OperationTime?)
 
     /**
      * Stops the change stream listener synchronously.

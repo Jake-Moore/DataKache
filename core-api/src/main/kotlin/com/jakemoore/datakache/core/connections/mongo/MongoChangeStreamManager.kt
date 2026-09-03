@@ -2,6 +2,7 @@ package com.jakemoore.datakache.core.connections.mongo
 
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.core.connections.DatabaseScope
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamConfig
@@ -48,7 +49,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * the stream will start from that point to avoid missing changes.
      * This method is thread-safe and completes all setup before returning.
      */
-    override suspend fun start(startAtOperationTime: Any?) {
+    override suspend fun start(startAtOperationTime: OperationTime?) {
         stateManager.withStateLock {
             if (stateManager.isActive()) {
                 context.logger.warn(
@@ -73,7 +74,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
 
             try {
                 // Set the effective start time from the provided parameter (critical timing gap fix)
-                resumeTokenManager.setEffectiveStartTime(startAtOperationTime as? BsonTimestamp)
+                resumeTokenManager.setEffectiveStartTime(startAtOperationTime?.let { BsonTimestamp(it.raw) })
 
                 // Reset error tracking for restart
                 errorHandler.resetFailures()

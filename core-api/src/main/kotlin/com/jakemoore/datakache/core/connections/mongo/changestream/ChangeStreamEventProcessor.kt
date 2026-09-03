@@ -3,6 +3,7 @@ package com.jakemoore.datakache.core.connections.mongo.changestream
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.changes.ChangeOperationType
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamState
 import com.mongodb.client.model.changestream.ChangeStreamDocument
 import com.mongodb.client.model.changestream.OperationType
@@ -225,7 +226,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 val fullDoc = change.fullDocument
                 if (fullDoc != null) {
                     val changeType = ChangeDocumentType.fromOperationType(operationType)
-                    context.eventHandler.onDocumentChanged(fullDoc, changeType)
+                    context.eventHandler.onDocumentChanged(fullDoc, changeType, change.eventOperationTime())
                     if (isRecoveryMode) {
                         context.logger.warn("Recovered from lost $operationType event for document: ${fullDoc.key}")
                     } else {
@@ -249,7 +250,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 if (documentKey != null) {
                     val keyString = extractIdFromDocumentKey(documentKey)
                     if (keyString != null) {
-                        context.eventHandler.onDocumentDeleted(keyString)
+                        context.eventHandler.onDocumentDeleted(keyString, change.eventOperationTime())
                         if (isRecoveryMode) {
                             context.logger.warn("Recovered from lost DELETE event for document: $keyString")
                         } else {
@@ -470,3 +471,12 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     @Suppress("unused")
     fun getCurrentChannel(): Channel<ChangeStreamDocument<D>>? = eventChannel
 }
+
+/**
+ * The cluster time this event was committed at, which is the same clock a write's session reports.
+ *
+ * Falls back to [OperationTime.UNKNOWN] rather than throwing: an event with no cluster time is
+ * treated as older than everything, so it cannot overwrite state that has one.
+ */
+private fun <D : Any> ChangeStreamDocument<D>.eventOperationTime(): OperationTime =
+    this.clusterTime?.let { OperationTime(it.value) } ?: OperationTime.UNKNOWN

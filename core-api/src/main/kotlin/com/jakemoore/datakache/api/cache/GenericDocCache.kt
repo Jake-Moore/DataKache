@@ -67,7 +67,7 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
 
             doc.initializeInternal(this)
             // Access internal method to save and cache the document
-            return@wrap this.insertDocumentInternal(doc, force = true)
+            return@wrap this.insertDocumentInternal(doc)
         }
     }
 
@@ -109,9 +109,12 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      */
     override suspend fun delete(key: String): DefiniteResult<Boolean> {
         return DeleteResultHandler.wrap {
-            val found = cacheMap.remove(key) != null
+            val found = isCached(key)
+
+            // The database service removes it from the cache, using the operation time of the
+            // session that performed the delete. Removing it here as well would apply a mutation
+            // with no position in the ordering, which is what let a late event put it back.
             DataKache.storageMode.databaseService.delete(this, key)
-            cacheMap.remove(key)
 
             // This method boolean is whether the document was found in the cache
             //   false is okay, just indicates that the document was not cached

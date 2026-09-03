@@ -18,6 +18,7 @@ import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.metrics.MetricsReceiver
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.OptionalResult
@@ -79,7 +80,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             )
 
             // Preload all Documents into Cache
-            loadAllIntoCache()
+            loadAllIntoCache(operationTime)
             this.getLoggerInternal().debug("Loaded all documents (${cacheMap.size}x) into cache: $cacheName")
 
             // Listen for DB Updates that should be streamed down
@@ -210,7 +211,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             }
         return DataKache.storageMode.databaseService
             .update(this, doc, updateFunction, bypassValidation)
-            .also { cacheInternal(it, force = true) }
     }
 
     override fun readAll(): Collection<D> = Collections.unmodifiableCollection(cacheMap.values)
@@ -249,7 +249,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             val doc = DataKache.storageMode.databaseService.read(this, key)
             if (doc != null) {
                 // Cache the document if it was found
-                cacheInternal(doc, log = true)
+                cacheContentOnlyInternal(doc, log = true)
             }
             return@wrap doc
         }
@@ -259,7 +259,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         DbReadAllResultHandler.wrap {
         DataKache.storageMode.databaseService.readAll(this).map {
             // Cache each document as it is read from the database
-            cacheInternal(it, log = true)
+            cacheContentOnlyInternal(it, log = true)
             it
         }
     }
@@ -309,39 +309,116 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
+    private companion object {
+        /** Keys remembered after removal, so a late event for them is still refused. */
+        const val TOMBSTONE_LIMIT = 10_000
+
+        const val LOAD_FACTOR = 0.75f
+    }
+
+    /**
+     * The position in the database's ordering that each key's cached state was taken from.
+     *
+     * Entries outlive the document. A key removed from [cacheMap] keeps its entry, because that is
+     * what a late event for the key is compared against; forgetting it immediately would let the
+     * event apply and put a deleted document back.
+     */
+    private val appliedAt = ConcurrentHashMap<K, OperationTime>()
+
+    /**
+     * Bounded record for keys no longer in [cacheMap], so [appliedAt] cannot grow without limit.
+     * Eviction is by insertion order and only reached after [TOMBSTONE_LIMIT] later removals, by
+     * which point no event for the key can plausibly still be in flight.
+     */
+    private val tombstones =
+        Collections.synchronizedMap(
+            object : LinkedHashMap<K, Unit>(TOMBSTONE_LIMIT, LOAD_FACTOR, false) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, Unit>): Boolean {
+                    val evict = size > TOMBSTONE_LIMIT
+                    if (evict) appliedAt.remove(eldest.key)
+                    return evict
+                }
+            },
+        )
+
+    /**
+     * Applies [action] only if [at] is strictly newer than the state the cache already holds for
+     * [key], and records the new position atomically with it.
+     *
+     * Strictly newer rather than newer-or-equal makes redelivery a no-op: a change stream that
+     * reconnects resumes from a token and can deliver an event that was already applied.
+     *
+     * The comparison and the mutation happen inside one [ConcurrentHashMap.compute], which holds the
+     * per-key lock, so no other application of the same key can interleave between them.
+     */
+    private fun applyIfNewer(key: K, at: OperationTime, action: () -> Unit): Boolean {
+        var applied = false
+        appliedAt.compute(key) { _, current ->
+            if (current != null && at <= current) {
+                current
+            } else {
+                action()
+                applied = true
+                at
+            }
+        }
+        return applied
+    }
+
     @ApiStatus.Internal
-    override fun cacheInternal(doc: D, log: Boolean, force: Boolean) {
+    override fun cacheInternal(doc: D, at: OperationTime, log: Boolean) {
+        doc.initializeInternal(this)
+        val applied =
+            applyIfNewer(doc.key, at) {
+                cacheMap[doc.key] = doc
+                tombstones.remove(doc.key)
+            }
+        if (log && applied) {
+            getLoggerInternal().debug("Cached document: ${doc.key}")
+        } else if (!applied) {
+            getLoggerInternal().debug("Refused stale state for ${doc.key} at $at")
+        }
+    }
+
+    @ApiStatus.Internal
+    override fun cacheContentOnlyInternal(doc: D, log: Boolean) {
         doc.initializeInternal(this)
 
-        // Optimization - if the document is in cache under the same version, assume the data is the same
-        //  and therefore we can skip re-caching it.
-        if (!force && config.optimisticCaching) {
+        // Optimization - if the document is in cache under the same version, assume the data is the
+        //  same and therefore we can skip re-caching it.
+        if (config.optimisticCaching) {
             val cached: D? = cacheMap[doc.key]
             if (cached != null && cached.version == doc.version) return
         }
 
         cacheMap[doc.key] = doc
         if (log) {
-            getLoggerInternal().debug("Cached document: ${doc.key}")
+            getLoggerInternal().debug("Cached document from a read: ${doc.key}")
         }
     }
 
     @ApiStatus.Internal
-    override fun uncacheInternal(doc: D): Boolean = cacheMap.remove(doc.key) != null
+    override fun uncacheInternal(doc: D, at: OperationTime): Boolean = uncacheInternal(doc.key, at)
 
     @ApiStatus.Internal
-    override fun uncacheInternal(key: K): Boolean = cacheMap.remove(key) != null
+    override fun uncacheInternal(key: K, at: OperationTime): Boolean {
+        var removed = false
+        applyIfNewer(key, at) {
+            removed = cacheMap.remove(key) != null
+            tombstones[key] = Unit
+        }
+        return removed
+    }
 
     /**
      * @return The same [doc] for chaining.
      */
     @ApiStatus.Internal
     @Throws(DuplicateDocumentKeyException::class, DuplicateUniqueIndexException::class)
-    suspend fun insertDocumentInternal(doc: D, force: Boolean): D {
-        // Insert the document in the database
+    suspend fun insertDocumentInternal(doc: D): D {
+        // The database service caches the document itself, using the operation time of the
+        // session that performed the write. Caching here as well would apply it without one.
         DataKache.storageMode.databaseService.insert(this, doc)
-        // Cache the document in memory
-        this.cacheInternal(doc, force = force)
         return doc
     }
 
@@ -354,7 +431,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         // Insert the document in the database
         DataKache.storageMode.databaseService.replace(this, key, update)
         // Cache the document in memory
-        this.cacheInternal(update)
         return update
     }
 
@@ -379,15 +455,17 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     override fun areChangeStreamJobsRunning(): Boolean = changeStreamManager?.areJobsActive() ?: false
 
-    private suspend fun loadAllIntoCache() =
+    private suspend fun loadAllIntoCache(at: OperationTime?) =
         withContext(Dispatchers.IO) {
         val documents = DataKache.storageMode.databaseService.readAll(this@DocCacheImpl)
         documents.collect { doc ->
-            cacheInternal(doc, log = false)
+            // The preload reflects the state at the operation time captured before it began, and
+            // the change stream starts from that same point, so the two meet without a gap.
+            if (at != null) cacheInternal(doc, at, log = false) else cacheContentOnlyInternal(doc, log = false)
         }
     }
 
-    private suspend fun startChangeStreamListener(operationTime: Any?) {
+    private suspend fun startChangeStreamListener(operationTime: OperationTime?) {
         // Create the change stream manager through the database service
         DataKache.storageMode.databaseService
             .createChangeStreamManager(
@@ -407,7 +485,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     private fun createChangeEventHandler(): ChangeEventHandler<K, D> =
         object : ChangeEventHandler<K, D> {
-        override suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType) {
+        override suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType, at: OperationTime) {
             val name = this@DocCacheImpl.cacheName
             val key = this@DocCacheImpl.keyToString(doc.key)
 
@@ -418,7 +496,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                         it.onChangeStreamInsert(name, key)
                     }
 
-                    cacheInternal(doc, log = false, force = true)
+                    cacheInternal(doc, at, log = false)
                     getLoggerInternal().debug("Cached Document From INSERT: ${doc.key}")
                 }
 
@@ -428,7 +506,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                         it.onChangeStreamReplace(name, key)
                     }
 
-                    cacheInternal(doc, log = false, force = true)
+                    cacheInternal(doc, at, log = false)
                     getLoggerInternal().debug("Cached Document From REPLACE: ${doc.key}")
                 }
 
@@ -438,13 +516,13 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                         it.onChangeStreamUpdate(name, key)
                     }
 
-                    cacheInternal(doc, log = false, force = true)
+                    cacheInternal(doc, at, log = false)
                     getLoggerInternal().debug("Cached Document From UPDATE: ${doc.key}")
                 }
             }
         }
 
-        override suspend fun onDocumentDeleted(keyString: String) {
+        override suspend fun onDocumentDeleted(keyString: String, at: OperationTime) {
             val key: K = this@DocCacheImpl.keyFromString(keyString)
 
             // METRICS
@@ -453,7 +531,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 it.onChangeStreamDelete(name, keyString)
             }
 
-            val removed = uncacheInternal(key)
+            val removed = uncacheInternal(key, at)
             if (removed) {
                 getLoggerInternal().debug("Uncached Document From DELETE: $key")
             }

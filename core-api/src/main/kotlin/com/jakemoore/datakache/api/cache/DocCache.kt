@@ -12,6 +12,7 @@ import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededEx
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.java.ThrowingUnaryOperator
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
 import com.jakemoore.datakache.api.result.Empty
@@ -388,19 +389,29 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
     @ApiStatus.Internal
-    fun cacheInternal(doc: D, log: Boolean = true, force: Boolean = false)
+    fun cacheInternal(doc: D, at: OperationTime, log: Boolean = true)
 
     /**
      * @return If a document was removed from the cache.
      */
     @ApiStatus.Internal
-    fun uncacheInternal(doc: D): Boolean
+    fun uncacheInternal(doc: D, at: OperationTime): Boolean
 
     /**
      * @return If a document was removed from the cache.
      */
     @ApiStatus.Internal
-    fun uncacheInternal(key: K): Boolean
+    fun uncacheInternal(key: K, at: OperationTime): Boolean
+
+    /**
+     * Caches a document read back from the database without claiming a position in the ordering.
+     *
+     * A read reflects committed state, so its content is safe to cache, but the read itself carries
+     * no operation time here. Advancing the ordering with a guess would let a legitimate later event
+     * be refused, so a read updates content and leaves the ordering alone.
+     */
+    @ApiStatus.Internal
+    fun cacheContentOnlyInternal(doc: D, log: Boolean = true)
 
     @ApiStatus.Internal
     fun getLoggerInternal(): LoggerService

@@ -18,7 +18,7 @@ plugins {
 }
 
 @Suppress("PropertyName")
-val VERSION = "0.4.5"
+val VERSION = "0.4.6"
 
 allprojects {
     group = "com.jakemoore"

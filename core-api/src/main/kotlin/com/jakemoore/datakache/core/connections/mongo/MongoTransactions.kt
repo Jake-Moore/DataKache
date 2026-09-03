@@ -90,8 +90,8 @@ object MongoTransactions : CoroutineScope {
         // METRICS
         DataKacheMetrics.receivers.forEach { it.onDatabaseUpdateTransactionSuccess(elapsedMillis) }
 
-        // Update cache
-        docCache.cacheInternal(updatedDoc)
+        // The cache was updated inside the session that committed, so it carries that write's
+        // operation time. Caching again here would apply it without one.
         return updatedDoc
     }
 
@@ -171,6 +171,9 @@ object MongoTransactions : CoroutineScope {
 
                 session.commitTransaction()
                 sessionResolved = true
+
+                // Cache while the session still knows the cluster time of the commit.
+                requireNotNull(result.doc).let { docCache.cacheInternal(it, session.operationTimeOrUnknown()) }
 
                 // METRICS
                 logAttemptTimeMetric(startMark)

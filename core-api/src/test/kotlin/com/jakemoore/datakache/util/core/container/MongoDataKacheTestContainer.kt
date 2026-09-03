@@ -196,8 +196,13 @@ class MongoDataKacheTestContainer(private val dbNameShort: String = "TestDatabas
             }
 
             this._container =
-                MongoDBContainer(DockerImageName.parse("mongo:8.0"))
-                    .withReuse(false)
+                MongoDBContainer(
+                    // Overridable so a workstation whose kernel MongoDB refuses to start on can
+                    // point at a locally built substitute. Defaults to the image CI uses.
+                    DockerImageName
+                        .parse(System.getenv("DATAKACHE_TEST_MONGO_IMAGE") ?: "mongo:8.0")
+                        .asCompatibleSubstituteFor("mongo"),
+                ).withReuse(false)
                     .also { it.start() }
         }
 

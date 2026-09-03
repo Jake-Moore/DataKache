@@ -17,6 +17,7 @@ import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.metrics.MetricsReceiver
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.api.result.OptionalResult
 import com.jakemoore.datakache.core.Service
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
@@ -460,7 +461,7 @@ internal abstract class DatabaseService :
      *
      * @return A database-specific timestamp object, or null if not supported
      */
-    abstract suspend fun getCurrentOperationTime(): Any?
+    abstract suspend fun getCurrentOperationTime(): OperationTime?
 
     /**
      * Creates a change stream manager for the given [docCache] with the specified [eventHandler].

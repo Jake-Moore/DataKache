@@ -306,7 +306,7 @@ abstract class PlayerDocCache<D : PlayerDoc<D>>(
         val doc: D = constructNewPlayerDoc(uuid, username, initializer)
 
         // Access internal method to save and cache the document
-        return this.insertDocumentInternal(doc, force = true)
+        return this.insertDocumentInternal(doc)
     }
 
     @Throws(
