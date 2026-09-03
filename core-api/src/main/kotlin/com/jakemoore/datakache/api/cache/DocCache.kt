@@ -242,7 +242,10 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     /**
      * Fetch a document from the **database** (skipping cache).
      *
-     * This document will be automatically cached on success.
+     * The result populates the cache only if [key] has never been cached or deleted before. A read
+     * cannot safely refresh a key that has, because it carries no position in the database's own
+     * ordering and a slow read could otherwise overwrite state a concurrent write already made
+     * newer. Use [read] first if the caller only wants to know what is currently cached.
      *
      * @param key The unique key of the document to be fetched.
      *
@@ -253,7 +256,8 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     /**
      * Fetch all documents from the **database** (skipping cache) as a [Flow].
      *
-     * All documents will be automatically cached on success.
+     * Each document populates the cache under the same rule as [readFromDatabase]: only a key with
+     * no existing position is written back.
      *
      * @return An [DefiniteResult] containing a [Flow] of documents.
      */
@@ -388,8 +392,40 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
     // ------------------------------------------------------------ //
     //                     Internal Cache Methods                   //
     // ------------------------------------------------------------ //
+
+    /**
+     * Applies [doc] to the cache at position [at] in the database's ordering, if [at] is newer than
+     * the position the cache already holds for [doc]'s key.
+     *
+     * [DocCacheConfig.optimisticCaching] applies only when the caller passes [isReplayedEvent] true,
+     * and that is safe to do only where "same version" is trustworthy evidence of "same content" --
+     * where the operation that produced [doc] GUARANTEES its version differs from whatever was there
+     * before whenever the content does. Local writes must never pass it, regardless of operation
+     * type: they are authoritative on their own content, and have nothing to gain by risking a skip.
+     *
+     * For the three change-stream replay sites, per operation type:
+     * - UPDATE: [isReplayedEvent] true. [updateInternal]'s transaction enforces the guarantee
+     *   unconditionally, via `copyHelper(nextVersion)` on every attempt including retries, so a
+     *   version match really does mean this exact update was already applied.
+     * - REPLACE: [isReplayedEvent] false, unconditionally. A database replace carries no such
+     *   guarantee -- it can legitimately keep a document's existing version, as a reset rather than
+     *   an increment, in which case "same version" says nothing about content.
+     * - INSERT: [isReplayedEvent] false too, though for a different reason: on the ordinary path the
+     *   key had no prior document, so `cached` is null and the flag could never matter. Passing true
+     *   would buy nothing there and would reopen the REPLACE class of bug on the one path where
+     *   `cached` can be non-null: a delete whose own cache removal was skipped, racing a recreate
+     *   that reuses the same starting version.
+     *
+     * The stakes for getting this wrong are not merely a stale read. Local writes and their own
+     * change-stream replay carry the IDENTICAL operation time, since it is one write viewed from two
+     * places, so whichever of them reaches this method first decides the position for both. A skip
+     * still advances the position ([DocCacheImpl]'s `appliedAt`), so if the winner of that race skips
+     * its own write, the position is claimed with nothing behind it, and the loser -- carrying that
+     * same operation time -- is then refused as not strictly newer. The content is never applied by
+     * either side. Applying unconditionally is what keeps this safe regardless of which side wins.
+     */
     @ApiStatus.Internal
-    fun cacheInternal(doc: D, at: OperationTime, log: Boolean = true)
+    fun cacheInternal(doc: D, at: OperationTime, log: Boolean = true, isReplayedEvent: Boolean = false)
 
     /**
      * @return If a document was removed from the cache.

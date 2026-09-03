@@ -289,8 +289,20 @@ internal class MongoDatabaseService : DatabaseService() {
                     sessionClosed = true
 
                     // The session reports the cluster time of the write it just committed, which
-                    // is the same clock the change stream quotes, so the two can be ordered.
-                    docCache.cacheInternal(doc, session.operationTimeOrUnknown())
+                    // is the same clock the change stream quotes, so the two can be ordered. If it
+                    // reports none, the change stream's own event for this insert still applies the
+                    // cache update once it arrives; see the KDoc on operationTimeOrNull.
+                    val insertedAt = session.operationTimeOrNull()
+                    if (insertedAt != null) {
+                        docCache.cacheInternal(doc, insertedAt)
+                    } else {
+                        docCache.getLoggerInternal().warn(
+                            "MongoDB session reported no operation time for an insert " +
+                                "(${docCache.keyToString(doc.key)}); relying on the change stream " +
+                                "to cache it. This is expected only on a deployment that does not " +
+                                "support change streams.",
+                        )
+                    }
                 } catch (e: MongoWriteException) {
                     if (!sessionClosed && session.hasActiveTransaction()) {
                         session.abortTransaction()
@@ -386,7 +398,21 @@ internal class MongoDatabaseService : DatabaseService() {
                 return@withContext client.startSession().use { session ->
                     val deleted =
                         getMongoCollection(docCache).deleteMany(session, filter).deletedCount > 0
-                    docCache.uncacheInternal(key, session.operationTimeOrUnknown())
+                    // A no-op delete costs a tombstone slot in the LRU record if it uncaches
+                    // regardless, which shortens the window that record protects. Nothing to
+                    // remove from the cache either, since a key MongoDB never held cannot be there.
+                    if (deleted) {
+                        val deletedAt = session.operationTimeOrNull()
+                        if (deletedAt != null) {
+                            docCache.uncacheInternal(key, deletedAt)
+                        } else {
+                            docCache.getLoggerInternal().warn(
+                                "MongoDB session reported no operation time for a delete " +
+                                    "(${docCache.keyToString(key)}); relying on the change " +
+                                    "stream to remove it from the cache.",
+                            )
+                        }
+                    }
                     deleted
                 }
             } catch (me: MongoException) {
@@ -530,7 +556,16 @@ internal class MongoDatabaseService : DatabaseService() {
                         )
                     }
 
-                    docCache.cacheInternal(update, session.operationTimeOrUnknown())
+                    val replacedAt = session.operationTimeOrNull()
+                    if (replacedAt != null) {
+                        docCache.cacheInternal(update, replacedAt)
+                    } else {
+                        docCache.getLoggerInternal().warn(
+                            "MongoDB session reported no operation time for a replace " +
+                                "(${docCache.keyToString(key)}); relying on the change stream " +
+                                "to cache it.",
+                        )
+                    }
                 }
             } catch (e: DocumentNotFoundException) {
                 // don't log, this is fine, promote to caller

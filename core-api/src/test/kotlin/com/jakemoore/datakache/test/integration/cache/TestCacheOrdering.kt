@@ -2,6 +2,7 @@ package com.jakemoore.datakache.test.integration.cache
 
 import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
+import com.jakemoore.datakache.util.doc.TestGenericDoc
 import io.kotest.matchers.shouldBe
 
 /**
@@ -42,11 +43,14 @@ class TestCacheOrdering : AbstractDataKacheTest() {
             }
 
             it("should not overwrite newer state with an older event") {
+                // isReplayedEvent defaults false on both calls below, so optimisticCaching cannot
+                // engage regardless of version; this exercises the ordering refusal in isolation.
                 val doc = cache.create("orderingStale") { it.copy(balance = 1.0) }.getOrThrow()
                 val newer = doc.copy(balance = 99.0)
+                val staleAgain = doc.copy(balance = 1.0)
 
                 cache.cacheInternal(newer, laterThanAnyWrite(30L))
-                cache.cacheInternal(doc.copy(balance = 1.0), laterThanAnyWrite(29L))
+                cache.cacheInternal(staleAgain, laterThanAnyWrite(29L))
 
                 cache
                     .read(doc.key)
@@ -71,10 +75,13 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 // A change stream that reconnects resumes from a token and can deliver an event it
                 // has already delivered. Equal times are refused, so this cannot undo later state.
                 val doc = cache.create("orderingRedelivery") { it.copy(balance = 5.0) }.getOrThrow()
-                cache.cacheInternal(doc.copy(balance = 5.0), laterThanAnyWrite(50L))
-                cache.cacheInternal(doc.copy(balance = 7.0), laterThanAnyWrite(51L))
+                val redelivered = doc.copy(balance = 5.0)
+                val newer = doc.copy(balance = 7.0)
 
-                cache.cacheInternal(doc.copy(balance = 5.0), laterThanAnyWrite(50L))
+                cache.cacheInternal(redelivered, laterThanAnyWrite(50L))
+                cache.cacheInternal(newer, laterThanAnyWrite(51L))
+
+                cache.cacheInternal(redelivered, laterThanAnyWrite(50L))
 
                 cache
                     .read(doc.key)
@@ -96,6 +103,159 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                     .getOrThrow()
                     .balance
                     .shouldBe(3.0)
+            }
+
+            it("should skip an optimistic re-cache of a REPLAYED event but still advance the position") {
+                // optimisticCaching (default on) skips the map write when the version already
+                // matches, on the theory that an equal version means equal data, and it applies
+                // only to isReplayedEvent = true, which is how a change stream event is applied and
+                // is the only place "same version" is trustworthy evidence of "same content": the
+                // version came from a write this cache already saw. A local write must never take
+                // this shortcut on its own content, which is what
+                // "should not lose an authoritative local write to optimisticCaching" below covers.
+                //
+                // It must not skip advancing the recorded position, or a later stale event that DID
+                // change something would be wrongly accepted because the position never moved past.
+                val doc = cache.create("optimisticAdvances") { it.copy(balance = 1.0) }.getOrThrow()
+
+                // Same version, different content: the write is skipped by the optimization.
+                cache.cacheInternal(doc.copy(balance = 999.0), laterThanAnyWrite(70L), isReplayedEvent = true)
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(1.0)
+
+                // The position advanced anyway: an event older than the skip is now refused too.
+                cache.cacheInternal(doc.copy(balance = -1.0), laterThanAnyWrite(69L), isReplayedEvent = true)
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(1.0)
+            }
+
+            it("should not lose an authoritative local write to optimisticCaching, even at an unchanged version") {
+                // The regression this exists for. PlayerDocCache.delete() resets a document via a
+                // database replace that intentionally does not bump version (it is a reset, not an
+                // increment), and the previously cached version was the same. Without
+                // isReplayedEvent gating this correctly, that authoritative write was silently
+                // skipped, leaving the cache showing pre-reset content indefinitely: the position
+                // still advanced, so no later event -- carrying that exact same operation time --
+                // could ever arrive to apply what the local write itself had skipped.
+                val doc = cache.create("localWriteSameVersion") { it.copy(balance = 1.0) }.getOrThrow()
+                val reset = doc.copy(balance = 0.0, version = doc.version)
+
+                cache.cacheInternal(reset, laterThanAnyWrite(80L))
+
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(0.0)
+            }
+
+            it("should not lose a live key's position to tombstone eviction after a delete then a recreate") {
+                // This is sequential, so it cannot exercise the CONCURRENT race the fix closes --
+                // that atomicity comes from tombstone membership being decided inside the same
+                // appliedAt.compute call as the ordering decision, which ConcurrentHashMap
+                // guarantees is serialized per key, and is not something a sequential test can
+                // disprove. What this covers, and what a naive "clear on delete, forget on cache"
+                // implementation would still get wrong even without any race: a recreate must
+                // actually remove the key from the tombstone list, or unrelated deletes pushed
+                // through afterward can evict it as if it were still tombstoned, evicting a LIVE
+                // key's position and reopening the exact refusal a stale event depends on.
+                cache.tombstoneLimit = 2
+
+                val doc =
+                    cache
+                        .create("tombstoneRaceKey") { it.copy(name = "tombstoneRaceKey", balance = 900.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(doc.key, laterThanAnyWrite(1L))
+                cache.cacheInternal(doc, laterThanAnyWrite(2L))
+
+                // Push several unrelated deletes through to force eviction of older tombstones.
+                // Distinct name and balance: TestGenericDocCache enforces a unique index on both,
+                // and a MongoDB unique index treats every null as a collision unless sparse.
+                repeat(5) { i ->
+                    val other =
+                        cache
+                            .create("tombstoneRaceOther$i") {
+                                it.copy(name = "tombstoneRaceOther$i", balance = 910.0 + i)
+                            }.getOrThrow()
+                    cache.uncacheInternal(other.key, laterThanAnyWrite(10L + i))
+                }
+
+                // Still live, and still protected: a stale event between the delete and the
+                // recreate must be refused, which only holds if the key's position survived.
+                cache.read(doc.key).isEmpty().shouldBe(false)
+                cache.cacheInternal(doc.copy(balance = -1.0), laterThanAnyWrite(1L))
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(doc.balance)
+            }
+
+            it("should clear ordering state along with cached documents on a full clear") {
+                // clearDocsFromDatabasePermanently and the other lifecycle clears (startup
+                // failure, shutdown, collection drop/rename) remove keys outside the ordered
+                // per-key path. If they cleared cacheMap without also clearing appliedAt, every
+                // key's position would leak for the life of the process, unrecoverable on a
+                // collection drop since a real drop emits no per-document delete events to ever
+                // reroute those keys through the bookkeeping that would otherwise free them.
+                val doc = cache.create("clearOrderingKey").getOrThrow()
+                cache.cacheInternal(doc, laterThanAnyWrite(500L))
+
+                cache.clearDocsFromDatabasePermanently().getOrThrow()
+
+                // If appliedAt still held the old high-water mark, this lower synthetic time
+                // would be refused and the document would never reappear in the cache.
+                cache.cacheInternal(doc, laterThanAnyWrite(1L))
+
+                cache.read(doc.key).isEmpty().shouldBe(false)
+            }
+
+            it("should refuse cacheContentOnlyInternal for a key that already has a position") {
+                // The regression this guards: a database read used to write straight into
+                // cacheMap with no lock at all, so a slow read could land after a newer write and
+                // silently overwrite it, and because appliedAt still held the newer position, the
+                // event that would have repaired the cache was then refused as stale too. A read
+                // must defer entirely to whatever already has a position, not merely to whatever
+                // is currently in cacheMap, which is why this call takes no operation time of
+                // its own: it cannot outrank a write it did not observe.
+                val doc = cache.create("readGuardKey") { it.copy(balance = 1.0) }.getOrThrow()
+                cache.cacheInternal(doc.copy(balance = 2.0), laterThanAnyWrite(90L))
+
+                cache.cacheContentOnlyInternal(doc.copy(balance = 999.0))
+
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(2.0)
+            }
+
+            it("should populate cacheContentOnlyInternal for a key with no position yet") {
+                // The other half: a key nothing has ever cached or deleted has no position to
+                // defer to, so a read is the only source of truth and must populate it. Built
+                // directly rather than through create(), which would give the key a position,
+                // and deleting it again would leave a tombstoned one.
+                val fresh =
+                    TestGenericDoc(
+                        key = "readGuardNeverCachedKey",
+                        version = 0L,
+                        name = "readGuardNeverCachedKey",
+                        balance = 4.0,
+                    )
+
+                cache.cacheContentOnlyInternal(fresh)
+
+                cache
+                    .read(fresh.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(4.0)
             }
         }
     }

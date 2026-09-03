@@ -173,7 +173,17 @@ object MongoTransactions : CoroutineScope {
                 sessionResolved = true
 
                 // Cache while the session still knows the cluster time of the commit.
-                requireNotNull(result.doc).let { docCache.cacheInternal(it, session.operationTimeOrUnknown()) }
+                val updatedDoc = requireNotNull(result.doc)
+                val updatedAt = session.operationTimeOrNull()
+                if (updatedAt != null) {
+                    docCache.cacheInternal(updatedDoc, updatedAt)
+                } else {
+                    docCache.getLoggerInternal().warn(
+                        "MongoDB session reported no operation time for an update " +
+                            "(${docCache.keyToString(updatedDoc.key)}); relying on the change " +
+                            "stream to cache it.",
+                    )
+                }
 
                 // METRICS
                 logAttemptTimeMetric(startMark)
