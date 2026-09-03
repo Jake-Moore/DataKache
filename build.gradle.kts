@@ -20,45 +20,6 @@ plugins {
 @Suppress("PropertyName")
 val VERSION = "0.4.5"
 
-ext {
-    // KotlinX
-    val coroutinesVer = "1.10.2"
-    set("kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVer")
-    set("kotlinx-coroutines-test", "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVer")
-    val serializationVer = "1.10.0"
-    set("kotlinx-serialization-core", "org.jetbrains.kotlinx:kotlinx-serialization-core:${serializationVer}")
-    set("kotlinx-serialization-json-jvm", "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:${serializationVer}")
-    // Reflect is needed for managing specific KProperty's on Store objects
-    set("kotlin-reflect", "org.jetbrains.kotlin:kotlin-reflect:2.3.10")
-
-    // KamiCommon standalone-utils
-    val kamiCommonVer = "5.0.0-alpha.36"
-    set("kamicommon-standalone-utils", "com.kamikazejam.kamicommon:standalone-utils:$kamiCommonVer")
-
-    // MongoDB Driver + Kotlin Support
-    val mongoVer = "5.6.4"
-    set("mongodb-driver-kotlin-coroutine", "org.mongodb:mongodb-driver-kotlin-coroutine:${mongoVer}")
-    set("bson-kotlinx", "org.mongodb:bson-kotlinx:${mongoVer}") // BSON for Serialization (for MongoDB)
-    set("slf4j-nop", "org.slf4j:slf4j-nop:2.0.17") // Logging for MongoDB (silent, no-op)
-
-    // Google Guava (for CacheBuilder)
-    set("guava", "com.google.guava:guava:33.5.0-jre")
-
-    // Testing Dependencies
-    val kotestVer = "5.9.1"
-    set("kotest-runner-junit5", "io.kotest:kotest-runner-junit5:${kotestVer}")
-    set("kotest-assertions-core", "io.kotest:kotest-assertions-core:${kotestVer}")
-    set("kotest-property", "io.kotest:kotest-property:${kotestVer}")
-    set("kotest-framework-datatest", "io.kotest:kotest-framework-datatest:${kotestVer}")
-
-    set("junit-jupiter-engine", "org.junit.jupiter:junit-jupiter-engine:6.0.3")
-    set("testcontainers-junit-jupiter", "org.testcontainers:junit-jupiter:1.21.4")
-    // NOTE: the MongoDB container automatically sets up its own single-node replica set
-    //       This means it supports retryable writes and transactions automatically.
-    set("testcontainers-mongodb", "org.testcontainers:mongodb:1.21.4")
-    set("testcontainers-core", "org.testcontainers:testcontainers:2.0.3")
-}
-
 allprojects {
     group = "com.jakemoore"
     version = VERSION

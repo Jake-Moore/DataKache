@@ -6,34 +6,34 @@ plugins {
 dependencies {
     // Kotlin Libraries
     api(kotlin("stdlib-jdk8"))
-    api(project.property("kotlinx-coroutines-core") as String)
-    api(project.property("kotlinx-serialization-core") as String)
-    api(project.property("kotlinx-serialization-json-jvm") as String)
-    api(project.property("kotlin-reflect") as String)
+    api(libs.kotlinx.coroutines.core)
+    api(libs.kotlinx.serialization.core)
+    api(libs.kotlinx.serialization.json.jvm)
+    api(libs.kotlin.reflect)
 
     // KamiCommon
-    api(project.property("kamicommon-standalone-utils") as String)
+    api(libs.kamicommon.standalone.utils)
 
     // MongoDB
-    api(project.property("mongodb-driver-kotlin-coroutine") as String)
-    api(project.property("bson-kotlinx") as String)
-    api(project.property("slf4j-nop") as String)
+    api(libs.mongodb.driver.kotlin.coroutine)
+    api(libs.bson.kotlinx)
+    api(libs.slf4j.nop)
 
-    api(project.property("guava") as String)
+    api(libs.guava)
 
     // Testing Dependencies
-    testImplementation(project.property("kotest-runner-junit5") as String)
-    testImplementation(project.property("kotest-assertions-core") as String)
-    testImplementation(project.property("kotest-property") as String)
-    testImplementation(project.property("kotest-framework-datatest") as String)
+    testImplementation(libs.kotest.runner.junit5)
+    testImplementation(libs.kotest.assertions.core)
+    testImplementation(libs.kotest.property)
+    testImplementation(libs.kotest.framework.datatest)
 
-    testImplementation(project.property("testcontainers-junit-jupiter") as String)
-    testImplementation(project.property("testcontainers-mongodb") as String)
-    testImplementation(project.property("testcontainers-core") as String)
-    testImplementation(project.property("kotlinx-coroutines-test") as String)
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testImplementation(libs.testcontainers.mongodb)
+    testImplementation(libs.testcontainers.core)
+    testImplementation(libs.kotlinx.coroutines.test)
 
-    testRuntimeOnly(project.property("junit-jupiter-engine") as String)
-    testRuntimeOnly(project.property("slf4j-nop") as String)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.slf4j.nop)
 }
 
 tasks {
