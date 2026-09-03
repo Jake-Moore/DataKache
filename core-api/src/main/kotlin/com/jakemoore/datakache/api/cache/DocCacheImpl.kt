@@ -326,20 +326,38 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     private val appliedAt = ConcurrentHashMap<K, OperationTime>()
 
     /**
-     * Bounded record for keys no longer in [cacheMap], so [appliedAt] cannot grow without limit.
-     * Eviction is by insertion order and only reached after [TOMBSTONE_LIMIT] later removals, by
-     * which point no event for the key can plausibly still be in flight.
+     * Keys no longer in [cacheMap] whose position is still remembered, in removal order, so
+     * [appliedAt] cannot grow without limit.
+     *
+     * Guarded by [tombstoneLock] rather than by a synchronized wrapper, because eviction has to
+     * touch [appliedAt] and doing that while holding the tombstone monitor inverts the lock order
+     * against [applyIfNewer], which holds an [appliedAt] bin lock. Hash-colliding keys could then
+     * deadlock. The evicted key is therefore collected under the lock and forgotten outside it.
      */
-    private val tombstones =
-        Collections.synchronizedMap(
-            object : LinkedHashMap<K, Unit>(TOMBSTONE_LIMIT, LOAD_FACTOR, false) {
-                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, Unit>): Boolean {
-                    val evict = size > TOMBSTONE_LIMIT
-                    if (evict) appliedAt.remove(eldest.key)
-                    return evict
+    private val tombstones = LinkedHashMap<K, Unit>()
+
+    private val tombstoneLock = Any()
+
+    /** Remembers [key]'s position after removal, evicting the oldest once past the limit. */
+    private fun rememberTombstone(key: K) {
+        val evicted: K? =
+            synchronized(tombstoneLock) {
+                tombstones[key] = Unit
+                if (tombstones.size > TOMBSTONE_LIMIT) {
+                    val eldest = tombstones.keys.first()
+                    tombstones.remove(eldest)
+                    eldest
+                } else {
+                    null
                 }
-            },
-        )
+            }
+        // Outside the monitor: see the note above about lock ordering.
+        evicted?.let { appliedAt.remove(it) }
+    }
+
+    private fun forgetTombstone(key: K) {
+        synchronized(tombstoneLock) { tombstones.remove(key) }
+    }
 
     /**
      * Applies [action] only if [at] is strictly newer than the state the cache already holds for
@@ -368,11 +386,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     @ApiStatus.Internal
     override fun cacheInternal(doc: D, at: OperationTime, log: Boolean) {
         doc.initializeInternal(this)
-        val applied =
-            applyIfNewer(doc.key, at) {
-                cacheMap[doc.key] = doc
-                tombstones.remove(doc.key)
-            }
+        val applied = applyIfNewer(doc.key, at) { cacheMap[doc.key] = doc }
+        if (applied) forgetTombstone(doc.key)
         if (log && applied) {
             getLoggerInternal().debug("Cached document: ${doc.key}")
         } else if (!applied) {
@@ -384,15 +399,22 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     override fun cacheContentOnlyInternal(doc: D, log: Boolean) {
         doc.initializeInternal(this)
 
-        // Optimization - if the document is in cache under the same version, assume the data is the
-        //  same and therefore we can skip re-caching it.
-        if (config.optimisticCaching) {
-            val cached: D? = cacheMap[doc.key]
-            if (cached != null && cached.version == doc.version) return
+        // Only populate a key that has no position yet. A read carries no operation time of its
+        // own: the time it was performed at is later than the commit time of the data it returned,
+        // so recording it would over-claim and refuse a genuinely newer event. Writing the content
+        // without a position is worse still, because a slow read could overwrite newer state while
+        // appliedAt kept the newer time, and the event that would repair it would then be refused.
+        //
+        // The caller still receives the document it read; only the cache side effect is skipped.
+        var cached = false
+        appliedAt.compute(doc.key) { _, current ->
+            if (current == null) {
+                cacheMap[doc.key] = doc
+                cached = true
+            }
+            current
         }
-
-        cacheMap[doc.key] = doc
-        if (log) {
+        if (cached && log) {
             getLoggerInternal().debug("Cached document from a read: ${doc.key}")
         }
     }
@@ -403,10 +425,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     @ApiStatus.Internal
     override fun uncacheInternal(key: K, at: OperationTime): Boolean {
         var removed = false
-        applyIfNewer(key, at) {
-            removed = cacheMap.remove(key) != null
-            tombstones[key] = Unit
-        }
+        val applied = applyIfNewer(key, at) { removed = cacheMap.remove(key) != null }
+        if (applied) rememberTombstone(key)
         return removed
     }
 
