@@ -10,8 +10,6 @@ name: Gradle Build (on pull)
 jobs:
   build_datakache:
     runs-on: ubuntu-latest
-    if: ${{ !contains(join(github.event.pull_request.labels.*.name, ','), 'actions-dependencies')
-      }}
     permissions:
       contents: read
     steps:
@@ -22,7 +20,7 @@ jobs:
         java-version: '21'
         distribution: temurin
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c
+      uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
       with:
         gradle-version: current
     - name: Build with Gradle

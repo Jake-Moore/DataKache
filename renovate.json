@@ -17,25 +17,14 @@
       "minimumReleaseAge": "0 days"
     },
     {
-      "description": "Group all non-major updates together and auto-merge. bumpVersions is what stops an auto-merged update releasing over the top of the previous one: the publishing repository accepts redeploys, so a release without a version bump silently replaces the artifact already at that coordinate. This project uses `val VERSION`, plain semver, no prerelease suffix.",
+      "description": "Group all non-major updates together and auto-merge. The version bump that stops a release landing on top of the previous artifact is configured at the top level of this file rather than here.",
       "matchUpdateTypes": [
         "minor",
         "patch"
       ],
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
-      "automerge": true,
-      "bumpVersions": [
-        {
-          "filePatterns": [
-            "^build\\.gradle\\.kts$"
-          ],
-          "matchStrings": [
-            "^[\\s]*val\\s+VERSION\\s*=\\s*\"(\\d+\\.\\d+\\.\\d+)\"[\\s]*(?://.*)?$"
-          ],
-          "bumpType": "patch"
-        }
-      ]
+      "automerge": true
     },
     {
       "description": "Require approval for major updates.",
@@ -96,5 +85,16 @@
   "timezone": "America/Los_Angeles",
   "schedule": [
     "* 0-6 * * *"
+  ],
+  "bumpVersions": [
+    {
+      "filePatterns": [
+        "^build\\.gradle\\.kts$"
+      ],
+      "matchStrings": [
+        "^[\\s]*val\\s+VERSION\\s*=\\s*\"(\\d+\\.\\d+\\.\\d+)\"[\\s]*(?://.*)?$"
+      ],
+      "bumpType": "patch"
+    }
   ]
 }
