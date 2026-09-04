@@ -336,7 +336,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     /**
      * Keys no longer in [cacheMap] whose position is still remembered, in removal order, so
-     * [appliedAt] cannot grow without limit.
+     * [appliedAt] cannot grow without limit. The value is the position the key held when it was
+     * tombstoned, which is what makes eviction safe: see [tombstoneAdd].
      *
      * Guarded by [tombstoneLock] and touched only from inside the [appliedAt] `compute` lambda for
      * the same key. That keeps membership atomic with the ordering decision it exists to protect:
@@ -345,22 +346,44 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * waiting for another key's bin lock, because both operations only ever run from inside the
      * lambda for the key in question, so there is one lock ordering: appliedAt bin lock, then
      * tombstoneLock, always in that order, never the reverse.
+     *
+     * **The eviction bound is a real limit and not only a memory one.** Once a key's entry is gone
+     * the cache knows nothing about its ordering, so an event for it that is still in flight is
+     * applied rather than refused. Events reach the cache in commit order, so an in-flight event is
+     * not normally older than the state it would overwrite. The exception is the change stream's
+     * out-of-band fallback, which applies an event immediately when its buffer is saturated and
+     * therefore ahead of everything still queued; a key evicted between those two deliveries can be
+     * left holding the older one, with nothing later to repair it. Eviction by count is the wrong
+     * shape for that: the safe boundary is how far the stream has actually applied, not how many
+     * keys have been removed since.
      */
-    private val tombstones = LinkedHashMap<K, Unit>()
+    private val tombstones = LinkedHashMap<K, OperationTime>()
 
     private val tombstoneLock = Any()
 
-    /** Sized so `tombstones.size` after this call cannot exceed [tombstoneLimit]. */
-    private fun tombstoneAdd(key: K): K? =
+    /**
+     * Records [key] as tombstoned at position [at], evicting the oldest entry once past
+     * [tombstoneLimit].
+     *
+     * @return The evicted key together with **the position it held when it was tombstoned**, or
+     * null if nothing was evicted. Carrying that position out of the lock is the point. Reading it
+     * back out of [appliedAt] afterwards races a legitimate recreate of the evicted key landing in
+     * between: the recreate's fresh position would be captured as the stale one, the conditional
+     * removal in [applyEviction] would then match and succeed, and a live key would be left with no
+     * position at all, which is the state a stale event is applied over unconditionally.
+     */
+    private fun tombstoneAdd(key: K, at: OperationTime): Pair<K, OperationTime>? =
         synchronized(tombstoneLock) {
-        // Remove first so a re-tombstoned key is re-inserted at the end, keeping the
+        // Remove first so a re-tombstoned key is reinserted at the end, keeping the
         // LinkedHashMap's iteration order a true removal order for eviction to read.
         tombstones.remove(key)
-        tombstones[key] = Unit
-        if (tombstones.size > tombstoneLimit) {
-            val eldest = tombstones.keys.first()
-            tombstones.remove(eldest)
-            eldest
+        tombstones[key] = at
+        // At least one, so the entry just added is never the eldest and cannot evict itself.
+        if (tombstones.size > tombstoneLimit.coerceAtLeast(1)) {
+            val eldest = tombstones.entries.first()
+            val evicted = eldest.key to eldest.value
+            tombstones.remove(eldest.key)
+            evicted
         } else {
             null
         }
@@ -383,14 +406,14 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * Known, accepted limitation: this is not coordinated with an in-flight [applyIfNewer] call for
      * some other key. If that call's `compute` body runs to completion after all three clears here
      * have finished, its write lands in [cacheMap] and its own newly recorded position lands in
-     * [appliedAt] as if the clear had never happened, for that one key. Pre-existing in spirit -- the
-     * code this replaced raced a bare `cacheMap.clear()` against unlocked writes the same way -- and
-     * narrower in practice for most callers: [shutdown] waits for the change stream's in-flight event
-     * processing to finish first, and [clearDocsFromDatabasePermanently] is gated behind
+     * [appliedAt] as if the clear had never happened. Narrower in practice for most callers:
+     * [shutdown] waits for the change stream's in-flight event processing to finish first,
+     * and [clearDocsFromDatabasePermanently] is gated behind
      * [DocCacheConfig.enableMassDestructiveOps], which its own KDoc already scopes to tests or
      * tightly controlled admin tooling rather than live traffic. Closing this fully would need a
      * generation counter checked inside [applyIfNewer]'s own compute callback; not done here because
      * nothing in this codebase depends on a clear being linearizable against concurrent writes today.
+     * More than one key can straddle the window, since the three clears here are not one atomic step.
      */
     private fun clearCacheAndOrdering() {
         cacheMap.clear()
@@ -419,10 +442,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      *
      * If that update evicts the oldest tombstoned entry, that entry belongs to a DIFFERENT key than
      * [key], and ConcurrentHashMap's own contract forbids updating any other mapping of the same map
-     * from inside a compute callback. So the evicted key and the value it held at the moment of
-     * eviction are captured and returned, for [applyEviction] to remove conditionally once this call
-     * has returned -- conditionally, because between the two a legitimate update to that key could
-     * already have landed, and a plain remove would then destroy live state instead of stale state.
+     * from inside a compute callback. So [tombstoneAdd] returns the evicted key together with the
+     * position it was tombstoned at, taken under [tombstoneLock] rather than read back out of
+     * [appliedAt], and [applyEviction] removes it conditionally once this call has returned.
+     * Conditionally, because between the two a legitimate update to that key could already have
+     * landed, and a plain remove would then destroy live state instead of stale state.
      */
     private fun applyIfNewer(
         key: K,
@@ -441,11 +465,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 if (becomesLive) {
                     tombstoneRemove(key)
                 } else {
-                    val evictedKey = tombstoneAdd(key)
-                    if (evictedKey != null) {
-                        // A plain read, not an update, so safe to call on appliedAt from here.
-                        appliedAt[evictedKey]?.let { eviction = evictedKey to it }
-                    }
+                    eviction = tombstoneAdd(key, at)
                 }
                 at
             }
@@ -543,9 +563,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     @ApiStatus.Internal
     @Throws(DocumentNotFoundException::class)
     suspend fun replaceDocumentInternal(key: K, update: D): D {
-        // Insert the document in the database
+        // The database service caches it, at the operation time of the session that replaced it.
         DataKache.storageMode.databaseService.replace(this, key, update)
-        // Cache the document in memory
         return update
     }
 
@@ -629,11 +648,14 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                         it.onChangeStreamReplace(name, key)
                     }
 
-                    // isReplayedEvent is deliberately false here, unlike INSERT and UPDATE.
+                    // isReplayedEvent is deliberately false here, unlike UPDATE.
                     // optimisticCaching's premise, equal version means equal content, is not a
-                    // contract replace() enforces: PlayerDocCache.delete() resets a document via a
-                    // replace that intentionally keeps the same version, since it is a reset rather
-                    // than an increment. And it is not only the local write that must never skip on
+                    // contract replace() enforces: unlike an update it applies no version filter
+                    // and performs no increment, so the version it writes is whatever the caller
+                    // put in the document. PlayerDocCache.delete() is the case in this codebase,
+                    // replacing with a freshly constructed document at version 0, which collides
+                    // with the cached version whenever the document had never been updated.
+                    // And it is not only the local write that must never skip on
                     // that basis. The change stream's own event for that SAME replace carries the
                     // IDENTICAL operation time as the session that performed it, so this handler and
                     // the local write in MongoDatabaseService.replaceInternal are racing for the

@@ -2,11 +2,13 @@ package com.jakemoore.datakache.core.connections.changes
 
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.ordering.OperationTime
+import org.jetbrains.annotations.ApiStatus
 
 /**
  * Manages change stream connections for database collections.
  * This interface abstracts the change stream functionality to allow for different implementations.
  */
+@ApiStatus.Internal
 interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
     /**
      * Starts the change stream listener synchronously.

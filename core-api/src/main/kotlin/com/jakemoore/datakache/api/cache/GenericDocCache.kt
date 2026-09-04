@@ -105,6 +105,11 @@ abstract class GenericDocCache<D : GenericDoc<D>>(
      *
      * @param key The unique key of the document to be deleted.
      *
+     * The result reports whether the document was **cached** when the call began, sampled before the
+     * database delete rather than claimed by it, so two callers racing a delete on one key can both
+     * be told it was found. Callers needing to know whether the database actually removed a row
+     * should not read it from here.
+     *
      * @return A [DefiniteResult] indicating if the document was found and deleted. (false = not found)
      */
     override suspend fun delete(key: String): DefiniteResult<Boolean> {

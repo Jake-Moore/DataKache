@@ -253,6 +253,57 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                     .shouldBe(2.0)
             }
 
+            it("should uncache a key the database reports it did not delete, while the cache holds it") {
+                // A read populates a key with no position, so a key can be cached having never gone
+                // through the ordered write path. If it is then deleted remotely, or was never in
+                // the database at all, the local delete matches no rows. Converging the cache is
+                // still this call's job: leaving the document readable after delete() returned
+                // would be the same surprise the ordering work exists to remove, arrived at from
+                // the other side.
+                val stray =
+                    TestGenericDoc(
+                        key = "strayCachedKey",
+                        version = 0L,
+                        name = "strayCachedKey",
+                        balance = 55.0,
+                    )
+                cache.cacheContentOnlyInternal(stray)
+                cache.read(stray.key).isEmpty().shouldBe(false)
+
+                cache.delete(stray.key).getOrThrow()
+
+                cache.read(stray.key).isEmpty().shouldBe(true)
+            }
+
+            it("should stop refusing stale events once a key's tombstone has been evicted") {
+                // Pins the documented bound rather than asserting it away. The tombstone record is
+                // finite, and a key evicted from it has no position left, so the next event for it
+                // is applied unconditionally however old it is. Ordinary delivery is in commit
+                // order so nothing older is still in flight; the change stream's out-of-band
+                // fallback is the exception, and closing that needs eviction to follow how far the
+                // stream has applied rather than a count. This test exists to fail loudly if
+                // eviction semantics change, and to keep the limit visible in the suite.
+                cache.tombstoneLimit = 1
+
+                val evicted =
+                    cache
+                        .create("evictedTombstoneKey") { it.copy(name = "evictedTombstone", balance = 700.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(evicted.key, laterThanAnyWrite(1000L))
+
+                // A second delete pushes the first key's tombstone, and its position, out.
+                val other =
+                    cache
+                        .create("evictingOtherKey") { it.copy(name = "evictingOther", balance = 701.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(other.key, laterThanAnyWrite(1001L))
+
+                // Older than the delete that removed it, and applied anyway: no position remains.
+                cache.cacheInternal(evicted, laterThanAnyWrite(999L))
+
+                cache.read(evicted.key).isEmpty().shouldBe(false)
+            }
+
             it("should populate cacheContentOnlyInternal for a key with no position yet") {
                 // The other half: a key nothing has ever cached or deleted has no position to
                 // defer to, so a read is the only source of truth and must populate it. Built

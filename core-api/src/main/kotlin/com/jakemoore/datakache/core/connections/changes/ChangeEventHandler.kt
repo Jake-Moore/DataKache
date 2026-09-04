@@ -3,10 +3,12 @@ package com.jakemoore.datakache.core.connections.changes
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.ordering.OperationTime
+import org.jetbrains.annotations.ApiStatus
 
 /**
  * Handles change event processing for the cache.
  */
+@ApiStatus.Internal
 interface ChangeEventHandler<K : Any, D : Doc<K, D>> {
     /**
      * Called when a document is inserted, updated, or replaced.

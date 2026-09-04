@@ -455,11 +455,13 @@ internal abstract class DatabaseService :
     abstract fun isDatabaseReadyForWrites(): Boolean
 
     /**
-     * Gets the current operation time from the database to prevent timing gaps
-     * in change stream initialization. The returned object is database-specific
-     * and should be passed to createChangeStreamManager if timing gap prevention is needed.
+     * Reads the deployment's current position in its own ordering, before a preload begins, so the
+     * change stream can be started from that same point and no write is missed between the two.
      *
-     * @return A database-specific timestamp object, or null if not supported
+     * This is a round trip. Prefer the operation time the session that performed a write already
+     * reports, where one is available.
+     *
+     * @return The current position, or null if this deployment does not report one.
      */
     abstract suspend fun getCurrentOperationTime(): OperationTime?
 

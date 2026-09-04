@@ -398,10 +398,14 @@ internal class MongoDatabaseService : DatabaseService() {
                 return@withContext client.startSession().use { session ->
                     val deleted =
                         getMongoCollection(docCache).deleteMany(session, filter).deletedCount > 0
-                    // A no-op delete costs a tombstone slot in the LRU record if it uncaches
-                    // regardless, which shortens the window that record protects. Nothing to
-                    // remove from the cache either, since a key MongoDB never held cannot be there.
-                    if (deleted) {
+                    // Uncache when MongoDB removed something, and also when it did not but the
+                    // key is cached anyway, which means the cache has diverged and this delete is
+                    // the moment to converge it. Skipping the second case would leave a document
+                    // readable from the cache after a delete reported success in removing it from
+                    // the caller's point of view. A delete that matched nothing and was not cached
+                    // is left alone, so a miss does not spend a slot in the bounded tombstone
+                    // record and shorten the window that record protects.
+                    if (deleted || docCache.isCached(key)) {
                         val deletedAt = session.operationTimeOrNull()
                         if (deletedAt != null) {
                             docCache.uncacheInternal(key, deletedAt)
