@@ -63,8 +63,9 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      * fixed budget for it is a guess that a slower machine invalidates. Whether anything completed
      * in the last window is an exact question.
      *
-     * Incremented after the executor returns, so it counts finished work rather than started work.
-     * The loop below is sequential, so it advances at most once per item and never runs ahead.
+     * Incremented after the executor returns, so it counts finished work rather than started work,
+     * and always before the result of that work is published. See [finish]. The loop below is
+     * sequential, so it advances at most once per item and never runs ahead.
      */
     private val completedCount = AtomicLong(0)
 
@@ -226,9 +227,11 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 } catch (e: CancellationException) {
                     // Already completed above if the executor was the thing cancelled; this covers
                     // a cancellation between dequeue and execution. Same reasoning either way.
-                    request.deferred.completeExceptionally(
-                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
-                    )
+                    request.finish {
+                        it.completeExceptionally(
+                            UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                        )
+                    }
                     // rethrow for cooperative cancellation
                     throw e
                 } catch (e: Exception) {
@@ -236,10 +239,9 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                         e,
                         "Unexpected error processing update request for key: ${docCache.keyToString(key)}",
                     )
-                    request.deferred.completeExceptionally(e)
+                    request.finish { it.completeExceptionally(e) }
                 } finally {
                     isProcessing.set(false)
-                    completedCount.incrementAndGet()
                 }
             }
         } catch (e: CancellationException) {
@@ -270,19 +272,40 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
             val updatedDoc = updateExecutor(docCache, request.doc, request.updateFunction, request.bypassValidation)
 
             // Complete the deferred with success
-            request.deferred.complete(updatedDoc)
+            request.finish { it.complete(updatedDoc) }
         } catch (e: CancellationException) {
             // The QUEUE was cancelled, which is not the caller's cancellation. Handing them a
             // CancellationException would cancel their coroutine rather than fail their call.
-            request.deferred.completeExceptionally(
-                UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
-            )
+            request.finish {
+                it.completeExceptionally(
+                    UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                )
+            }
             // rethrow for cooperative cancellation of this queue
             throw e
         } catch (e: Exception) {
             // Promote exception to the deferred result
-            request.deferred.completeExceptionally(e)
+            request.finish { it.completeExceptionally(e) }
         }
+    }
+
+    /**
+     * Publishes progress before the result, so that nothing can observe a request as finished
+     * while [completedCount] still says the queue has done nothing.
+     *
+     * A waiter reads the counter only once its own wait has expired. Incrementing afterwards left a
+     * window in which a request completed just inside that wait read as no progress at all, and the
+     * queue was reported stalled when it had in fact just succeeded. That misreading is not
+     * confined to the waiter whose request it was: every other caller behind the same queue reads
+     * the same counter.
+     *
+     * The completed check keeps the count at one per request, since a cancelled executor is
+     * completed by [processUpdateRequest] and then again by the loop that called it.
+     */
+    private inline fun UpdateRequest<K, D>.finish(complete: (CompletableDeferred<D>) -> Unit) {
+        if (deferred.isCompleted) return
+        completedCount.incrementAndGet()
+        complete(deferred)
     }
 
     /**

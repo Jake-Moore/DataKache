@@ -95,6 +95,38 @@ class TestUpdateQueueLiveness : AbstractDataKacheTest() {
                 }
             }
 
+            it("should count failed work as progress, not as a stall") {
+                // Progress is "something finished", not "something succeeded". Routing every
+                // terminal completion through one place is what keeps that true; counting only the
+                // successful path would report a queue of failing updates as wedged, and the caller
+                // would get a stall instead of the failure that actually happened.
+                val service = DataKache.storageMode.databaseService
+                service.stallWindowMsOverride = 1_000L
+
+                try {
+                    val doc = cache.create("livenessFailingKey") { it.copy(name = "livenessFailing") }.getOrThrow()
+                    val slowFailure: Executor = { _, _, _, _ ->
+                        delay(100L)
+                        throw IllegalStateException("executor refused")
+                    }
+
+                    repeat(29) {
+                        service.updateQueueManagerInternal.enqueueUpdate(cache, doc, { it }, slowFailure, true)
+                    }
+                    val queued =
+                        service.updateQueueManagerInternal.enqueueUpdate(cache, doc, { it }, slowFailure, true)
+
+                    // Several windows behind a queue that only ever fails, and still its own answer.
+                    val thrown =
+                        shouldThrow<IllegalStateException> {
+                            service.awaitUpdate(cache, doc.key, queued)
+                        }
+                    thrown.message.shouldBe("executor refused")
+                } finally {
+                    service.stallWindowMsOverride = null
+                }
+            }
+
             it("should fail a queue that completes nothing, naming the stall") {
                 // A queue whose item never returns completes nothing, which is the one thing no
                 // amount of load explains.
