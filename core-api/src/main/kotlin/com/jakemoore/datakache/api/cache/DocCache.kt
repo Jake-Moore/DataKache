@@ -9,6 +9,9 @@ import com.jakemoore.datakache.api.exception.DuplicateUniqueIndexException
 import com.jakemoore.datakache.api.exception.update.DocumentUpdateException
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
+import com.jakemoore.datakache.api.exception.update.UpdateQueueShutdownException
+import com.jakemoore.datakache.api.exception.update.UpdateQueueStalledException
+import com.jakemoore.datakache.api.exception.update.UpdateQueueTooDeepException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.java.ThrowingUnaryOperator
 import com.jakemoore.datakache.api.logging.LoggerService
@@ -131,6 +134,15 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * - [DocumentNotFoundException]: The document with the given key does not exist in the cache or database.
      * - [DuplicateUniqueIndexException]: The update operation violates a unique index constraint.
      * - [TransactionRetriesExceededException]: The update operation failed after exceeding allowed transaction retries.
+     * - [UpdateQueueStalledException]: The queue serialising updates for this document stopped
+     *   making progress.
+     * - [UpdateQueueTooDeepException]: The queue kept progressing but this update never reached the
+     *   front of it.
+     * - [UpdateQueueShutdownException]: The queue was shut down before this update finished.
+     *
+     * **The last three mean the outcome is unknown rather than failed.** Only the waiting was given
+     * up; the queue still owns the update and may complete it afterwards. Retrying an update that
+     * is not idempotent after one of those can apply it twice.
      */
     suspend fun update(key: K, updateFunction: (D) -> D): DefiniteResult<D>
 
@@ -144,6 +156,15 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * - [DocumentNotFoundException]: The document with the given key does not exist in the cache or database.
      * - [DuplicateUniqueIndexException]: The update operation violates a unique index constraint.
      * - [TransactionRetriesExceededException]: The update operation failed after exceeding allowed transaction retries.
+     * - [UpdateQueueStalledException]: The queue serialising updates for this document stopped
+     *   making progress.
+     * - [UpdateQueueTooDeepException]: The queue kept progressing but this update never reached the
+     *   front of it.
+     * - [UpdateQueueShutdownException]: The queue was shut down before this update finished.
+     *
+     * **The last three mean the outcome is unknown rather than failed.** Only the waiting was given
+     * up; the queue still owns the update and may complete it afterwards. Retrying an update that
+     * is not idempotent after one of those can apply it twice.
      */
     suspend fun update(doc: D, updateFunction: (D) -> D): DefiniteResult<D> = update(doc.key, updateFunction)
 

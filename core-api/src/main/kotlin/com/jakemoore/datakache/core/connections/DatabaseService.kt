@@ -13,6 +13,9 @@ import com.jakemoore.datakache.api.exception.update.IllegalDocumentVersionModifi
 import com.jakemoore.datakache.api.exception.update.RejectUpdateException
 import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededException
 import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
+import com.jakemoore.datakache.api.exception.update.UpdateQueueShutdownException
+import com.jakemoore.datakache.api.exception.update.UpdateQueueStalledException
+import com.jakemoore.datakache.api.exception.update.UpdateQueueTooDeepException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
@@ -23,11 +26,10 @@ import com.jakemoore.datakache.core.Service
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
 import com.jakemoore.datakache.core.connections.queues.UpdateQueueManager
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.math.roundToLong
+import kotlin.time.TimeSource
 
 /**
  * The set of all methods that a Database service must implement. This includes all CRUD operations DataKache needs.
@@ -57,51 +59,108 @@ internal abstract class DatabaseService :
      */
     private val updateQueueManager by updateQueueManagerDelegate
 
+    /** Exposed so tests can enqueue through the real queue with a controlled executor. */
+    internal val updateQueueManagerInternal: UpdateQueueManager get() = updateQueueManager
+
+    private companion object {
+        /** How many single-update budgets a caller waits behind a progressing queue. */
+        const val CEILING_MULTIPLE = 4L
+    }
+
     /**
-     * Calculates an appropriate timeout for update operations based on database latency and actual queue depth.
+     * The longest a single update may legitimately take on this backend, including whatever
+     * retrying it does internally.
      *
-     * The timeout is designed to be generous enough to handle:
-     * - Database round-trip latency (using averagePingNanos)
-     * - Queue processing overhead
-     * - Actual queue depth for the specific document
-     * - Safety margin for network variability
-     *
-     * @param updateQueueManager The queue manager to get queue size information
-     * @param docCache The document cache being updated
-     * @param docKey The document key being updated
-     * @return Timeout duration in milliseconds
+     * Stated by the backend rather than chosen here, because only the backend knows its own retry
+     * policy. A number picked independently of it stops being right the moment that policy changes,
+     * and the failure is silent: healthy updates start being reported as wedged.
      */
-    private fun <K : Any, D : Doc<K, D>> calculateUpdateTimeoutMs(
-        updateQueueManager: UpdateQueueManager,
+    abstract val maxSingleUpdateMs: Long
+
+    /**
+     * Overrides [stallWindow] for tests, which cannot wait out a real backend's retry budget.
+     */
+    @Volatile
+    internal var stallWindowMsOverride: Long? = null
+
+    /**
+     * The longest a **single** update may take before the queue behind it is called wedged.
+     *
+     * From outside a queue, one item that never returns and one item that is merely slow look the
+     * same: neither completes. So a bound on one item is unavoidable, and this is it.
+     *
+     * **What matters is what it does NOT scale with.** Not queue depth, not contention, not the
+     * number of writers. Those are what made the previous budget wrong: it multiplied a per-item
+     * estimate by the depth, so a document with fifty writers needed fifty times the budget and got
+     * an estimate derived from ping. Here, fifty queued updates each taking a second are fifty
+     * healthy windows in a row, and only an update that takes longer than this on its own is a
+     * fault.
+     *
+     * Derived from [maxSingleUpdateMs] so it always exceeds what it bounds.
+     */
+    private val stallWindow: Long get() = stallWindowMsOverride ?: maxSingleUpdateMs
+
+    /**
+     * How long a caller waits behind a queue that is progressing but never reaches them.
+     *
+     * A multiple of the single-update bound rather than a separate constant, so a backend with a
+     * long retry budget does not get a ceiling it can cross while perfectly healthy.
+     */
+    @Volatile
+    internal var queueCeilingMsOverride: Long? = null
+
+    private val queueCeiling: Long get() = queueCeilingMsOverride ?: (maxSingleUpdateMs * CEILING_MULTIPLE)
+
+    /**
+     * Waits for [queued], failing only when the queue behind it is actually in trouble.
+     *
+     * **Two boundaries, because there are two faults and they need different answers.**
+     *
+     * A queue that completes nothing for [stallWindow] has an item that has taken longer than any
+     * single update may. That is a fault at any depth, on any machine, because the bound is on one
+     * item rather than on the queue.
+     *
+     * A queue that keeps completing but never reaches this caller within [queueCeiling] is receiving
+     * work faster than it can finish it. Also a fault, but a different one, so it is a different
+     * exception: the remedy is to write to that document less, not to look for a deadlock.
+     */
+    internal suspend fun <K : Any, D : Doc<K, D>> awaitUpdate(
         docCache: DocCache<K, D>,
         docKey: K,
-    ): Long {
-        // While the ping may be less than 10ms, let's give the timeout the benefit of the doubt
-        val pingMs = (averagePingNanos / 1_000_000).coerceAtLeast(10)
+        queued: UpdateQueueManager.QueuedUpdate<K, D>,
+    ): D {
+        val start = TimeSource.Monotonic.markNow()
+        // No queue means the manager was shut down and the request failed without being enqueued,
+        // so there is nothing to watch and the await below throws immediately.
+        val queue = queued.queue ?: return queued.deferred.await()
+        var lastCompleted = queue.getCompletedCount()
 
-        // Base timeout: 5x the average ping time (converted to milliseconds)
-        // This accounts for the database round-trip plus processing overhead
-        val baseTimeoutMs =
-            if (averagePingNanos > 0) {
-                pingMs * 5
-            } else {
-                // Fallback if ping is not available: 250ms
-                250L
+        while (true) {
+            // Only the wait is abandoned here, never the update: the queue owns the deferred and
+            // carries on regardless, so a window elapsing costs nothing but another look.
+            val result = withTimeoutOrNull(stallWindow) { queued.deferred.await() }
+            if (result != null) return result
+
+            val completed = queue.getCompletedCount()
+            val depth = queue.getTotalQueueSize()
+            val namespace = docCache.getKeyNamespace(docKey)
+
+            if (completed == lastCompleted) {
+                DataKacheMetrics.receivers.forEach {
+                    it.onUpdateQueueStalled(docCache.cacheName, docCache.keyToString(docKey), depth)
+                }
+                throw UpdateQueueStalledException(namespace, stallWindow, depth)
             }
+            lastCompleted = completed
 
-        // Get the actual queue size for this specific document
-        //  Add one so that if the current document is in 'processing', it still counts as part of the queue
-        val queueSize = updateQueueManager.getTotalQueueSize(docCache, docKey) + 1
-
-        // Calculate timeout based on actual queue depth
-        // Each queued item needs time to be processed
-        val queueDepthTimeoutMs = baseTimeoutMs * queueSize
-
-        // Add safety margin: 50% extra time for network variability
-        val totalTimeoutMs = (queueDepthTimeoutMs * 1.5).roundToLong()
-
-        // Ensure minimum and maximum bounds
-        return totalTimeoutMs.coerceIn(25L, 300_000L) // 25 ms to 5 min
+            val waited = start.elapsedNow().inWholeMilliseconds
+            if (waited >= queueCeiling) {
+                DataKacheMetrics.receivers.forEach {
+                    it.onUpdateQueueTooDeep(docCache.cacheName, docCache.keyToString(docKey), waited, depth)
+                }
+                throw UpdateQueueTooDeepException(namespace, waited, depth)
+            }
+        }
     }
 
     // ------------------------------------------------------------ //
@@ -156,14 +215,19 @@ internal abstract class DatabaseService :
      * - [IllegalDocumentKeyModificationException]: if the update function modifies the document key.
      * - [IllegalDocumentVersionModificationException]: if the update function modifies the document version.
      * - [RejectUpdateException]: if the update is rejected by the update function.
-     * - [TimeoutCancellationException]: if the update operation times out waiting for queue processing.
+     * - [UpdateQueueStalledException]: if the queue for this document stopped making progress.
+     * - [UpdateQueueTooDeepException]: if the queue kept progressing but never reached this caller.
+     * - [UpdateQueueShutdownException]: if the queue was shut down before the update finished.
+     *
+     * The last three leave the outcome **unknown** rather than failed, so do not blindly retry.
      */
     @Throws(
         DocumentNotFoundException::class, DuplicateUniqueIndexException::class,
         TransactionRetriesExceededException::class, DocumentUpdateException::class,
         InvalidDocCopyHelperException::class, UpdateFunctionReturnedSameInstanceException::class,
         IllegalDocumentKeyModificationException::class, IllegalDocumentVersionModificationException::class,
-        RejectUpdateException::class, TimeoutCancellationException::class,
+        RejectUpdateException::class, UpdateQueueStalledException::class,
+        UpdateQueueTooDeepException::class, UpdateQueueShutdownException::class,
     )
     suspend fun <K : Any, D : Doc<K, D>> update(
         docCache: DocCache<K, D>,
@@ -171,14 +235,13 @@ internal abstract class DatabaseService :
         updateFunction: (D) -> D,
         bypassValidation: Boolean = false,
     ): D {
-        var timeoutMS = -1L
         try {
             // METRICS
             DataKacheMetrics.receivers.forEach(MetricsReceiver::onDatabaseUpdate)
 
             // Use the queue system to serialize updates to the same document
             // This eliminates database-level conflicts and improves FIFO ordering
-            val deferred =
+            val queued =
                 updateQueueManager.enqueueUpdate(
                     docCache = docCache,
                     doc = doc,
@@ -187,16 +250,21 @@ internal abstract class DatabaseService :
                     bypassValidation = bypassValidation,
                 )
 
-            // Apply timeout to prevent indefinite blocking
-            timeoutMS = calculateUpdateTimeoutMs(updateQueueManager, docCache, doc.key)
-            return withTimeout(timeoutMS) {
-                deferred.await()
-            }
-        } catch (e: TimeoutCancellationException) {
-            error(
-                "UPDATE for document with key '${doc.key}' in cache '${docCache.cacheName}' timed out! " +
-                    "Waited for ${timeoutMS}ms, but the queue did not process the update in time. ",
-            )
+            return awaitUpdate(docCache, doc.key, queued)
+        } catch (e: UpdateQueueStalledException) {
+            // Named individually on purpose. Catching the whole DocumentUpdateException family here
+            // would take the four validation failures that already existed out of
+            // onDatabaseUpdateFail, which no test asserts on and nobody would notice until a
+            // dashboard quietly under-counted.
+            error(e.message)
+            throw e
+        } catch (e: UpdateQueueTooDeepException) {
+            error(e.message)
+            throw e
+        } catch (e: UpdateQueueShutdownException) {
+            // A queue fault rather than a database one, and the expected shape of teardown under
+            // load, so counting it as an update failure would put a spike on every clean shutdown.
+            error(e.message)
             throw e
         } catch (e: CancellationException) {
             throw e

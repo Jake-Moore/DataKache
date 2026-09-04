@@ -2,6 +2,7 @@ package com.jakemoore.datakache.core.connections.queues
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.exception.update.UpdateQueueShutdownException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -54,6 +55,20 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     // Cleanup tracking
     private val lastActivityTime = AtomicReference(TimeSource.Monotonic.markNow())
 
+    /**
+     * How many requests this queue has finished, successfully or not.
+     *
+     * The waiting side uses this to tell a queue that is *busy* from one that is *wedged*. Elapsed
+     * time cannot: a deep queue under contention is slow for reasons that are not a fault, and any
+     * fixed budget for it is a guess that a slower machine invalidates. Whether anything completed
+     * in the last window is an exact question.
+     *
+     * Incremented after the executor returns, so it counts finished work rather than started work,
+     * and always before the result of that work is published. See [finish]. The loop below is
+     * sequential, so it advances at most once per item and never runs ahead.
+     */
+    private val completedCount = AtomicLong(0)
+
     // Mutex for coordinating shutdown
     private val shutdownMutex = Mutex()
 
@@ -84,7 +99,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
         if (isShutdown.get()) {
             deferred.completeExceptionally(
-                IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown"),
+                UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
             )
             return deferred
         }
@@ -106,7 +121,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 if (exception is ClosedSendChannelException) {
                     // Channel is closed (shutdown)
                     deferred.completeExceptionally(
-                        IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown"),
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                     )
                 } else {
                     // Channel is full - implement backpressure strategy
@@ -125,39 +140,70 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     @OptIn(DelicateCoroutinesApi::class)
     private fun handleBackpressure(request: UpdateRequest<K, D>, deferred: CompletableDeferred<D>) {
         // Launch a coroutine to handle backpressure asynchronously
-        scope.launch {
-            try {
-                var retryCount = 0
+        val job =
+            scope.launch {
+                try {
+                    var retryCount = 0
 
-                while (retryCount < MAX_BACKPRESSURE_RETRIES && !updateChannel.isClosedForSend) {
-                    delay(BACKPRESSURE_RETRY_DELAY_MS)
+                    while (retryCount < MAX_BACKPRESSURE_RETRIES && !updateChannel.isClosedForSend) {
+                        delay(BACKPRESSURE_RETRY_DELAY_MS)
 
-                    val retryResult = updateChannel.trySend(request)
-                    if (retryResult.isSuccess) {
-                        // Successfully queued after retry
-                        queueSize.incrementAndGet()
+                        val retryResult = updateChannel.trySend(request)
+                        if (retryResult.isSuccess) {
+                            // Successfully queued after retry
+                            queueSize.incrementAndGet()
+                            return@launch
+                        }
+
+                        retryCount++
+                    }
+
+                    // A closed channel is a shutdown, not a full queue. Reporting it as "full" sends the
+                    // caller looking for a load problem that is not there.
+                    if (updateChannel.isClosedForSend) {
+                        deferred.completeExceptionally(
+                            UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                        )
                         return@launch
                     }
 
-                    retryCount++
+                    // All retries failed - reject the update
+                    val errorMessage =
+                        "UpdateQueue for key ${docCache.keyToString(key)} is full " +
+                            "(capacity: $MAX_QUEUED_UPDATES). Update rejected after $MAX_BACKPRESSURE_RETRIES retry attempts."
+
+                    docCache.getLoggerInternal().warn(errorMessage)
+                    deferred.completeExceptionally(
+                        IllegalStateException(errorMessage),
+                    )
+                } catch (e: CancellationException) {
+                    // This scope was cancelled by shutdown, not by the caller. Without this branch the
+                    // catch below forwards the CancellationException verbatim, which cancels the
+                    // caller's coroutine rather than failing their call.
+                    deferred.completeExceptionally(
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                    )
+                    // rethrow for cooperative cancellation of this queue
+                    throw e
+                } catch (e: Exception) {
+                    // Handle any unexpected errors during backpressure handling
+                    docCache.getLoggerInternal().error(
+                        e,
+                        "Error during backpressure handling for key: ${docCache.keyToString(key)}",
+                    )
+                    deferred.completeExceptionally(e)
                 }
+            }
 
-                // All retries failed - reject the update
-                val errorMessage =
-                    "UpdateQueue for key ${docCache.keyToString(key)} is full " +
-                        "(capacity: $MAX_QUEUED_UPDATES). Update rejected after $MAX_BACKPRESSURE_RETRIES retry attempts."
-
-                docCache.getLoggerInternal().warn(errorMessage)
+        // A coroutine cancelled before its body runs never reaches the catch above, so the caller
+        // would hold a deferred nothing will ever complete: they wait a whole window and are told
+        // the queue stalled, which is the wrong diagnosis for a queue that shut down. Completing
+        // is idempotent, so this is a no-op whenever the body did get to run.
+        job.invokeOnCompletion { cause ->
+            if (cause != null) {
                 deferred.completeExceptionally(
-                    IllegalStateException(errorMessage),
+                    UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                 )
-            } catch (e: Exception) {
-                // Handle any unexpected errors during backpressure handling
-                docCache.getLoggerInternal().error(
-                    e,
-                    "Error during backpressure handling for key: ${docCache.keyToString(key)}",
-                )
-                deferred.completeExceptionally(e)
             }
         }
     }
@@ -179,11 +225,13 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 try {
                     processUpdateRequest(request)
                 } catch (e: CancellationException) {
-                    request.deferred.completeExceptionally(
-                        CancellationException(
-                            "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}",
-                        ),
-                    )
+                    // Already completed above if the executor was the thing cancelled; this covers
+                    // a cancellation between dequeue and execution. Same reasoning either way.
+                    request.finish {
+                        it.completeExceptionally(
+                            UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                        )
+                    }
                     // rethrow for cooperative cancellation
                     throw e
                 } catch (e: Exception) {
@@ -191,7 +239,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                         e,
                         "Unexpected error processing update request for key: ${docCache.keyToString(key)}",
                     )
-                    request.deferred.completeExceptionally(e)
+                    request.finish { it.completeExceptionally(e) }
                 } finally {
                     isProcessing.set(false)
                 }
@@ -224,11 +272,40 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
             val updatedDoc = updateExecutor(docCache, request.doc, request.updateFunction, request.bypassValidation)
 
             // Complete the deferred with success
-            request.deferred.complete(updatedDoc)
+            request.finish { it.complete(updatedDoc) }
+        } catch (e: CancellationException) {
+            // The QUEUE was cancelled, which is not the caller's cancellation. Handing them a
+            // CancellationException would cancel their coroutine rather than fail their call.
+            request.finish {
+                it.completeExceptionally(
+                    UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                )
+            }
+            // rethrow for cooperative cancellation of this queue
+            throw e
         } catch (e: Exception) {
             // Promote exception to the deferred result
-            request.deferred.completeExceptionally(e)
+            request.finish { it.completeExceptionally(e) }
         }
+    }
+
+    /**
+     * Publishes progress before the result, so that nothing can observe a request as finished
+     * while [completedCount] still says the queue has done nothing.
+     *
+     * A waiter reads the counter only once its own wait has expired. Incrementing afterwards left a
+     * window in which a request completed just inside that wait read as no progress at all, and the
+     * queue was reported stalled when it had in fact just succeeded. That misreading is not
+     * confined to the waiter whose request it was: every other caller behind the same queue reads
+     * the same counter.
+     *
+     * The completed check keeps the count at one per request, since a cancelled executor is
+     * completed by [processUpdateRequest] and then again by the loop that called it.
+     */
+    private inline fun UpdateRequest<K, D>.finish(complete: (CompletableDeferred<D>) -> Unit) {
+        if (deferred.isCompleted) return
+        completedCount.incrementAndGet()
+        complete(deferred)
     }
 
     /**
@@ -270,14 +347,14 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 // Force cancellation if timeout exceeded
                 processingJob.cancel()
 
-                // Drain remaining queued requests and complete them exceptionally
+                // Drain what never started. These were queued and abandoned, which is the same
+                // failure as the one in flight and must reach the caller the same way: as a
+                // failure they can catch, not as a cancellation of their own coroutine.
                 while (true) {
                     val result = updateChannel.tryReceive()
                     if (result.isFailure) break
                     result.getOrNull()?.deferred?.completeExceptionally(
-                        CancellationException(
-                            "UpdateQueue shutdown forced for key: ${docCache.keyToString(key)}",
-                        ),
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                     )
                 }
             } finally {
@@ -310,6 +387,9 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      * @return the current number of items waiting in the queue (not including the one being processed)
      */
     fun getQueueSize(): Long = queueSize.get()
+
+    /** See [completedCount]. */
+    fun getCompletedCount(): Long = completedCount.get()
 
     /**
      * @return the total number of items in the queue including the one being processed
