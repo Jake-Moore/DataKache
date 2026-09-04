@@ -4,9 +4,9 @@
 # and does not reliably parse `ext { set("name", "group:artifact:$ver") }`.
 
 [versions]
-kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.10.0"
-kotlin = "2.3.10"
+kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.11.0"
+kotlin = "2.4.10"
 kamicommon = "5.0.0"
 mongodb = "5.11.0"
 slf4j = "2.0.18"
