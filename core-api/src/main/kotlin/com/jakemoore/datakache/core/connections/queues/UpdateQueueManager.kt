@@ -224,6 +224,10 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
                                     launch {
                                         try {
                                             queue.shutdown()
+                                        } catch (e: CancellationException) {
+                                            // Teardown, not a fault. Without this the catch below
+                                            // logs an error on every clean shutdown.
+                                            throw e
                                         } catch (e: Exception) {
                                             // Log but don't fail the cleanup process
                                             loggerService.error(e, "Error shutting down queue $queueKey")
@@ -235,6 +239,10 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
                                     // If we're shutting down, shutdown the queue directly
                                     try {
                                         queue.shutdown()
+                                    } catch (e: CancellationException) {
+                                        // Teardown, not a fault. Anything left unswept stays in
+                                        // one of the two collections, so shutdown still finds it.
+                                        throw e
                                     } catch (e: Exception) {
                                         loggerService.error(
                                             e,
