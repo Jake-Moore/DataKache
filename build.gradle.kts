@@ -10,7 +10,7 @@ plugins {
     id("maven-publish")
 
     // Detekt Code Quality Plugin
-    id("dev.detekt") version "2.0.0-alpha.2"
+    id("dev.detekt") version "2.0.0-alpha.6"
 
     // Kotlin Plugins
     kotlin("jvm")
