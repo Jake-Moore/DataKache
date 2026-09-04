@@ -17,6 +17,37 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
     init {
         describe("Change Stream Operations") {
 
+            it("should advance the point the stream would resume from as it applies events") {
+                // The regression this exists for. The operation-time fallback was set once, at
+                // cache start, and never moved. Losing both resume tokens therefore replayed every
+                // change since the process booted: an enormous replay on a long-lived cache, or,
+                // once the oplog no longer reaches back that far, a resume that fails and silently
+                // restarts from the current time with everything in between missed.
+                eventually(5.seconds) {
+                    delay(100)
+                    require(cache.areChangeStreamJobsRunning())
+                }
+
+                val atStart = cache.streamResumePositionInternal()
+                require(atStart != null) { "expected a resume position captured at cache start" }
+
+                repeat(3) { i ->
+                    cache
+                        .create("resumeAdvanceKey$i") {
+                            it.copy(name = "resumeAdvance$i", balance = 850.0 + i)
+                        }.getOrThrow()
+                }
+
+                // Only the ordered path moves it, so this also waits for those events to be applied.
+                eventually(5.seconds) {
+                    delay(100)
+                    val now = cache.streamResumePositionInternal()
+                    require(now != null && now > atStart) {
+                        "resume position did not advance past $atStart (still $now)"
+                    }
+                }
+            }
+
             it("should replicate external INSERT to local cache") {
                 // Ensure that the change streams are running before we proceed
                 eventually(5.seconds) {

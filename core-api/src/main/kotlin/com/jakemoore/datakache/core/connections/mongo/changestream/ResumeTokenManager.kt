@@ -39,6 +39,29 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     }
 
     /**
+     * Moves the operation-time fallback forward to [appliedAt], the position of an event that has
+     * been applied in order.
+     *
+     * Without this the fallback stays at the time captured when the cache started, for the life of
+     * the process, and losing both resume tokens replays every change since then. On a cache that
+     * has been up for any length of time that is either an enormous replay or, once the oplog no
+     * longer reaches back that far, a resume that fails and silently restarts from the current time
+     * with everything in between missed.
+     *
+     * **Advanced only from the ordered path**, so it never runs ahead of what has actually been
+     * applied. Resuming slightly earlier than necessary is harmless, because a redelivered event is
+     * refused by the cache's own ordering; resuming later than what has been applied would lose
+     * events outright.
+     */
+    fun advanceEffectiveStartTime(appliedAt: BsonTimestamp?) {
+        if (appliedAt == null) return
+        val current = effectiveStartTime
+        if (current == null || appliedAt > current) {
+            effectiveStartTime = appliedAt
+        }
+    }
+
+    /**
      * Clears only resume tokens, preserving other state.
      */
     fun clearTokensOnly() {

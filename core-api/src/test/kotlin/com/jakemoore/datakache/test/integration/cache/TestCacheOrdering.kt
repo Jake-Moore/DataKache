@@ -173,15 +173,16 @@ class TestCacheOrdering : AbstractDataKacheTest() {
             }
 
             it("should not lose a live key's position to tombstone eviction after a delete then a recreate") {
-                // This is sequential, so it cannot exercise the CONCURRENT race the fix closes --
-                // that atomicity comes from tombstone membership being decided inside the same
-                // appliedAt.compute call as the ordering decision, which ConcurrentHashMap
-                // guarantees is serialized per key, and is not something a sequential test can
-                // disprove. What this covers, and what a naive "clear on delete, forget on cache"
-                // implementation would still get wrong even without any race: a recreate must
-                // actually remove the key from the tombstone list, or unrelated deletes pushed
-                // through afterward can evict it as if it were still tombstoned, evicting a LIVE
-                // key's position and reopening the exact refusal a stale event depends on.
+                // A scenario check rather than a regression test, and worth saying so. It walks
+                // delete, recreate, then enough unrelated deletes to drive real evictions, and
+                // asserts the recreated key still refuses a stale event afterwards.
+                //
+                // What it deliberately does NOT claim: that it would catch a recreate which forgot
+                // to drop the key from the removed-key record. It would not. Such a key would be
+                // evicted carrying its OLD position, and applyEviction removes conditionally on
+                // exactly that value, so the recreate's newer position survives anyway. The
+                // conditional removal is what makes this safe, and it is not something a sequential
+                // test can distinguish from the tombstone bookkeeping being correct.
                 cache.tombstoneLimit = 2
 
                 val doc =
@@ -191,7 +192,12 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 cache.uncacheInternal(doc.key, laterThanAnyWrite(1L))
                 cache.cacheInternal(doc, laterThanAnyWrite(2L))
 
-                // Push several unrelated deletes through to force eviction of older tombstones.
+                // Eviction only happens below the ordering boundary, so move it past everything
+                // these deletes will record. Without this the record simply grows and no eviction
+                // is exercised at all.
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(50L))
+
+                // Push several unrelated deletes through to drive eviction of older entries.
                 // Distinct name and balance: TestGenericDocCache enforces a unique index on both,
                 // and a MongoDB unique index treats every null as a collision unless sparse.
                 repeat(5) { i ->
@@ -389,6 +395,166 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 cache.cacheInternal(first, laterThanAnyWrite(2999L))
 
                 cache.read(first.key).isEmpty().shouldBe(false)
+            }
+
+            it("should not advance the ordering boundary for an out-of-band event") {
+                // Delivered through the real handler, because whether an event advances the
+                // boundary is decided there and nowhere else. An out-of-band event is applied when
+                // the stream's buffer saturates, ahead of everything still queued, so it proves
+                // nothing about what has been applied and must not move the boundary. If it did,
+                // the entry protecting against those still-queued older events would be evicted.
+                cache.tombstoneLimit = 1
+
+                val held =
+                    cache
+                        .create("outOfBandHeldKey") { it.copy(name = "outOfBandHeld", balance = 750.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(held.key, laterThanAnyWrite(4000L))
+
+                val unrelated =
+                    cache
+                        .create("outOfBandOtherKey") { it.copy(name = "outOfBandOther", balance = 751.0) }
+                        .getOrThrow()
+                cache.changeEventHandlerInternal().onDocumentDeleted(
+                    unrelated.key,
+                    laterThanAnyWrite(4500L),
+                    outOfBand = true,
+                )
+
+                val third =
+                    cache
+                        .create("outOfBandThirdKey") { it.copy(name = "outOfBandThird", balance = 752.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(third.key, laterThanAnyWrite(4600L))
+
+                // The boundary never moved, so the held entry survived and the stale event is refused.
+                cache.cacheInternal(held, laterThanAnyWrite(3999L))
+
+                cache.read(held.key).isEmpty().shouldBe(true)
+            }
+
+            it("should advance the ordering boundary for an ordered event") {
+                // The other half of the same gate, identical but for outOfBand. An ordered event
+                // does mean everything up to it has been applied, so the entry below it is safe to
+                // forget, which is observable as the stale event no longer being refused.
+                cache.tombstoneLimit = 1
+
+                val evictable =
+                    cache
+                        .create("orderedHeldKey") { it.copy(name = "orderedHeld", balance = 760.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(evictable.key, laterThanAnyWrite(4000L))
+
+                val unrelated =
+                    cache
+                        .create("orderedOtherKey") { it.copy(name = "orderedOther", balance = 761.0) }
+                        .getOrThrow()
+                cache.changeEventHandlerInternal().onDocumentDeleted(
+                    unrelated.key,
+                    laterThanAnyWrite(4500L),
+                    outOfBand = false,
+                )
+
+                val third =
+                    cache
+                        .create("orderedThirdKey") { it.copy(name = "orderedThird", balance = 762.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(third.key, laterThanAnyWrite(4600L))
+
+                cache.cacheInternal(evictable, laterThanAnyWrite(3999L))
+
+                cache.read(evictable.key).isEmpty().shouldBe(false)
+            }
+
+            it("should forget the ordering boundary when the change stream reconnects") {
+                // The regression this exists for. A reconnecting stream can resume from a point
+                // EARLIER than it had already reached, because the resume token fallback ends at
+                // the operation time captured when the cache started, and replays history from
+                // there. Events older than the boundary the previous connection advanced are then
+                // delivered after all, so the boundary means nothing across a reconnection and
+                // eviction must stop until ordered delivery re-establishes one.
+                cache.tombstoneLimit = 1
+
+                val held =
+                    cache
+                        .create("reconnectHeldKey") { it.copy(name = "reconnectHeld", balance = 770.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(held.key, laterThanAnyWrite(5000L))
+
+                // A boundary that would permit forgetting it, and then a reconnection.
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(5500L))
+                cache.changeEventHandlerInternal().onConnected(reconnected = true)
+
+                val other =
+                    cache
+                        .create("reconnectOtherKey") { it.copy(name = "reconnectOther", balance = 771.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(other.key, laterThanAnyWrite(5600L))
+
+                cache.cacheInternal(held, laterThanAnyWrite(4999L))
+
+                cache.read(held.key).isEmpty().shouldBe(true)
+            }
+
+            it("should not evict an entry from before a reconnection against a boundary from after it") {
+                // The residual the reset alone does not close, and the reason entries carry the
+                // connection they were minted on. Clearing the boundary at a reconnection is not
+                // enough by itself: the new connection re-establishes one within moments, and an
+                // entry minted BEFORE the reconnection is still sitting in the record. Its position
+                // came from a stream position that the new connection may not have reached yet,
+                // because a replay starts earlier, so comparing the two is meaningless and the
+                // entry must simply be ineligible until the ceiling forces it.
+                cache.tombstoneLimit = 1
+
+                val held =
+                    cache
+                        .create("epochHeldKey") { it.copy(name = "epochHeld", balance = 790.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(held.key, laterThanAnyWrite(7000L))
+
+                cache.changeEventHandlerInternal().onConnected(reconnected = true)
+
+                // The new connection establishes a boundary well past the old entry's position.
+                // Comparing positions alone would forget it; comparing connections does not.
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(7500L))
+
+                val other =
+                    cache
+                        .create("epochOtherKey") { it.copy(name = "epochOther", balance = 791.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(other.key, laterThanAnyWrite(7600L))
+
+                cache.cacheInternal(held, laterThanAnyWrite(6999L))
+
+                cache.read(held.key).isEmpty().shouldBe(true)
+            }
+
+            it("should not move the ordering boundary backwards within one connection") {
+                // A resumed stream can redeliver an event it has already applied, so the boundary
+                // must not follow it backwards while the connection is the same one. Only a
+                // reconnection, which can genuinely reposition earlier, resets it.
+                cache.tombstoneLimit = 1
+
+                val evictable =
+                    cache
+                        .create("monotonicKey") { it.copy(name = "monotonic", balance = 780.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(evictable.key, laterThanAnyWrite(6300L))
+
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(6500L))
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(6100L))
+
+                val other =
+                    cache
+                        .create("monotonicOtherKey") { it.copy(name = "monotonicOther", balance = 781.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(other.key, laterThanAnyWrite(6600L))
+
+                // Evicted, which only holds if the boundary stayed at 6500 rather than dropping to
+                // 6100, since the entry sits between the two.
+                cache.cacheInternal(evictable, laterThanAnyWrite(6299L))
+
+                cache.read(evictable.key).isEmpty().shouldBe(false)
             }
 
             it("should populate cacheContentOnlyInternal for a key with no position yet") {

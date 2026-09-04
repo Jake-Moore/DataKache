@@ -259,10 +259,13 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             }
 
             // Update state to connected on first successful event
-            if (stateManager.transitionTo(ChangeStreamState.CONNECTING, ChangeStreamState.CONNECTED) ||
-                stateManager.transitionTo(ChangeStreamState.RECONNECTING, ChangeStreamState.CONNECTED)
-            ) {
-                onSuccessfulConnection()
+            val firstConnection =
+                stateManager.transitionTo(ChangeStreamState.CONNECTING, ChangeStreamState.CONNECTED)
+            val reconnection =
+                !firstConnection &&
+                    stateManager.transitionTo(ChangeStreamState.RECONNECTING, ChangeStreamState.CONNECTED)
+            if (firstConnection || reconnection) {
+                onSuccessfulConnection(reconnected = reconnection)
             }
 
             // Handle the event through the event processor (tokens updated after processing)
@@ -273,7 +276,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     /**
      * Handles successful connection to the change stream.
      */
-    private suspend fun onSuccessfulConnection() {
+    private suspend fun onSuccessfulConnection(reconnected: Boolean) {
         if (errorHandler.getConsecutiveFailures() > 0) {
             context.logger.debug(
                 "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures",
@@ -281,7 +284,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         }
 
         errorHandler.resetFailures()
-        context.eventHandler.onConnected()
+        context.eventHandler.onConnected(reconnected)
         context.logger.debug("Change stream connected")
     }
 
@@ -296,6 +299,9 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * Gets the last error that occurred, if any.
      */
     override fun getLastError(): Throwable? = errorHandler.getLastError()
+
+    override fun getResumePosition(): OperationTime? =
+        resumeTokenManager.getEffectiveStartTime()?.let { OperationTime(it.value) }
 
     /**
      * Gets the number of consecutive failures.

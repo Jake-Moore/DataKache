@@ -59,8 +59,13 @@ interface ChangeEventHandler<K : Any, D : Doc<K, D>> {
 
     /**
      * Called when the change stream connects successfully.
+     *
+     * @param reconnected False on the first connection of this stream, which begins exactly where
+     * its caller asked it to. True on every later one, where the stream may resume from a point
+     * EARLIER than it had already reached and replay history, so anything a handler concluded from
+     * the previous connection's progress no longer holds.
      */
-    suspend fun onConnected()
+    suspend fun onConnected(reconnected: Boolean)
 
     /**
      * Called when the change stream disconnects.

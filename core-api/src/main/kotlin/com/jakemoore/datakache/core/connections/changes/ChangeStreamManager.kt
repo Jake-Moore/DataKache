@@ -44,4 +44,13 @@ interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
      * Checks if the change stream job, and the event processor job are both active.
      */
     fun areJobsActive(): Boolean
+
+    /**
+     * The position this stream would restart from if it lost its resume tokens, or null if it has
+     * none.
+     *
+     * Tracks what the stream has applied in order, so a token loss resumes near where it was rather
+     * than replaying from wherever it first started.
+     */
+    fun getResumePosition(): OperationTime?
 }

@@ -42,6 +42,8 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.annotations.ApiStatus
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     override val cacheName: String,
@@ -75,10 +77,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
             // Capture operation time BEFORE loading documents to prevent timing gaps
             val operationTime = DataKache.storageMode.databaseService.getCurrentOperationTime()
-            // The stream starts here, so everything before it is already in the preload. Seeding the
-            // boundary lets the removed-key record shed entries from the first delete onwards rather
-            // than holding every one until the first ordered event happens to arrive.
-            streamAppliedThrough = operationTime
+            // The stream is about to start from exactly here, so this is a boundary the first
+            // connection genuinely holds: nothing older than it will be delivered on that
+            // connection. It lets the removed-key record shed entries from the first delete rather
+            // than holding every one until an ordered event happens to arrive.
+            streamAppliedThrough = operationTime?.let { StreamPosition(connectionEpoch.get(), it) }
             this.getLoggerInternal().debug(
                 "Captured operation time before loading: $operationTime for cache: $cacheName",
             )
@@ -341,47 +344,78 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     internal var tombstoneLimit: Int = DEFAULT_TOMBSTONE_LIMIT
 
     /**
-     * The position through which the change stream has applied events **in order**, or null before
-     * it has applied any.
+     * The last event the change stream applied **in order**, and the connection it arrived on, or
+     * null before the current connection has applied any.
      *
-     * This is the boundary that makes evicting a tombstone safe, and it is the only reason eviction
-     * is safe at all. Events reach the cache in the database's commit order through a single
-     * buffered consumer, so everything still queued is newer than the last event drained from that
-     * buffer. A tombstone whose position is older than this value therefore has no event left in
-     * flight that could resurrect the key once its position is forgotten.
+     * This boundary is what makes evicting a removed key's position safe, and it is the only reason
+     * eviction is safe at all. Events reach the cache in the database's commit order through a
+     * single buffered consumer, so everything still queued is newer than the last event drained
+     * from that buffer. An entry older than the boundary therefore has no event left in flight that
+     * could resurrect its key once its position is forgotten.
      *
      * **Advanced only by ordered events.** The change stream applies an event out of band when its
      * buffer saturates, ahead of everything still queued, so such an event proves nothing about
-     * what has been applied and must not move this. That case is exactly the one the boundary
-     * exists for: the out-of-band event's own tombstone sits above the boundary and stays put until
-     * the buffer has drained past it.
+     * what has been applied. That case is exactly the one the boundary exists for: the out-of-band
+     * event's own entry sits above the boundary and stays until the buffer has drained past it.
      *
-     * Written by the single ordered consumer and by [start]; read from inside [tombstoneAdd] on
-     * whatever thread is applying a mutation, hence volatile.
+     * **And it means nothing across a reconnection**, which is why it carries an epoch. The stream
+     * can resume from a point EARLIER than it had already reached: `ResumeTokenManager` falls back
+     * to the operation time captured at cache start when both resume tokens are lost, which replays
+     * history from that point. Events older than the boundary are then delivered after all, and the
+     * property above is false. So a reconnect increments [connectionEpoch] and clears this, and an
+     * entry is only safely evictable against a boundary from the epoch it was minted in.
      */
     @Volatile
-    private var streamAppliedThrough: OperationTime? = null
-
-    /** Set inside [tombstoneAdd], reported by [reportTombstoneCeiling] outside the lock. */
-    @Volatile
-    private var tombstoneCeilingBreached = false
-
-    @Volatile
-    private var tombstoneCeilingReported = false
+    private var streamAppliedThrough: StreamPosition? = null
 
     /**
-     * Records that the change stream has applied every event up to and including [at], in order.
+     * Which connection the change stream is on. Incremented by [invalidateStreamPositionInternal].
      *
-     * Called only for events delivered through the ordered buffer. Monotonic, because a stream that
-     * reconnects resumes from a token and can redeliver events it has already applied, and the
-     * boundary must not move backwards when it does.
+     * A reposition can only happen at a reconnection, so this is the granularity at which the
+     * boundary's meaning changes. Entries minted on an earlier connection are never safely
+     * evictable afterwards, only evictable by the ceiling, which bounds what that costs.
+     */
+    private val connectionEpoch = AtomicInteger(0)
+
+    /** Reported at most once per process, so a forced eviction can never be lost to a race. */
+    private val tombstoneCeilingReported = AtomicBoolean(false)
+
+    private data class StreamPosition(val epoch: Int, val at: OperationTime)
+
+    private data class Tombstone(val at: OperationTime, val epoch: Int)
+
+    private data class Eviction<K : Any>(val key: K, val at: OperationTime, val forced: Boolean)
+
+    /**
+     * Records that the change stream has applied every event up to and including [at], in order, on
+     * the current connection.
+     *
+     * Called only for events delivered through the ordered buffer. Monotonic **within** an epoch,
+     * because a resumed stream can redeliver an event it has already applied and the boundary must
+     * not move backwards when it does. Across epochs it starts again, because a new connection may
+     * be reading from an earlier point entirely.
      */
     @ApiStatus.Internal
     internal fun advanceStreamPositionInternal(at: OperationTime) {
+        val epoch = connectionEpoch.get()
         val current = streamAppliedThrough
-        if (current == null || at > current) {
-            streamAppliedThrough = at
+        if (current == null || current.epoch != epoch || at > current.at) {
+            streamAppliedThrough = StreamPosition(epoch, at)
         }
+    }
+
+    /**
+     * Forgets where the change stream had applied to, because it has just (re)connected and may be
+     * reading from an earlier point than it had already reached.
+     *
+     * Eviction is suspended until ordered delivery re-establishes a boundary on the new epoch, so a
+     * replay cannot mint an entry and immediately drop it against a boundary the previous
+     * connection had advanced.
+     */
+    @ApiStatus.Internal
+    internal fun invalidateStreamPositionInternal() {
+        connectionEpoch.incrementAndGet()
+        streamAppliedThrough = null
     }
 
     /**
@@ -396,7 +430,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     /**
      * Keys no longer in [cacheMap] whose position is still remembered, in removal order, so
      * [appliedAt] cannot grow without limit. The value is the position the key held when it was
-     * tombstoned, which is what makes eviction safe: see [tombstoneAdd].
+     * tombstoned and the connection that happened on, which is what makes eviction safe: see
+     * [tombstoneAdd].
      *
      * Guarded by [tombstoneLock] and touched only from inside the [appliedAt] `compute` lambda for
      * the same key. That keeps membership atomic with the ordering decision it exists to protect:
@@ -413,66 +448,50 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * badly behind therefore holds the record above its limit, up to [TOMBSTONE_CEILING_FACTOR]
      * times it, past which an entry is dropped unsafely and the breach is logged.
      */
-    private val tombstones = LinkedHashMap<K, OperationTime>()
+    private val tombstones = LinkedHashMap<K, Tombstone>()
 
     private val tombstoneLock = Any()
 
     /**
-     * Records [key] as tombstoned at position [at], and evicts the oldest entry if the record is
-     * over [tombstoneLimit] **and** the change stream has applied past that entry.
+     * Records [key] as tombstoned at position [at] on the current connection, and evicts the oldest
+     * entry if the record is over [tombstoneLimit] **and** it is safe to forget.
      *
-     * @return The evicted key together with **the position it held when it was tombstoned**, or
-     * null if nothing was evicted. Carrying that position out of the lock is the point. Reading it
-     * back out of [appliedAt] afterwards races a legitimate recreate of the evicted key landing in
-     * between: the recreate's fresh position would be captured as the stale one, the conditional
-     * removal in [applyEviction] would then match and succeed, and a live key would be left with no
-     * position at all, which is the state a stale event is applied over unconditionally.
+     * Safe means the change stream has applied, in order and on the same connection the entry was
+     * minted on, past that entry's position. Same connection matters because a reconnection can
+     * resume from an earlier point and replay history, at which point events older than a boundary
+     * the previous connection advanced are delivered after all.
+     *
+     * @return The evicted key with **the position it held when it was tombstoned**, and whether the
+     * ceiling forced the eviction rather than the boundary permitting it. Carrying the position out
+     * of the lock is the point: reading it back out of [appliedAt] afterwards races a legitimate
+     * recreate of the evicted key landing in between, whose fresh position would be captured as the
+     * stale one, removed successfully by [applyEviction], and leave a live key with no position at
+     * all, which is the state a stale event is applied over unconditionally.
      */
-    private fun tombstoneAdd(key: K, at: OperationTime): Pair<K, OperationTime>? =
+    private fun tombstoneAdd(key: K, at: OperationTime): Eviction<K>? =
         synchronized(tombstoneLock) {
         // Remove first so a re-tombstoned key is reinserted at the end, keeping the
         // LinkedHashMap's iteration order a true removal order for eviction to read.
         tombstones.remove(key)
-        tombstones[key] = at
+        tombstones[key] = Tombstone(at, connectionEpoch.get())
 
         // At least one, so the entry just added is never the eldest and cannot evict itself.
         val limit = tombstoneLimit.coerceAtLeast(1)
         if (tombstones.size <= limit) return@synchronized null
 
         val eldest = tombstones.entries.first()
-        val appliedThrough = streamAppliedThrough
+        val boundary = streamAppliedThrough
         // Strictly older, because an event AT the boundary is the one that moved it there, and
         // a redelivery of that same event after a resume carries that same position again.
-        val safe = appliedThrough != null && eldest.value < appliedThrough
+        val safe =
+            boundary != null &&
+                boundary.epoch == eldest.value.epoch &&
+                eldest.value.at < boundary.at
         val forced = !safe && tombstones.size > limit * TOMBSTONE_CEILING_FACTOR
         if (!safe && !forced) return@synchronized null
 
-        tombstoneCeilingBreached = forced
         tombstones.remove(eldest.key)
-        eldest.key to eldest.value
-    }
-
-    /**
-     * Logs a removed-key record that has outgrown what the change stream lets it forget safely.
-     *
-     * Separate from [tombstoneAdd] so nothing logs while holding [tombstoneLock] inside an
-     * [appliedAt] compute callback, where it would block other threads applying the same key.
-     */
-    private fun reportTombstoneCeiling() {
-        if (tombstoneCeilingBreached == tombstoneCeilingReported) return
-        tombstoneCeilingReported = tombstoneCeilingBreached
-        if (tombstoneCeilingBreached) {
-            getLoggerInternal().warn(
-                "Removed-key ordering record for $cacheName has grown past its safe bound without " +
-                    "the change stream applying far enough to forget any entry safely. Dropping the " +
-                    "oldest anyway to bound memory: a late event for a dropped key can now reinstate " +
-                    "stale content for it. The change stream is likely stopped or far behind.",
-            )
-        } else {
-            getLoggerInternal().info(
-                "Removed-key ordering record for $cacheName is back within its safe bound.",
-            )
-        }
+        Eviction(eldest.key, eldest.value.at, forced)
     }
 
     private fun tombstoneRemove(key: K) {
@@ -539,9 +558,9 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         at: OperationTime,
         becomesLive: Boolean,
         mutate: () -> Unit,
-    ): Pair<Boolean, Pair<K, OperationTime>?> {
+    ): Pair<Boolean, Eviction<K>?> {
         var applied = false
-        var eviction: Pair<K, OperationTime>? = null
+        var eviction: Eviction<K>? = null
         appliedAt.compute(key) { _, current ->
             if (current != null && at <= current) {
                 current
@@ -559,8 +578,23 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         return applied to eviction
     }
 
-    private fun applyEviction(eviction: Pair<K, OperationTime>?) {
-        eviction?.let { (key, staleValue) -> appliedAt.remove(key, staleValue) }
+    private fun applyEviction(eviction: Eviction<K>?) {
+        val evicted = eviction ?: return
+        appliedAt.remove(evicted.key, evicted.at)
+
+        // Reported once per process, by the call that forced it, so the transition can never be
+        // lost to another thread's concurrent eviction flipping a shared flag underneath it. There
+        // is no matching recovery message: a "back within bounds" line was the only thing that
+        // needed shared mutable state, and having gone degraded once is the part worth knowing.
+        if (evicted.forced && tombstoneCeilingReported.compareAndSet(false, true)) {
+            getLoggerInternal().warn(
+                "Removed-key ordering record for $cacheName has grown past its safe bound without " +
+                    "the change stream applying far enough to forget any entry safely. Dropping the " +
+                    "oldest anyway to bound memory: a late event for a dropped key can now reinstate " +
+                    "stale content for it. The change stream is likely stopped, far behind, or " +
+                    "repeatedly reconnecting.",
+            )
+        }
     }
 
     @ApiStatus.Internal
@@ -631,7 +665,6 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         val (_, eviction) =
             applyIfNewer(key, at, becomesLive = false) { removed = cacheMap.remove(key) != null }
         applyEviction(eviction)
-        reportTombstoneCeiling()
         return removed
     }
 
@@ -679,6 +712,10 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     // ------------------------------------------------------------ //
     override fun areChangeStreamJobsRunning(): Boolean = changeStreamManager?.areJobsActive() ?: false
 
+    /** Where the change stream would restart from if it lost its resume tokens. */
+    @ApiStatus.Internal
+    internal fun streamResumePositionInternal(): OperationTime? = changeStreamManager?.getResumePosition()
+
     private suspend fun loadAllIntoCache(at: OperationTime?) =
         withContext(Dispatchers.IO) {
         val documents = DataKache.storageMode.databaseService.readAll(this@DocCacheImpl)
@@ -706,6 +743,14 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                 )
             }
     }
+
+    /**
+     * The handler the change stream calls, exposed so tests can exercise the real delivery path
+     * rather than the cache primitives it delegates to. Whether an event advances the ordering
+     * boundary is decided here, not in those primitives, so it is not otherwise reachable.
+     */
+    @ApiStatus.Internal
+    internal fun changeEventHandlerInternal(): ChangeEventHandler<K, D> = createChangeEventHandler()
 
     private fun createChangeEventHandler(): ChangeEventHandler<K, D> =
         object : ChangeEventHandler<K, D> {
@@ -894,7 +939,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             )
         }
 
-        override suspend fun onConnected() {
+        override suspend fun onConnected(reconnected: Boolean) {
+            // A RE-connection may be reading from an earlier point than the last one reached, so
+            // what the last one applied says nothing about what is still to come. The first
+            // connection begins where start() asked it to, which is what the seed below records.
+            if (reconnected) invalidateStreamPositionInternal()
             getLoggerInternal().debug("Change stream connected for cache: $cacheName")
         }
 

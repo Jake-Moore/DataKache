@@ -88,8 +88,11 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         withTimeout(context.config.eventProcessingTimeout) {
                             processChangeEventSafely(event)
 
-                            // Update resume tokens after successful processing
+                            // Update resume tokens after successful processing. This is the
+                            // ordered path, so it is also the only place the operation-time
+                            // fallback may move: see advanceEffectiveStartTime.
                             resumeTokenManager.updateTokens(event.resumeToken)
+                            resumeTokenManager.advanceEffectiveStartTime(event.clusterTime)
 
                             totalEventsProcessed =
                                 if (totalEventsProcessed >= Long.MAX_VALUE - 1) {
