@@ -11,7 +11,7 @@ kamicommon = "5.0.0"
 mongodb = "5.11.0"
 slf4j = "2.0.18"
 guava = "33.7.1-jre"
-kotest = "5.9.1"
+kotest = "6.2.4"
 junit-jupiter = "6.1.3"
 testcontainers-modules = "1.21.4"
 testcontainers-core = "2.0.5"
@@ -46,7 +46,6 @@ tacospigot-server = { module = "net.techcable.tacospigot:server", version.ref = 
 kotest-runner-junit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 kotest-property = { module = "io.kotest:kotest-property", version.ref = "kotest" }
-kotest-framework-datatest = { module = "io.kotest:kotest-framework-datatest", version.ref = "kotest" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter" }
 # The MongoDB container sets up its own single-node replica set, so retryable writes and
 # transactions work without further configuration.
