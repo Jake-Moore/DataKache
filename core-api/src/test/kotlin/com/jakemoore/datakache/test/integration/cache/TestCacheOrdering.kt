@@ -303,33 +303,92 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 cache.read(stray.key).isEmpty().shouldBe(true)
             }
 
-            it("should stop refusing stale events once a tombstone is evicted, the documented bound") {
-                // Pins the documented bound rather than asserting it away. The tombstone record is
-                // finite, and a key evicted from it has no position left, so the next event for it
-                // is applied unconditionally however old it is. Ordinary delivery is in commit
-                // order so nothing older is still in flight; the change stream's out-of-band
-                // fallback is the exception, and closing that needs eviction to follow how far the
-                // stream has applied rather than a count. This test exists to fail loudly if
-                // eviction semantics change, and to keep the limit visible in the suite.
+            it("should hold a tombstone the change stream has not applied past") {
+                // The record is bounded so it cannot grow forever, but forgetting a key's position
+                // makes the next event for it apply unconditionally, so an entry may only be
+                // dropped once no event older than it can still be in flight. That boundary is how
+                // far the change stream has applied IN ORDER, which matters because the stream
+                // applies an event out of band when its buffer saturates, ahead of everything still
+                // queued. Evicting on count alone would drop exactly the entry protecting against
+                // the older queued event, and nothing later would repair it.
                 cache.tombstoneLimit = 1
 
-                val evicted =
+                val held =
                     cache
-                        .create("evictedTombstoneKey") { it.copy(name = "evictedTombstone", balance = 700.0) }
+                        .create("boundaryHeldKey") { it.copy(name = "boundaryHeld", balance = 700.0) }
                         .getOrThrow()
-                cache.uncacheInternal(evicted.key, laterThanAnyWrite(1000L))
+                cache.uncacheInternal(held.key, laterThanAnyWrite(1000L))
 
-                // A second delete pushes the first key's tombstone, and its position, out.
+                // Over the limit, so a count-based record would evict the first key here. The
+                // stream has applied nowhere near these synthetic positions, so this one may not.
                 val other =
                     cache
-                        .create("evictingOtherKey") { it.copy(name = "evictingOther", balance = 701.0) }
+                        .create("boundaryOtherKey") { it.copy(name = "boundaryOther", balance = 701.0) }
                         .getOrThrow()
                 cache.uncacheInternal(other.key, laterThanAnyWrite(1001L))
 
-                // Older than the delete that removed it, and applied anyway: no position remains.
-                cache.cacheInternal(evicted, laterThanAnyWrite(999L))
+                // The position survived, so the stale event is still refused.
+                cache.cacheInternal(held, laterThanAnyWrite(999L))
 
-                cache.read(evicted.key).isEmpty().shouldBe(false)
+                cache.read(held.key).isEmpty().shouldBe(true)
+            }
+
+            it("should evict a tombstone once the change stream has applied past it") {
+                // The other half, and why the record stays bounded rather than leaking every key
+                // ever deleted. Once the stream has applied in order past an entry's position, no
+                // event older than it can still be queued, so the entry is safe to forget.
+                cache.tombstoneLimit = 1
+
+                val evictable =
+                    cache
+                        .create("boundaryEvictKey") { it.copy(name = "boundaryEvict", balance = 800.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(evictable.key, laterThanAnyWrite(2000L))
+
+                // The ordered path reports that it has applied past that position.
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(2500L))
+
+                val other =
+                    cache
+                        .create("boundaryEvictOtherKey") { it.copy(name = "boundaryEvictOther", balance = 801.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(other.key, laterThanAnyWrite(2600L))
+
+                // The position was forgotten, which is only observable as an older event applying.
+                // Safe in production precisely because the boundary says no such event can exist.
+                cache.cacheInternal(evictable, laterThanAnyWrite(1999L))
+
+                cache.read(evictable.key).isEmpty().shouldBe(false)
+            }
+
+            it("should drop a tombstone unsafely once the record outgrows its ceiling") {
+                // Memory wins over ordering in the last resort. A stream that is stopped or far
+                // behind never moves the boundary, so the record would otherwise hold every removed
+                // key for the life of the process. Past a multiple of the limit the oldest entry is
+                // dropped anyway and the breach is logged, so a degraded cache says so rather than
+                // being killed for exhausting memory.
+                cache.tombstoneLimit = 1
+
+                val first =
+                    cache
+                        .create("ceilingFirstKey") { it.copy(name = "ceilingFirst", balance = 900.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(first.key, laterThanAnyWrite(3000L))
+
+                // The boundary never moves, so each of these is held rather than evicted, until the
+                // record passes the ceiling and the oldest goes regardless.
+                repeat(12) { i ->
+                    val other =
+                        cache
+                            .create("ceilingOtherKey$i") {
+                                it.copy(name = "ceilingOther$i", balance = 910.0 + i)
+                            }.getOrThrow()
+                    cache.uncacheInternal(other.key, laterThanAnyWrite(3001L + i))
+                }
+
+                cache.cacheInternal(first, laterThanAnyWrite(2999L))
+
+                cache.read(first.key).isEmpty().shouldBe(false)
             }
 
             it("should populate cacheContentOnlyInternal for a key with no position yet") {

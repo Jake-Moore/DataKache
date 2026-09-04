@@ -14,14 +14,23 @@ interface ChangeEventHandler<K : Any, D : Doc<K, D>> {
      * Called when a document is inserted, updated, or replaced.
      * @param doc The full [Doc] after the change.
      * @param changeType The change operation which produced the document.
+     * @param at The position of this event in the database's ordering.
+     * @param outOfBand See [onDocumentDeleted].
      */
-    suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType, at: OperationTime)
+    suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType, at: OperationTime, outOfBand: Boolean)
 
     /**
      * Called when a document is deleted.
+     *
      * @param keyString The String representation of the key of the deleted [Doc].
+     * @param at The position of this event in the database's ordering.
+     * @param outOfBand True when this event skipped the ordered buffer and was applied immediately,
+     * which the implementation does when that buffer is saturated and dropping the event would be
+     * worse. Such an event can therefore be applied AHEAD of events that are still queued and older
+     * than it, so a handler must not treat it as evidence that everything up to [at] has been
+     * applied. Ordinary events, delivered in the database's own commit order, do carry that meaning.
      */
-    suspend fun onDocumentDeleted(keyString: String, at: OperationTime)
+    suspend fun onDocumentDeleted(keyString: String, at: OperationTime, outOfBand: Boolean)
 
     /**
      * Called when the collection is dropped.

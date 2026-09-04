@@ -226,7 +226,12 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 val fullDoc = change.fullDocument
                 if (fullDoc != null) {
                     val changeType = ChangeDocumentType.fromOperationType(operationType)
-                    context.eventHandler.onDocumentChanged(fullDoc, changeType, change.eventOperationTime())
+                    context.eventHandler.onDocumentChanged(
+                        fullDoc,
+                        changeType,
+                        change.eventOperationTime(),
+                        outOfBand = isRecoveryMode,
+                    )
                     if (isRecoveryMode) {
                         context.logger.warn("Recovered from lost $operationType event for document: ${fullDoc.key}")
                     } else {
@@ -250,7 +255,11 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                 if (documentKey != null) {
                     val keyString = extractIdFromDocumentKey(documentKey)
                     if (keyString != null) {
-                        context.eventHandler.onDocumentDeleted(keyString, change.eventOperationTime())
+                        context.eventHandler.onDocumentDeleted(
+                            keyString,
+                            change.eventOperationTime(),
+                            outOfBand = isRecoveryMode,
+                        )
                         if (isRecoveryMode) {
                             context.logger.warn("Recovered from lost DELETE event for document: $keyString")
                         } else {

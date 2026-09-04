@@ -75,6 +75,10 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
             // Capture operation time BEFORE loading documents to prevent timing gaps
             val operationTime = DataKache.storageMode.databaseService.getCurrentOperationTime()
+            // The stream starts here, so everything before it is already in the preload. Seeding the
+            // boundary lets the removed-key record shed entries from the first delete onwards rather
+            // than holding every one until the first ordered event happens to arrive.
+            streamAppliedThrough = operationTime
             this.getLoggerInternal().debug(
                 "Captured operation time before loading: $operationTime for cache: $cacheName",
             )
@@ -312,6 +316,17 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     private companion object {
         /** Keys remembered after removal, so a late event for them is still refused. */
         const val DEFAULT_TOMBSTONE_LIMIT = 10_000
+
+        /**
+         * How far past [tombstoneLimit] the record may grow while the change stream has not applied
+         * far enough for eviction to be safe, before it is evicted unsafely anyway.
+         *
+         * The record can only be trimmed safely up to the point the stream has applied, so a stream
+         * that is down or badly behind cannot be allowed to hold entries indefinitely: exhausting
+         * memory takes the process out, which is worse than the staleness the record prevents. The
+         * breach is logged, so a degraded cache says so rather than going quiet.
+         */
+        const val TOMBSTONE_CEILING_FACTOR = 10L
     }
 
     /**
@@ -324,6 +339,50 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     @set:ApiStatus.Internal
     @Volatile
     internal var tombstoneLimit: Int = DEFAULT_TOMBSTONE_LIMIT
+
+    /**
+     * The position through which the change stream has applied events **in order**, or null before
+     * it has applied any.
+     *
+     * This is the boundary that makes evicting a tombstone safe, and it is the only reason eviction
+     * is safe at all. Events reach the cache in the database's commit order through a single
+     * buffered consumer, so everything still queued is newer than the last event drained from that
+     * buffer. A tombstone whose position is older than this value therefore has no event left in
+     * flight that could resurrect the key once its position is forgotten.
+     *
+     * **Advanced only by ordered events.** The change stream applies an event out of band when its
+     * buffer saturates, ahead of everything still queued, so such an event proves nothing about
+     * what has been applied and must not move this. That case is exactly the one the boundary
+     * exists for: the out-of-band event's own tombstone sits above the boundary and stays put until
+     * the buffer has drained past it.
+     *
+     * Written by the single ordered consumer and by [start]; read from inside [tombstoneAdd] on
+     * whatever thread is applying a mutation, hence volatile.
+     */
+    @Volatile
+    private var streamAppliedThrough: OperationTime? = null
+
+    /** Set inside [tombstoneAdd], reported by [reportTombstoneCeiling] outside the lock. */
+    @Volatile
+    private var tombstoneCeilingBreached = false
+
+    @Volatile
+    private var tombstoneCeilingReported = false
+
+    /**
+     * Records that the change stream has applied every event up to and including [at], in order.
+     *
+     * Called only for events delivered through the ordered buffer. Monotonic, because a stream that
+     * reconnects resumes from a token and can redeliver events it has already applied, and the
+     * boundary must not move backwards when it does.
+     */
+    @ApiStatus.Internal
+    internal fun advanceStreamPositionInternal(at: OperationTime) {
+        val current = streamAppliedThrough
+        if (current == null || at > current) {
+            streamAppliedThrough = at
+        }
+    }
 
     /**
      * The position in the database's ordering that each key's cached state was taken from.
@@ -347,23 +406,20 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * lambda for the key in question, so there is one lock ordering: appliedAt bin lock, then
      * tombstoneLock, always in that order, never the reverse.
      *
-     * **The eviction bound is a real limit and not only a memory one.** Once a key's entry is gone
-     * the cache knows nothing about its ordering, so an event for it that is still in flight is
-     * applied rather than refused. Events reach the cache in commit order, so an in-flight event is
-     * not normally older than the state it would overwrite. The exception is the change stream's
-     * out-of-band fallback, which applies an event immediately when its buffer is saturated and
-     * therefore ahead of everything still queued; a key evicted between those two deliveries can be
-     * left holding the older one, with nothing later to repair it. Eviction by count is the wrong
-     * shape for that: the safe boundary is how far the stream has actually applied, not how many
-     * keys have been removed since.
+     * **Eviction is gated on [streamAppliedThrough], not on the count alone.** Forgetting a key's
+     * position makes the next event for it apply unconditionally, so an entry may only be dropped
+     * once no event older than it can still be in flight. [tombstoneLimit] says when the record
+     * would like to shed an entry; the boundary says whether it may. A stream that is stopped or
+     * badly behind therefore holds the record above its limit, up to [TOMBSTONE_CEILING_FACTOR]
+     * times it, past which an entry is dropped unsafely and the breach is logged.
      */
     private val tombstones = LinkedHashMap<K, OperationTime>()
 
     private val tombstoneLock = Any()
 
     /**
-     * Records [key] as tombstoned at position [at], evicting the oldest entry once past
-     * [tombstoneLimit].
+     * Records [key] as tombstoned at position [at], and evicts the oldest entry if the record is
+     * over [tombstoneLimit] **and** the change stream has applied past that entry.
      *
      * @return The evicted key together with **the position it held when it was tombstoned**, or
      * null if nothing was evicted. Carrying that position out of the lock is the point. Reading it
@@ -378,14 +434,44 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         // LinkedHashMap's iteration order a true removal order for eviction to read.
         tombstones.remove(key)
         tombstones[key] = at
+
         // At least one, so the entry just added is never the eldest and cannot evict itself.
-        if (tombstones.size > tombstoneLimit.coerceAtLeast(1)) {
-            val eldest = tombstones.entries.first()
-            val evicted = eldest.key to eldest.value
-            tombstones.remove(eldest.key)
-            evicted
+        val limit = tombstoneLimit.coerceAtLeast(1)
+        if (tombstones.size <= limit) return@synchronized null
+
+        val eldest = tombstones.entries.first()
+        val appliedThrough = streamAppliedThrough
+        // Strictly older, because an event AT the boundary is the one that moved it there, and
+        // a redelivery of that same event after a resume carries that same position again.
+        val safe = appliedThrough != null && eldest.value < appliedThrough
+        val forced = !safe && tombstones.size > limit * TOMBSTONE_CEILING_FACTOR
+        if (!safe && !forced) return@synchronized null
+
+        tombstoneCeilingBreached = forced
+        tombstones.remove(eldest.key)
+        eldest.key to eldest.value
+    }
+
+    /**
+     * Logs a removed-key record that has outgrown what the change stream lets it forget safely.
+     *
+     * Separate from [tombstoneAdd] so nothing logs while holding [tombstoneLock] inside an
+     * [appliedAt] compute callback, where it would block other threads applying the same key.
+     */
+    private fun reportTombstoneCeiling() {
+        if (tombstoneCeilingBreached == tombstoneCeilingReported) return
+        tombstoneCeilingReported = tombstoneCeilingBreached
+        if (tombstoneCeilingBreached) {
+            getLoggerInternal().warn(
+                "Removed-key ordering record for $cacheName has grown past its safe bound without " +
+                    "the change stream applying far enough to forget any entry safely. Dropping the " +
+                    "oldest anyway to bound memory: a late event for a dropped key can now reinstate " +
+                    "stale content for it. The change stream is likely stopped or far behind.",
+            )
         } else {
-            null
+            getLoggerInternal().info(
+                "Removed-key ordering record for $cacheName is back within its safe bound.",
+            )
         }
     }
 
@@ -545,6 +631,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         val (_, eviction) =
             applyIfNewer(key, at, becomesLive = false) { removed = cacheMap.remove(key) != null }
         applyEviction(eviction)
+        reportTombstoneCeiling()
         return removed
     }
 
@@ -622,7 +709,12 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     private fun createChangeEventHandler(): ChangeEventHandler<K, D> =
         object : ChangeEventHandler<K, D> {
-        override suspend fun onDocumentChanged(doc: D, changeType: ChangeDocumentType, at: OperationTime) {
+        override suspend fun onDocumentChanged(
+            doc: D,
+            changeType: ChangeDocumentType,
+            at: OperationTime,
+            outOfBand: Boolean,
+        ) {
             val name = this@DocCacheImpl.cacheName
             val key = this@DocCacheImpl.keyToString(doc.key)
 
@@ -684,9 +776,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                     getLoggerInternal().debug("Handled UPDATE for ${doc.key}")
                 }
             }
+
+            if (!outOfBand) advanceStreamPositionInternal(at)
         }
 
-        override suspend fun onDocumentDeleted(keyString: String, at: OperationTime) {
+        override suspend fun onDocumentDeleted(keyString: String, at: OperationTime, outOfBand: Boolean) {
             val key: K = this@DocCacheImpl.keyFromString(keyString)
 
             // METRICS
@@ -696,6 +790,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             }
 
             val removed = uncacheInternal(key, at)
+            if (!outOfBand) advanceStreamPositionInternal(at)
             if (removed) {
                 getLoggerInternal().debug("Handled DELETE for $key")
             }
