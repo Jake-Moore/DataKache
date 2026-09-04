@@ -120,6 +120,10 @@ open class MetricsReceiverPartial : MetricsReceiver {
 
     override fun onChangeStreamBackpressure(cacheName: String) {}
 
+    override fun onUpdateQueueStalled(cacheName: String, docKeyString: String, queueDepth: Long) {}
+
+    override fun onUpdateQueueTooDeep(cacheName: String, docKeyString: String, waitedMs: Long, queueDepth: Long) {}
+
     override fun onDatabaseReadDocByUniqueIndex() {}
 
     override fun onCacheReadDocByUniqueIndex() {}

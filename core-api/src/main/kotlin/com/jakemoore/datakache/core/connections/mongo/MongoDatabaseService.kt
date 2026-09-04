@@ -55,10 +55,32 @@ import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
 
 internal class MongoDatabaseService : DatabaseService() {
+    /**
+     * The retry budget, plus room for the round trips it only covers the waiting between.
+     *
+     * **Ping is the right instrument here and was the wrong one before.** The budget this replaced
+     * used ping to predict how long a contended transaction takes, which it cannot. This uses it to
+     * predict how long a round trip takes, which is exactly what it measures. Two round trips per
+     * attempt, at most [MongoTransactions.MAX_TRANSACTION_ATTEMPTS] attempts.
+     *
+     * [MIN_ROUND_TRIP_MARGIN_MS] dominates that term below a ping of roughly 600ms, so on a healthy
+     * deployment this is the retry budget plus a flat minute. The ping term exists for the link
+     * slow enough that the flat minute would be the wrong answer.
+     *
+     * A getter rather than a stored value, so it follows the current ping instead of freezing at
+     * whatever was known when this service was constructed.
+     */
+    override val maxSingleUpdateMs: Long
+        get() {
+            val pingMs = averagePingNanos / 1_000_000
+            val roundTrips = pingMs * ROUND_TRIPS_PER_ATTEMPT * MongoTransactions.MAX_TRANSACTION_ATTEMPTS
+            return MongoTransactions.MAX_RETRY_BUDGET_MS + maxOf(roundTrips, MIN_ROUND_TRIP_MARGIN_MS)
+        }
+
     // ------------------------------------------------------------ //
     //                     Mongo Service Properties                 //
     // ------------------------------------------------------------ //
-    override var averagePingNanos: Long = -1 // Initial value 0
+    override var averagePingNanos: Long = -1 // Negative until the first ping is measured
     override val serverPingMap: Cache<String, Long> =
         CacheBuilder
             .newBuilder()
@@ -770,6 +792,12 @@ internal class MongoDatabaseService : DatabaseService() {
     }
 
     companion object {
+        /** A read and a write per attempt, roughly, which is what the margin has to cover. */
+        const val ROUND_TRIPS_PER_ATTEMPT: Long = 2
+
+        /** Used until a ping has been measured, and as a floor for a very fast deployment. */
+        const val MIN_ROUND_TRIP_MARGIN_MS: Long = 60_000
+
         internal const val DUPLICATE_KEY_VIOLATION_CODE = 11_000
     }
 }

@@ -40,7 +40,7 @@ import kotlin.time.TimeSource
 @Suppress("MemberVisibilityCanBePrivate")
 object MongoTransactions : CoroutineScope {
     // TODO - future: Add configuration support for these const values
-    private const val MAX_TRANSACTION_ATTEMPTS: Int = 50
+    internal const val MAX_TRANSACTION_ATTEMPTS: Int = 50
     private const val LOG_WRITE_CONFLICT_AFTER: Int = 10 // log after 10 attempts
     private const val LOG_WRITE_CONFLICT_FREQUENCY: Int = 5 // log every 5 attempts
     private const val WRITE_CONFLICT_ERROR_CODE = 112 // MongoDB error code for write conflicts
@@ -48,6 +48,19 @@ object MongoTransactions : CoroutineScope {
     // Backoff values
     private const val MIN_BACKOFF_MS: Long = 5
     private const val MAX_BACKOFF_MS: Long = 5000
+
+    /**
+     * The longest this retry policy can spend on one update before giving up.
+     *
+     * Every wait is at most [MAX_BACKOFF_MS], and there is one fewer of them than
+     * [MAX_TRANSACTION_ATTEMPTS], since the first attempt does not wait and the last throws before
+     * waiting. Multiplying by the attempt count is therefore a bound with a little room in it.
+     *
+     * Exposed because anything deciding whether an update has taken "too long" has to exceed it,
+     * and a number chosen independently of this one silently stops being right the moment either
+     * constant changes.
+     */
+    internal const val MAX_RETRY_BUDGET_MS: Long = MAX_TRANSACTION_ATTEMPTS * MAX_BACKOFF_MS
 
     /**
      * Execute a MongoDB document update with retries and version filter (CAS logic).

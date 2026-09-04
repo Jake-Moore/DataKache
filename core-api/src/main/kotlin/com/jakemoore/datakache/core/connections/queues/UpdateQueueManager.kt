@@ -2,6 +2,7 @@ package com.jakemoore.datakache.core.connections.queues
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.exception.update.UpdateQueueShutdownException
 import com.jakemoore.datakache.api.logging.LoggerService
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -49,8 +50,11 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
     }
 
     /**
-     * Gets or creates an UpdateQueue for the specified document key.
-     * Returns a CompletableDeferred that will resolve to the updated document.
+     * Gets or creates the UpdateQueue for this document key and enqueues the update on it.
+     *
+     * @return The queue that took the request and the deferred that will resolve to the updated
+     * document. The queue travels with it because a waiter must watch that instance rather than
+     * whatever queue later answers to the same key; see [QueuedUpdate].
      */
     suspend fun <K : Any, D : Doc<K, D>> enqueueUpdate(
         docCache: DocCache<K, D>,
@@ -58,13 +62,16 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
         updateFunction: (D) -> D,
         updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D,
         bypassValidation: Boolean,
-    ): CompletableDeferred<D> {
+    ): QueuedUpdate<K, D> {
         if (isShutdown.get()) {
             val deferred = CompletableDeferred<D>()
             deferred.completeExceptionally(
-                IllegalStateException("UpdateQueueManager is shutdown"),
+                UpdateQueueShutdownException(docCache.getKeyNamespace(doc.key)),
             )
-            return deferred
+            // getQueue, never getOrCreate. Creating one here would launch a processing coroutine
+            // on a manager that is already shut down, parked forever on a channel nothing will
+            // send to, once per document key touched during teardown.
+            return QueuedUpdate(getQueue(docCache, doc.key), deferred)
         }
 
         val queueKey = QueueKey(docCache.cacheName, docCache.keyToString(doc.key))
@@ -73,8 +80,23 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
         val queue = getOrCreateQueue(queueKey, doc.key, docCache, updateExecutor)
 
         // Enqueue the update
-        return queue.enqueueUpdate(doc, updateFunction, bypassValidation)
+        return QueuedUpdate(queue, queue.enqueueUpdate(doc, updateFunction, bypassValidation))
     }
+
+    /**
+     * A request and the queue that took it, or no queue when the manager was already shut down
+     * and the request was failed without ever being enqueued.
+     *
+     * The queue travels with the request because a waiter has to watch **that** queue, not whatever
+     * queue currently answers to the same document key. The idle sweep can retire a queue and a
+     * later write create a fresh one under the same key, and a waiter comparing progress by key
+     * would then be reading a different queue's counter: either one that has never run, so a
+     * healthy request looks wedged, or a busy one, so a wedged request looks healthy.
+     */
+    internal class QueuedUpdate<K : Any, D : Doc<K, D>>(
+        val queue: UpdateQueue<K, D>?,
+        val deferred: CompletableDeferred<D>,
+    )
 
     /**
      * Gets or creates an UpdateQueue for the specified document key.
@@ -132,15 +154,6 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
     fun <K : Any, D : Doc<K, D>> getQueueSize(docCache: DocCache<K, D>, docKey: K): Long {
         val queue = getQueue(docCache, docKey)
         return queue?.getQueueSize() ?: 0L
-    }
-
-    /**
-     * Gets the total queue size (including currently processing item) for the specified document key.
-     * Returns 0 if no queue exists for the given key.
-     */
-    fun <K : Any, D : Doc<K, D>> getTotalQueueSize(docCache: DocCache<K, D>, docKey: K): Long {
-        val queue = getQueue(docCache, docKey)
-        return queue?.getTotalQueueSize() ?: 0L
     }
 
     /**

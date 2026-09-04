@@ -2,6 +2,7 @@ package com.jakemoore.datakache.core.connections.queues
 
 import com.jakemoore.datakache.api.cache.DocCache
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.exception.update.UpdateQueueShutdownException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -54,6 +55,19 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     // Cleanup tracking
     private val lastActivityTime = AtomicReference(TimeSource.Monotonic.markNow())
 
+    /**
+     * How many requests this queue has finished, successfully or not.
+     *
+     * The waiting side uses this to tell a queue that is *busy* from one that is *wedged*. Elapsed
+     * time cannot: a deep queue under contention is slow for reasons that are not a fault, and any
+     * fixed budget for it is a guess that a slower machine invalidates. Whether anything completed
+     * in the last window is an exact question.
+     *
+     * Incremented after the executor returns, so it counts finished work rather than started work.
+     * The loop below is sequential, so it advances at most once per item and never runs ahead.
+     */
+    private val completedCount = AtomicLong(0)
+
     // Mutex for coordinating shutdown
     private val shutdownMutex = Mutex()
 
@@ -84,7 +98,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
         if (isShutdown.get()) {
             deferred.completeExceptionally(
-                IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown"),
+                UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
             )
             return deferred
         }
@@ -106,7 +120,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 if (exception is ClosedSendChannelException) {
                     // Channel is closed (shutdown)
                     deferred.completeExceptionally(
-                        IllegalStateException("UpdateQueue for key ${docCache.keyToString(key)} is shutdown"),
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                     )
                 } else {
                     // Channel is full - implement backpressure strategy
@@ -142,6 +156,15 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                     retryCount++
                 }
 
+                // A closed channel is a shutdown, not a full queue. Reporting it as "full" sends the
+                // caller looking for a load problem that is not there.
+                if (updateChannel.isClosedForSend) {
+                    deferred.completeExceptionally(
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                    )
+                    return@launch
+                }
+
                 // All retries failed - reject the update
                 val errorMessage =
                     "UpdateQueue for key ${docCache.keyToString(key)} is full " +
@@ -151,6 +174,15 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 deferred.completeExceptionally(
                     IllegalStateException(errorMessage),
                 )
+            } catch (e: CancellationException) {
+                // This scope was cancelled by shutdown, not by the caller. Without this branch the
+                // catch below forwards the CancellationException verbatim, which cancels the
+                // caller's coroutine rather than failing their call.
+                deferred.completeExceptionally(
+                    UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                )
+                // rethrow for cooperative cancellation of this queue
+                throw e
             } catch (e: Exception) {
                 // Handle any unexpected errors during backpressure handling
                 docCache.getLoggerInternal().error(
@@ -179,10 +211,10 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 try {
                     processUpdateRequest(request)
                 } catch (e: CancellationException) {
+                    // Already completed above if the executor was the thing cancelled; this covers
+                    // a cancellation between dequeue and execution. Same reasoning either way.
                     request.deferred.completeExceptionally(
-                        CancellationException(
-                            "UpdateQueue processing cancelled for key: ${docCache.keyToString(key)}",
-                        ),
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                     )
                     // rethrow for cooperative cancellation
                     throw e
@@ -194,6 +226,7 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                     request.deferred.completeExceptionally(e)
                 } finally {
                     isProcessing.set(false)
+                    completedCount.incrementAndGet()
                 }
             }
         } catch (e: CancellationException) {
@@ -225,6 +258,14 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
 
             // Complete the deferred with success
             request.deferred.complete(updatedDoc)
+        } catch (e: CancellationException) {
+            // The QUEUE was cancelled, which is not the caller's cancellation. Handing them a
+            // CancellationException would cancel their coroutine rather than fail their call.
+            request.deferred.completeExceptionally(
+                UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+            )
+            // rethrow for cooperative cancellation of this queue
+            throw e
         } catch (e: Exception) {
             // Promote exception to the deferred result
             request.deferred.completeExceptionally(e)
@@ -270,14 +311,14 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
                 // Force cancellation if timeout exceeded
                 processingJob.cancel()
 
-                // Drain remaining queued requests and complete them exceptionally
+                // Drain what never started. These were queued and abandoned, which is the same
+                // failure as the one in flight and must reach the caller the same way: as a
+                // failure they can catch, not as a cancellation of their own coroutine.
                 while (true) {
                     val result = updateChannel.tryReceive()
                     if (result.isFailure) break
                     result.getOrNull()?.deferred?.completeExceptionally(
-                        CancellationException(
-                            "UpdateQueue shutdown forced for key: ${docCache.keyToString(key)}",
-                        ),
+                        UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                     )
                 }
             } finally {
@@ -310,6 +351,9 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
      * @return the current number of items waiting in the queue (not including the one being processed)
      */
     fun getQueueSize(): Long = queueSize.get()
+
+    /** See [completedCount]. */
+    fun getCompletedCount(): Long = completedCount.get()
 
     /**
      * @return the total number of items in the queue including the one being processed
