@@ -44,7 +44,7 @@ import org.jetbrains.annotations.ApiStatus
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     override val cacheName: String,
@@ -82,7 +82,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             // connection genuinely holds: nothing older than it will be delivered on that
             // connection. It lets the removed-key record shed entries from the first delete rather
             // than holding every one until an ordered event happens to arrive.
-            streamAppliedThrough = operationTime?.let { StreamPosition(connectionEpoch.get(), it) }
+            streamPosition.updateAndGet { current -> current.copy(appliedThrough = operationTime) }
             this.getLoggerInternal().debug(
                 "Captured operation time before loading: $operationTime for cache: $cacheName",
             )
@@ -345,43 +345,31 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     internal var tombstoneLimit: Int = DEFAULT_TOMBSTONE_LIMIT
 
     /**
-     * The last event the change stream applied **in order**, and the connection it arrived on, or
-     * null before the current connection has applied any.
+     * The connection the change stream is on, and how far it has applied **in order** on that
+     * connection, or null for that second part before it has applied anything.
      *
-     * This boundary is what makes evicting a removed key's position safe, and it is the only reason
-     * eviction is safe at all. Events reach the cache in the database's commit order through a
-     * single buffered consumer, so everything still queued is newer than the last event drained
-     * from that buffer. An entry older than the boundary therefore has no event left in flight that
-     * could resurrect its key once its position is forgotten.
+     * **One value, because the two must change together.** They are written by the ordered consumer
+     * and by the producer's reconnection handling, which are different coroutines: read the
+     * connection, have the producer reconnect, then write the boundary, and the boundary is
+     * published against a connection that has been abandoned. Entries minted on it would then be
+     * forgotten against a boundary that no longer describes anything, which is the failure the
+     * connection tag exists to prevent.
      *
-     * **Advanced only by ordered events.** The change stream applies an event out of band when its
-     * buffer saturates, ahead of everything still queued, so such an event proves nothing about
-     * what has been applied. That case is exactly the one the boundary exists for: the out-of-band
-     * event's own entry sits above the boundary and stays until the buffer has drained past it.
+     * The boundary is what makes forgetting a removed key's position safe. Events reach the cache in
+     * the database's commit order through a single buffered consumer, so everything still queued is
+     * newer than the last event drained, and an entry older than the boundary has nothing in flight
+     * that could resurrect its key.
      *
-     * **And it means nothing across a reconnection**, which is why it carries an epoch. The stream
-     * can resume from a point EARLIER than it had already reached: `ResumeTokenManager` falls back
-     * to the operation time captured at cache start when both resume tokens are lost, which replays
-     * history from that point. Events older than the boundary are then delivered after all, and the
-     * property above is false. So a reconnect increments [connectionEpoch] and clears this, and an
-     * entry is only safely evictable against a boundary from the epoch it was minted in.
+     * **It means nothing across a reposition**, which is why the connection travels with it. A
+     * reconnection that falls back to an operation time can start before the boundary and deliver
+     * events older than it; one that resumes from a token cannot, and keeps its progress.
      */
-    @Volatile
-    private var streamAppliedThrough: StreamPosition? = null
-
-    /**
-     * Which connection the change stream is on. Incremented by [invalidateStreamPositionInternal].
-     *
-     * A reposition can only happen at a reconnection, so this is the granularity at which the
-     * boundary's meaning changes. Entries minted on an earlier connection are never safely
-     * evictable afterwards, only evictable by the ceiling, which bounds what that costs.
-     */
-    private val connectionEpoch = AtomicInteger(0)
+    private val streamPosition = AtomicReference(StreamPosition(epoch = 0, appliedThrough = null))
 
     /** Reported at most once per process, so a forced eviction can never be lost to a race. */
     private val tombstoneCeilingReported = AtomicBoolean(false)
 
-    private data class StreamPosition(val epoch: Int, val at: OperationTime)
+    private data class StreamPosition(val epoch: Int, val appliedThrough: OperationTime?)
 
     private data class Tombstone(val at: OperationTime, val epoch: Int)
 
@@ -389,34 +377,34 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
     /**
      * Records that the change stream has applied every event up to and including [at], in order, on
-     * the current connection.
+     * the connection it is currently on.
      *
-     * Called only for events delivered through the ordered buffer. Monotonic **within** an epoch,
-     * because a resumed stream can redeliver an event it has already applied and the boundary must
-     * not move backwards when it does. Across epochs it starts again, because a new connection may
-     * be reading from an earlier point entirely.
+     * Called only for events delivered through the ordered buffer. Monotonic **within** a
+     * connection, because a resumed stream can redeliver an event it has already applied and the
+     * boundary must not move backwards when it does. A reconnection that repositioned starts again,
+     * and this cannot resurrect the previous one's boundary, because both live in one value.
      */
     @ApiStatus.Internal
     internal fun advanceStreamPositionInternal(at: OperationTime) {
-        val epoch = connectionEpoch.get()
-        val current = streamAppliedThrough
-        if (current == null || current.epoch != epoch || at > current.at) {
-            streamAppliedThrough = StreamPosition(epoch, at)
+        streamPosition.updateAndGet { current ->
+            val applied = current.appliedThrough
+            if (applied == null || at > applied) current.copy(appliedThrough = at) else current
         }
     }
 
     /**
-     * Forgets where the change stream had applied to, because it has just (re)connected and may be
-     * reading from an earlier point than it had already reached.
+     * Forgets where the change stream had applied to, because it has just reconnected somewhere it
+     * may not have reached yet.
      *
-     * Eviction is suspended until ordered delivery re-establishes a boundary on the new epoch, so a
-     * replay cannot mint an entry and immediately drop it against a boundary the previous
-     * connection had advanced.
+     * Forgetting entries is suspended until ordered delivery re-establishes a boundary on the new
+     * connection, and entries from the previous one can never be forgotten safely again, only by
+     * the ceiling. That is the cost of not being able to compare positions across a reposition.
      */
     @ApiStatus.Internal
     internal fun invalidateStreamPositionInternal() {
-        connectionEpoch.incrementAndGet()
-        streamAppliedThrough = null
+        streamPosition.updateAndGet { current ->
+            StreamPosition(epoch = current.epoch + 1, appliedThrough = null)
+        }
     }
 
     /**
@@ -442,7 +430,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * lambda for the key in question, so there is one lock ordering: appliedAt bin lock, then
      * tombstoneLock, always in that order, never the reverse.
      *
-     * **Eviction is gated on [streamAppliedThrough], not on the count alone.** Forgetting a key's
+     * **Eviction is gated on [streamPosition], not on the count alone.** Forgetting a key's
      * position makes the next event for it apply unconditionally, so an entry may only be dropped
      * once no event older than it can still be in flight. [tombstoneLimit] says when the record
      * would like to shed an entry; the boundary says whether it may. A stream that is stopped or
@@ -474,20 +462,21 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         // Remove first so a re-tombstoned key is reinserted at the end, keeping the
         // LinkedHashMap's iteration order a true removal order for eviction to read.
         tombstones.remove(key)
-        tombstones[key] = Tombstone(at, connectionEpoch.get())
+        val position = streamPosition.get()
+        tombstones[key] = Tombstone(at, position.epoch)
 
         // At least one, so the entry just added is never the eldest and cannot evict itself.
         val limit = tombstoneLimit.coerceAtLeast(1)
         if (tombstones.size <= limit) return@synchronized null
 
         val eldest = tombstones.entries.first()
-        val boundary = streamAppliedThrough
         // Strictly older, because an event AT the boundary is the one that moved it there, and
         // a redelivery of that same event after a resume carries that same position again.
+        val appliedThrough = position.appliedThrough
         val safe =
-            boundary != null &&
-                boundary.epoch == eldest.value.epoch &&
-                eldest.value.at < boundary.at
+            appliedThrough != null &&
+                position.epoch == eldest.value.epoch &&
+                eldest.value.at < appliedThrough
         val forced = !safe && tombstones.size > limit * TOMBSTONE_CEILING_FACTOR
         if (!safe && !forced) return@synchronized null
 

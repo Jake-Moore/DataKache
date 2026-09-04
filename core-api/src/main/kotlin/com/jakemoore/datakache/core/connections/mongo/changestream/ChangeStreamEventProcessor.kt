@@ -86,7 +86,8 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
         eventChannel = Channel(capacity = context.config.maxBufferedEvents)
         queueDepth.set(0)
         queuePeak.set(0)
-        queuePeakAllTime.set(0)
+        // queuePeakAllTime deliberately survives: it says what this stream has ever reached, and a
+        // reconnection replacing the channel is exactly when a reader most wants that to hold.
         context.logger.debug("Created new event channel with capacity ${context.config.maxBufferedEvents}")
     }
 
@@ -127,13 +128,18 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     if (event != null) {
                         queueDepth.decrementAndGet()
                         withTimeout(context.config.eventProcessingTimeout) {
-                            processChangeEventSafely(event)
-
-                            // Update resume tokens after successful processing. This is the
-                            // ordered path, so it is also the only place the operation-time
-                            // fallback may move: see advanceEffectiveStartTime.
-                            resumeTokenManager.updateTokens(event.resumeToken)
-                            resumeTokenManager.advanceEffectiveStartTime(event.clusterTime)
+                            // Only on success. Advancing past an event the cache did not apply
+                            // means a later reconnection resumes after it, and the mutation is
+                            // never delivered again: a silent, permanent hole in the cache. A
+                            // later event that does succeed will move the position past it anyway,
+                            // which is the wider problem this does not solve, but moving it for an
+                            // event that is known to have failed is a choice rather than a race.
+                            if (processChangeEventSafely(event)) {
+                                // The ordered path, so also the only place the operation-time
+                                // fallback may move: see advanceEffectiveStartTime.
+                                resumeTokenManager.updateTokens(event.resumeToken)
+                                resumeTokenManager.advanceEffectiveStartTime(event.clusterTime)
+                            }
 
                             totalEventsProcessed =
                                 if (totalEventsProcessed >= Long.MAX_VALUE - 1) {
@@ -337,14 +343,17 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     /**
      * Processes a single change event from the change stream with enhanced error handling.
      * This method is called by the event processor with timeout protection.
+     *
+     * @return Whether the event was applied. False means the cache did not receive this mutation,
+     * so the stream's resume position must not move past it.
      */
-    private suspend fun processChangeEventSafely(change: ChangeStreamDocument<D>) {
+    private suspend fun processChangeEventSafely(change: ChangeStreamDocument<D>): Boolean =
         try {
-            processEventCore(change)
-        } catch (e: Exception) {
-            context.logger.error(e, "Error processing change event")
-            // Don't rethrow - we want to continue processing other events
-        }
+        processEventCore(change)
+    } catch (e: Exception) {
+        context.logger.error(e, "Error processing change event")
+        // Not rethrown: one bad event should not stop the stream for every other key.
+        false
     }
 
     /**
