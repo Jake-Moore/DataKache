@@ -139,57 +139,70 @@ internal class UpdateQueue<K : Any, D : Doc<K, D>>(
     @OptIn(DelicateCoroutinesApi::class)
     private fun handleBackpressure(request: UpdateRequest<K, D>, deferred: CompletableDeferred<D>) {
         // Launch a coroutine to handle backpressure asynchronously
-        scope.launch {
-            try {
-                var retryCount = 0
+        val job =
+            scope.launch {
+                try {
+                    var retryCount = 0
 
-                while (retryCount < MAX_BACKPRESSURE_RETRIES && !updateChannel.isClosedForSend) {
-                    delay(BACKPRESSURE_RETRY_DELAY_MS)
+                    while (retryCount < MAX_BACKPRESSURE_RETRIES && !updateChannel.isClosedForSend) {
+                        delay(BACKPRESSURE_RETRY_DELAY_MS)
 
-                    val retryResult = updateChannel.trySend(request)
-                    if (retryResult.isSuccess) {
-                        // Successfully queued after retry
-                        queueSize.incrementAndGet()
+                        val retryResult = updateChannel.trySend(request)
+                        if (retryResult.isSuccess) {
+                            // Successfully queued after retry
+                            queueSize.incrementAndGet()
+                            return@launch
+                        }
+
+                        retryCount++
+                    }
+
+                    // A closed channel is a shutdown, not a full queue. Reporting it as "full" sends the
+                    // caller looking for a load problem that is not there.
+                    if (updateChannel.isClosedForSend) {
+                        deferred.completeExceptionally(
+                            UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
+                        )
                         return@launch
                     }
 
-                    retryCount++
-                }
+                    // All retries failed - reject the update
+                    val errorMessage =
+                        "UpdateQueue for key ${docCache.keyToString(key)} is full " +
+                            "(capacity: $MAX_QUEUED_UPDATES). Update rejected after $MAX_BACKPRESSURE_RETRIES retry attempts."
 
-                // A closed channel is a shutdown, not a full queue. Reporting it as "full" sends the
-                // caller looking for a load problem that is not there.
-                if (updateChannel.isClosedForSend) {
+                    docCache.getLoggerInternal().warn(errorMessage)
+                    deferred.completeExceptionally(
+                        IllegalStateException(errorMessage),
+                    )
+                } catch (e: CancellationException) {
+                    // This scope was cancelled by shutdown, not by the caller. Without this branch the
+                    // catch below forwards the CancellationException verbatim, which cancels the
+                    // caller's coroutine rather than failing their call.
                     deferred.completeExceptionally(
                         UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                     )
-                    return@launch
+                    // rethrow for cooperative cancellation of this queue
+                    throw e
+                } catch (e: Exception) {
+                    // Handle any unexpected errors during backpressure handling
+                    docCache.getLoggerInternal().error(
+                        e,
+                        "Error during backpressure handling for key: ${docCache.keyToString(key)}",
+                    )
+                    deferred.completeExceptionally(e)
                 }
+            }
 
-                // All retries failed - reject the update
-                val errorMessage =
-                    "UpdateQueue for key ${docCache.keyToString(key)} is full " +
-                        "(capacity: $MAX_QUEUED_UPDATES). Update rejected after $MAX_BACKPRESSURE_RETRIES retry attempts."
-
-                docCache.getLoggerInternal().warn(errorMessage)
-                deferred.completeExceptionally(
-                    IllegalStateException(errorMessage),
-                )
-            } catch (e: CancellationException) {
-                // This scope was cancelled by shutdown, not by the caller. Without this branch the
-                // catch below forwards the CancellationException verbatim, which cancels the
-                // caller's coroutine rather than failing their call.
+        // A coroutine cancelled before its body runs never reaches the catch above, so the caller
+        // would hold a deferred nothing will ever complete: they wait a whole window and are told
+        // the queue stalled, which is the wrong diagnosis for a queue that shut down. Completing
+        // is idempotent, so this is a no-op whenever the body did get to run.
+        job.invokeOnCompletion { cause ->
+            if (cause != null) {
                 deferred.completeExceptionally(
                     UpdateQueueShutdownException(docCache.getKeyNamespace(key)),
                 )
-                // rethrow for cooperative cancellation of this queue
-                throw e
-            } catch (e: Exception) {
-                // Handle any unexpected errors during backpressure handling
-                docCache.getLoggerInternal().error(
-                    e,
-                    "Error during backpressure handling for key: ${docCache.keyToString(key)}",
-                )
-                deferred.completeExceptionally(e)
             }
         }
     }

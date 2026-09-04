@@ -9,6 +9,7 @@ import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.metrics.MetricsReceiverPartial
 import com.jakemoore.datakache.api.result.Failure
 import com.jakemoore.datakache.core.connections.queues.UpdateQueue
+import com.jakemoore.datakache.core.connections.queues.UpdateQueueManager
 import com.jakemoore.datakache.util.core.AbstractDataKacheTest
 import com.jakemoore.datakache.util.doc.TestGenericDoc
 import io.kotest.assertions.throwables.shouldThrow
@@ -287,6 +288,26 @@ class TestUpdateQueueLiveness : AbstractDataKacheTest() {
                 } finally {
                     DataKacheMetrics.unregisterReceiverByID("liveness-shutdown-public")
                 }
+            }
+
+            it("should hold no queues and refuse new updates once the manager is shut down") {
+                // A queue created after shutdown has taken its snapshot appears in no snapshot, is
+                // never shut down, and leaves a processing coroutine running an executor against a
+                // service that has stopped. Admission is decided under the lock the snapshot is
+                // taken with, which is the ordering this pins. Uses its own manager, since shutting
+                // down the shared one would take every later test with it.
+                val manager = UpdateQueueManager(cache.getLoggerInternal())
+                val doc = cache.create("managerShutdownKey") { it.copy(name = "managerShutdown") }.getOrThrow()
+                val immediate: Executor = { _, d, f, _ -> f(d) }
+
+                manager.enqueueUpdate(cache, doc, { it }, immediate, true).deferred.await()
+                manager.getActiveQueuesCount().shouldBe(1)
+
+                manager.shutdown()
+                manager.getActiveQueuesCount().shouldBe(0)
+
+                val refused = manager.enqueueUpdate(cache, doc, { it }, immediate, true)
+                shouldThrow<UpdateQueueShutdownException> { refused.deferred.await() }
             }
 
             it("should still count an ordinary update failure through the public path") {

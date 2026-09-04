@@ -64,23 +64,33 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
         bypassValidation: Boolean,
     ): QueuedUpdate<K, D> {
         if (isShutdown.get()) {
-            val deferred = CompletableDeferred<D>()
-            deferred.completeExceptionally(
-                UpdateQueueShutdownException(docCache.getKeyNamespace(doc.key)),
-            )
-            // getQueue, never getOrCreate. Creating one here would launch a processing coroutine
-            // on a manager that is already shut down, parked forever on a channel nothing will
-            // send to, once per document key touched during teardown.
-            return QueuedUpdate(getQueue(docCache, doc.key), deferred)
+            return refuse(docCache, doc.key)
         }
 
         val queueKey = QueueKey(docCache.cacheName, docCache.keyToString(doc.key))
 
-        // Get or create the queue for this document key
-        val queue = getOrCreateQueue(queueKey, doc.key, docCache, updateExecutor)
+        // Null once shutdown has begun. The check above is only a fast path; this one is the
+        // authoritative answer, because it is made under the same lock shutdown snapshots with.
+        val queue =
+            getOrCreateQueue(queueKey, doc.key, docCache, updateExecutor)
+                ?: return refuse(docCache, doc.key)
 
         // Enqueue the update
         return QueuedUpdate(queue, queue.enqueueUpdate(doc, updateFunction, bypassValidation))
+    }
+
+    /**
+     * A request the manager would not accept, failed before it reached any queue.
+     */
+    private fun <K : Any, D : Doc<K, D>> refuse(docCache: DocCache<K, D>, docKey: K): QueuedUpdate<K, D> {
+        val deferred = CompletableDeferred<D>()
+        deferred.completeExceptionally(
+            UpdateQueueShutdownException(docCache.getKeyNamespace(docKey)),
+        )
+        // getQueue, never getOrCreate. Creating one here would launch a processing coroutine on a
+        // manager that is already shut down, parked forever on a channel nothing will send to,
+        // once per document key touched during teardown.
+        return QueuedUpdate(getQueue(docCache, docKey), deferred)
     }
 
     /**
@@ -100,7 +110,13 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
 
     /**
      * Gets or creates an UpdateQueue for the specified document key.
-     * Returns a CompletableDeferred that will resolve to the updated document.
+     *
+     * Null once [shutdown] has set its flag, so that no queue is created after the snapshot that
+     * shutdown takes: such a queue is in no snapshot, is never shut down, and leaves a processing
+     * coroutine running an executor against a service that has stopped.
+     *
+     * The lock-free read stays lock free. An entry found there was published before any snapshot,
+     * so it is either in that snapshot or the map has since been cleared and the read misses.
      */
     @Suppress("UNCHECKED_CAST")
     private suspend fun <K : Any, D : Doc<K, D>> getOrCreateQueue(
@@ -108,7 +124,7 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
         documentKey: K,
         docCache: DocCache<K, D>,
         updateExecutor: suspend (DocCache<K, D>, D, (D) -> D, Boolean) -> D,
-    ): UpdateQueue<K, D> {
+    ): UpdateQueue<K, D>? {
         // First check without lock (fast path)
         val existingQueue = queues[queueKey]
         if (existingQueue != null) {
@@ -117,6 +133,12 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
 
         // Double-checked locking to prevent race conditions
         return queueMutex.withLock {
+            // Shutdown sets its flag before taking this lock, so reading it here orders creation
+            // against the snapshot: either this queue is in it, or this returns null.
+            if (isShutdown.get()) {
+                return@withLock null
+            }
+
             // Check again inside the lock in case another thread created it
             val doubleCheckedQueue = queues[queueKey]
             if (doubleCheckedQueue != null) {
@@ -236,9 +258,15 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
         // Cancel the cleanup job
         job.cancel()
 
-        // Shutdown all existing queues
-        val activeQueues = queues.values.toList()
-        queues.clear()
+        // Under the lock, so it cannot interleave with a queue being created. Each queue is then
+        // shut down outside it, since that waits on in-flight work and the idle sweep holds this
+        // same lock.
+        val activeQueues =
+            queueMutex.withLock {
+                val snapshot = queues.values.toList()
+                queues.clear()
+                snapshot
+            }
 
         activeQueues.forEach { queue ->
             runCatching { queue.shutdown() }
