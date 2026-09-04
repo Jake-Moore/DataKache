@@ -36,7 +36,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     private val resumeTokenManager: ResumeTokenManager<K, D>,
 ) {
     // Event processing with backpressure - recreated in start()
-    private var eventChannel: Channel<ChangeStreamDocument<D>>? = null
+    private var eventChannel: Channel<StreamItem<D>>? = null
 
     // For monitoring and debugging
     private var totalEventsProcessed = 0L
@@ -83,7 +83,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      */
     fun createNewEventChannel() {
         eventChannel?.close() // Close existing channel if any
-        eventChannel = Channel(capacity = context.config.maxBufferedEvents)
+        eventChannel = Channel<StreamItem<D>>(capacity = context.config.maxBufferedEvents)
         queueDepth.set(0)
         queuePeak.set(0)
         // queuePeakAllTime deliberately survives: it says what this stream has ever reached, and a
@@ -117,7 +117,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                     val checkInterval = minOf(maxOf(baseInterval, 100), 5000) // Min 100ms, max 5s
 
                     val currentChannel = eventChannel
-                    val event =
+                    val item =
                         select {
                             if (currentChannel != null && !currentChannel.isClosedForReceive) {
                                 currentChannel.onReceive { it }
@@ -125,20 +125,33 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                             onTimeout(checkInterval) { null }
                         }
 
-                    if (event != null) {
+                    if (item != null) {
                         queueDepth.decrementAndGet()
                         withTimeout(context.config.eventProcessingTimeout) {
-                            // Only on success. Advancing past an event the cache did not apply
-                            // means a later reconnection resumes after it, and the mutation is
-                            // never delivered again: a silent, permanent hole in the cache. A
-                            // later event that does succeed will move the position past it anyway,
-                            // which is the wider problem this does not solve, but moving it for an
-                            // event that is known to have failed is a choice rather than a race.
-                            if (processChangeEventSafely(event)) {
-                                // The ordered path, so also the only place the operation-time
-                                // fallback may move: see advanceEffectiveStartTime.
-                                resumeTokenManager.updateTokens(event.resumeToken)
-                                resumeTokenManager.advanceEffectiveStartTime(event.clusterTime)
+                            when (item) {
+                                // Taken from the buffer in order, so it lands exactly between the
+                                // connection that produced the events before it and the one that
+                                // produced those after.
+                                is StreamItem.Reposition -> {
+                                    context.eventHandler.onStreamRepositioned()
+                                }
+
+                                is StreamItem.Event -> {
+                                    val event = item.change
+                                    // Only on success. Advancing past an event the cache did not
+                                    // apply means a later reconnection resumes after it, and the
+                                    // mutation is never delivered again: a silent, permanent hole.
+                                    // A later event that does succeed will move the position past
+                                    // it anyway, which is the wider problem this does not solve,
+                                    // but moving it for an event known to have failed is a choice
+                                    // rather than a race.
+                                    if (processChangeEventSafely(event)) {
+                                        // The ordered path, so also the only place the
+                                        // operation-time fallback may move.
+                                        resumeTokenManager.updateTokens(event.resumeToken)
+                                        resumeTokenManager.advanceEffectiveStartTime(event.clusterTime)
+                                    }
+                                }
                             }
 
                             totalEventsProcessed =
@@ -213,23 +226,44 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             return false
         }
 
-        // Counted BEFORE the event can be seen by the consumer. Counting after the send lets the
+        return enqueue(channel, StreamItem.Event(change), describe = "${change.operationType}")
+    }
+
+    /**
+     * Announces a reposition through the buffer, so it lands between the events it separates.
+     *
+     * Sent rather than offered, like an event: dropping it would leave the cache believing the new
+     * connection's progress continues the old one's, which is the state it exists to prevent.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    suspend fun handleReposition(): Boolean {
+        val channel = eventChannel
+        if (channel == null || channel.isClosedForSend) {
+            context.logger.warn("Stream repositioned with no open buffer; it will be reported on restart.")
+            return false
+        }
+        return enqueue(channel, StreamItem.Reposition(), describe = "reposition")
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private suspend fun enqueue(channel: Channel<StreamItem<D>>, item: StreamItem<D>, describe: String): Boolean {
+        // Counted BEFORE the item can be seen by the consumer. Counting after the send lets the
         // consumer dequeue and decrement first, which reads as a negative depth and hides the very
         // burst the peak exists to record.
         recordEnqueued()
         return try {
             // Fast path first, purely so a full buffer can be reported before we wait on it.
-            if (channel.trySend(change).isSuccess) return true
+            if (channel.trySend(item).isSuccess) return true
 
             context.logger.warn(
-                "Change stream buffer full (${context.config.maxBufferedEvents} events), " +
-                    "pausing the stream until it drains",
+                "Change stream buffer full (${context.config.maxBufferedEvents} events) while " +
+                    "queueing $describe, pausing the stream until it drains",
             )
             DataKacheMetrics.getReceiversInternal().forEach {
                 it.onChangeStreamBackpressure(context.collection.namespace.collectionName)
             }
 
-            channel.send(change)
+            channel.send(item)
             true
         } catch (_: ClosedSendChannelException) {
             queueDepth.decrementAndGet()
@@ -460,10 +494,10 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     }
 
     /**
-     * Gets the current event channel for external access.
+     * Gets the current event buffer for external access.
      */
     @Suppress("unused")
-    fun getCurrentChannel(): Channel<ChangeStreamDocument<D>>? = eventChannel
+    fun getCurrentChannel(): Channel<StreamItem<D>>? = eventChannel
 }
 
 /**

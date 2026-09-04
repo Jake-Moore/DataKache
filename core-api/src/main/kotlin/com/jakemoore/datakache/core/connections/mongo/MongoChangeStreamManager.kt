@@ -275,9 +275,14 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 // starts immediately after the last event applied, so only a reconnection that fell
                 // back to a time, or to nothing, can deliver something older.
                 val reconnected = connectionSequence.observeConnection()
-                onSuccessfulConnection(
-                    mayHaveRepositioned = reconnected && !resumeTokenManager.lastStartResumedFromToken(),
-                )
+                val repositioned = reconnected && !resumeTokenManager.lastStartResumedFromToken()
+                onSuccessfulConnection()
+                if (repositioned) {
+                    // Through the buffer, not straight to the handler. The consumer may still be
+                    // draining events from the previous connection, and a reposition that reached
+                    // the cache ahead of them would be applied to them as well.
+                    eventProcessor.handleReposition()
+                }
             }
 
             // Handle the event through the event processor (tokens updated after processing)
@@ -288,7 +293,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     /**
      * Handles successful connection to the change stream.
      */
-    private suspend fun onSuccessfulConnection(mayHaveRepositioned: Boolean) {
+    private suspend fun onSuccessfulConnection() {
         if (errorHandler.getConsecutiveFailures() > 0) {
             context.logger.debug(
                 "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures",
@@ -296,7 +301,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         }
 
         errorHandler.resetFailures()
-        context.eventHandler.onConnected(mayHaveRepositioned)
+        context.eventHandler.onConnected()
         context.logger.debug("Change stream connected")
     }
 

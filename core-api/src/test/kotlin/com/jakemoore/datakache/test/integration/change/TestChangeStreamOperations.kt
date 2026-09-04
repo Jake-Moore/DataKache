@@ -30,15 +30,26 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
                 require(initial != null) { "expected buffer stats while the stream is running" }
                 require(initial.capacity > 0) { "expected a bounded buffer, got ${initial.capacity}" }
 
+                val atStart = cache.streamResumePositionInternal()
+                require(atStart != null) { "expected a resume position while the stream is running" }
+
                 repeat(5) { i ->
                     cache
                         .create("queueStatsKey$i") { it.copy(name = "queueStats$i", balance = 860.0 + i) }
                         .getOrThrow()
                 }
 
-                // Fixed wait rather than polling, because every read resets the peak and polling
-                // would destroy the evidence this asserts on.
-                delay(1_000)
+                // Waiting on a condition rather than on a fixed duration, because a second is a
+                // guess about a container under load. The resume position only advances on the
+                // ordered path, so it advancing past where it began means these writes' events have
+                // been applied and the buffer has drained. Polling THAT rather than the buffer
+                // stats matters: every stats read resets the peak, so polling the stats would
+                // destroy the evidence this asserts on.
+                eventually(10.seconds) {
+                    delay(100)
+                    val now = cache.streamResumePositionInternal()
+                    require(now != null && now > atStart) { "events not applied yet (at $now)" }
+                }
 
                 val afterWrites = cache.getChangeStreamQueueStats()
                 require(afterWrites != null)

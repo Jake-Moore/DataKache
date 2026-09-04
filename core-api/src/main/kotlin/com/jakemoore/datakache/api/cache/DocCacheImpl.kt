@@ -938,14 +938,22 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             )
         }
 
-        override suspend fun onConnected(mayHaveRepositioned: Boolean) {
-            // Only when this connection could be reading from an earlier point than the stream had
-            // already reached. A resume token starts immediately after the last event applied, so
-            // an ordinary reconnection keeps its progress; discarding it on every reconnection
-            // would be safe and would also mean the boundary is almost never usable, leaving the
-            // ceiling as the normal way entries leave the record.
-            if (mayHaveRepositioned) invalidateStreamPositionInternal()
+        override suspend fun onConnected() {
             getLoggerInternal().debug("Change stream connected for cache: $cacheName")
+        }
+
+        override suspend fun onStreamRepositioned() {
+            // Arrives between the last event of the previous connection and the first of the new
+            // one, so everything already applied advanced the old connection's boundary and
+            // everything after this advances the new one. Reading the connection at the moment an
+            // event is applied, rather than at the moment it arrived, is what let a leftover event
+            // publish a boundary against a connection that had already been abandoned.
+            invalidateStreamPositionInternal()
+            getLoggerInternal().warn(
+                "Change stream for $cacheName reconnected at a point it may not have reached " +
+                    "before. Removed-key positions from before it can no longer be forgotten " +
+                    "safely, only by the ceiling.",
+            )
         }
 
         override suspend fun onDisconnected() {

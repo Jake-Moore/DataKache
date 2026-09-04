@@ -60,18 +60,25 @@ interface ChangeEventHandler<K : Any, D : Doc<K, D>> {
     /**
      * Called when the change stream connects successfully.
      *
-     * @param mayHaveRepositioned True when this connection could be reading from a point EARLIER
-     * than the stream had already reached, so anything a handler concluded from the previous
-     * connection's progress no longer holds.
-     *
-     * False for the first connection, which begins exactly where its caller asked, and false for a
-     * reconnection that resumed from a resume token, which starts immediately after the last event
-     * already applied. **Only a reconnection that fell back to a time, or to nothing, can go
-     * backwards**, and treating every reconnection as if it had would be safe but expensive:
-     * reconnections are routine, and a handler that discards its progress on each one never gets to
-     * use it.
+     * Informational. A reconnection that may have gone backwards is reported separately, and in
+     * stream order, by [onStreamRepositioned].
      */
-    suspend fun onConnected(mayHaveRepositioned: Boolean)
+    suspend fun onConnected()
+
+    /**
+     * Called when the stream has reconnected somewhere it may not have reached before, so events
+     * after this point can be OLDER than events before it.
+     *
+     * **Delivered in stream order**, between the last event of the previous connection and the
+     * first of the new one, because that is the only moment at which it is true. The producer knows
+     * about the reconnection immediately, while the consumer may still be draining events from the
+     * connection before it; announcing it directly would apply it to those events too.
+     *
+     * Not called for the first connection, which begins exactly where its caller asked, nor for a
+     * reconnection that resumed from a resume token, which starts immediately after the last event
+     * already applied. Only a fallback to an operation time, or to nothing, can go backwards.
+     */
+    suspend fun onStreamRepositioned()
 
     /**
      * Called when the change stream disconnects.

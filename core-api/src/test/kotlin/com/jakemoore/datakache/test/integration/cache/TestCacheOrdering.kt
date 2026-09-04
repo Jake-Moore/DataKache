@@ -483,7 +483,7 @@ class TestCacheOrdering : AbstractDataKacheTest() {
 
                 // A boundary that would permit forgetting it, and then a reconnection.
                 cache.advanceStreamPositionInternal(laterThanAnyWrite(5500L))
-                cache.changeEventHandlerInternal().onConnected(mayHaveRepositioned = true)
+                cache.changeEventHandlerInternal().onStreamRepositioned()
 
                 val other =
                     cache
@@ -512,7 +512,7 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 cache.uncacheInternal(evictable.key, laterThanAnyWrite(8000L))
 
                 cache.advanceStreamPositionInternal(laterThanAnyWrite(8500L))
-                cache.changeEventHandlerInternal().onConnected(mayHaveRepositioned = false)
+                cache.changeEventHandlerInternal().onConnected()
 
                 val other =
                     cache
@@ -542,7 +542,7 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                         .getOrThrow()
                 cache.uncacheInternal(held.key, laterThanAnyWrite(7000L))
 
-                cache.changeEventHandlerInternal().onConnected(mayHaveRepositioned = true)
+                cache.changeEventHandlerInternal().onStreamRepositioned()
 
                 // The new connection establishes a boundary well past the old entry's position.
                 // Comparing positions alone would forget it; comparing connections does not.
