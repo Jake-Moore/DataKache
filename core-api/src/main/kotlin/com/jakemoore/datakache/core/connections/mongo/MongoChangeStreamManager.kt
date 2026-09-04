@@ -2,6 +2,7 @@ package com.jakemoore.datakache.core.connections.mongo
 
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
 import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.core.connections.DatabaseScope
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
@@ -12,6 +13,7 @@ import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamC
 import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamErrorHandler
 import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamEventProcessor
 import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamStateManager
+import com.jakemoore.datakache.core.connections.mongo.changestream.ConnectionSequence
 import com.jakemoore.datakache.core.connections.mongo.changestream.ResumeTokenManager
 import com.jakemoore.datakache.core.connections.mongo.changestream.RetryDecision
 import com.mongodb.client.model.changestream.ChangeStreamDocument
@@ -41,6 +43,8 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     // Specialized components
     private val stateManager = ChangeStreamStateManager(context)
     private val errorHandler = ChangeStreamErrorHandler(context)
+    private val connectionSequence = ConnectionSequence()
+
     private val resumeTokenManager = ResumeTokenManager(context, errorHandler)
     private val eventProcessor = ChangeStreamEventProcessor(context, stateManager, errorHandler, resumeTokenManager)
 
@@ -259,13 +263,13 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             }
 
             // Update state to connected on first successful event
-            val firstConnection =
-                stateManager.transitionTo(ChangeStreamState.CONNECTING, ChangeStreamState.CONNECTED)
-            val reconnection =
-                !firstConnection &&
-                    stateManager.transitionTo(ChangeStreamState.RECONNECTING, ChangeStreamState.CONNECTED)
-            if (firstConnection || reconnection) {
-                onSuccessfulConnection(reconnected = reconnection)
+            if (stateManager.transitionTo(ChangeStreamState.CONNECTING, ChangeStreamState.CONNECTED) ||
+                stateManager.transitionTo(ChangeStreamState.RECONNECTING, ChangeStreamState.CONNECTED)
+            ) {
+                // Asked of the sequence rather than of the state machine, which cannot answer it:
+                // startChangeStreamWithRetry forces CONNECTING at the top of every attempt, so a
+                // retried connection no longer looks like one by the time it succeeds.
+                onSuccessfulConnection(reconnected = connectionSequence.observeConnection())
             }
 
             // Handle the event through the event processor (tokens updated after processing)
@@ -299,6 +303,8 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * Gets the last error that occurred, if any.
      */
     override fun getLastError(): Throwable? = errorHandler.getLastError()
+
+    override fun getQueueStats(): ChangeStreamQueueStats = eventProcessor.getQueueStats()
 
     override fun getResumePosition(): OperationTime? =
         resumeTokenManager.getEffectiveStartTime()?.let { OperationTime(it.value) }

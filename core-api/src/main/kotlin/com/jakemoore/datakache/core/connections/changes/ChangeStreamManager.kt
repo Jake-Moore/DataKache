@@ -1,6 +1,7 @@
 package com.jakemoore.datakache.core.connections.changes
 
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
 import com.jakemoore.datakache.api.ordering.OperationTime
 import org.jetbrains.annotations.ApiStatus
 
@@ -53,4 +54,9 @@ interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
      * than replaying from wherever it first started.
      */
     fun getResumePosition(): OperationTime?
+
+    /**
+     * A snapshot of this stream's event buffer. Reading it resets the recorded peak.
+     */
+    fun getQueueStats(): ChangeStreamQueueStats
 }

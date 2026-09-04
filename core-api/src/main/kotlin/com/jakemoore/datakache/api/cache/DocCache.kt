@@ -12,6 +12,7 @@ import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededEx
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.java.ThrowingUnaryOperator
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
 import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.api.registration.DataKacheRegistration
 import com.jakemoore.datakache.api.result.DefiniteResult
@@ -388,6 +389,17 @@ sealed interface DocCache<K : Any, D : Doc<K, D>> : DataKacheScope {
      * @return The [OptionalResult] containing the document if found, or empty if it does not.
      */
     suspend fun <T> readByUniqueIndexFromDatabase(index: DocUniqueIndex<K, D, T>, value: T): OptionalResult<D>
+
+    /**
+     * A snapshot of this cache's change stream event buffer, or null if the stream is not running.
+     *
+     * Intended for exporting as a gauge. Events are applied from a bounded buffer in the database's
+     * commit order, and a full buffer pauses the stream rather than dropping or reordering anything,
+     * so depth approaching [ChangeStreamQueueStats.capacity] means the cache is falling behind the
+     * database. **Reading resets [ChangeStreamQueueStats.peakSinceLastRead]**, so poll it from one
+     * place.
+     */
+    fun getChangeStreamQueueStats(): ChangeStreamQueueStats?
 
     // ------------------------------------------------------------ //
     //                     Internal Cache Methods                   //

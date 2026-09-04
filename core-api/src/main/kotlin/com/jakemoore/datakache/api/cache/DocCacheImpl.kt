@@ -16,6 +16,7 @@ import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededEx
 import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
 import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.metrics.MetricsReceiver
 import com.jakemoore.datakache.api.ordering.OperationTime
@@ -711,6 +712,8 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
     //                        MongoDB Streams                       //
     // ------------------------------------------------------------ //
     override fun areChangeStreamJobsRunning(): Boolean = changeStreamManager?.areJobsActive() ?: false
+
+    override fun getChangeStreamQueueStats(): ChangeStreamQueueStats? = changeStreamManager?.getQueueStats()
 
     /** Where the change stream would restart from if it lost its resume tokens. */
     @ApiStatus.Internal

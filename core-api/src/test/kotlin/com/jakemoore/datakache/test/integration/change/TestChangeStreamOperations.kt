@@ -17,6 +17,43 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
     init {
         describe("Change Stream Operations") {
 
+            it("should expose change stream buffer depth, and reset the peak when read") {
+                // The buffer is what makes a slow consumer visible instead of silent. A full one
+                // pauses the stream rather than dropping or reordering anything, so depth
+                // approaching capacity is the cache falling behind, and it is worth a gauge.
+                eventually(5.seconds) {
+                    delay(100)
+                    require(cache.areChangeStreamJobsRunning())
+                }
+
+                val initial = cache.getChangeStreamQueueStats()
+                require(initial != null) { "expected buffer stats while the stream is running" }
+                require(initial.capacity > 0) { "expected a bounded buffer, got ${initial.capacity}" }
+
+                repeat(5) { i ->
+                    cache
+                        .create("queueStatsKey$i") { it.copy(name = "queueStats$i", balance = 860.0 + i) }
+                        .getOrThrow()
+                }
+
+                // Fixed wait rather than polling, because every read resets the peak and polling
+                // would destroy the evidence this asserts on.
+                delay(1_000)
+
+                val afterWrites = cache.getChangeStreamQueueStats()
+                require(afterWrites != null)
+                afterWrites.depth.shouldBe(0)
+                require(afterWrites.peakSinceLastRead >= 1) {
+                    "expected the buffer to have held at least one event, got ${afterWrites.peakSinceLastRead}"
+                }
+
+                // The read above reset it, so a quiet interval reports the buffer as it stands.
+                cache
+                    .getChangeStreamQueueStats()
+                    ?.peakSinceLastRead
+                    .shouldBe(0)
+            }
+
             it("should advance the point the stream would resume from as it applies events") {
                 // The regression this exists for. The operation-time fallback was set once, at
                 // cache start, and never moved. Losing both resume tokens therefore replayed every

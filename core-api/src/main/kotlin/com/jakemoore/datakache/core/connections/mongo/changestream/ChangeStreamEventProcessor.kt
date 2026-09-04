@@ -3,6 +3,8 @@ package com.jakemoore.datakache.core.connections.mongo.changestream
 import com.jakemoore.datakache.api.changes.ChangeDocumentType
 import com.jakemoore.datakache.api.changes.ChangeOperationType
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
+import com.jakemoore.datakache.api.metrics.DataKacheMetrics
 import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamState
 import com.mongodb.client.model.changestream.ChangeStreamDocument
@@ -15,12 +17,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedSendChannelException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import org.bson.BsonDocument
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.TimeSource
 
 /**
@@ -41,12 +43,40 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     private var lastTokenCleanupTime = TimeSource.Monotonic.markNow()
 
     /**
+     * How many events are waiting in the buffer, and the deepest it has been since the last
+     * snapshot was taken.
+     *
+     * Tracked rather than read from the channel, which exposes no size. Two atomics per event is a
+     * price worth paying to make buffer pressure observable: a full buffer pauses the stream, so
+     * depth approaching capacity is the cache falling behind the database, and it is otherwise
+     * invisible until it is already a problem.
+     */
+    private val queueDepth = AtomicInteger(0)
+
+    private val queuePeak = AtomicInteger(0)
+
+    /** Resets [peakSinceLastRead][ChangeStreamQueueStats.peakSinceLastRead] as it reads it. */
+    fun getQueueStats(): ChangeStreamQueueStats =
+        ChangeStreamQueueStats(
+        capacity = context.config.maxBufferedEvents,
+        depth = queueDepth.get(),
+        peakSinceLastRead = queuePeak.getAndSet(queueDepth.get()),
+    )
+
+    private fun recordEnqueued() {
+        val depth = queueDepth.incrementAndGet()
+        queuePeak.updateAndGet { peak -> if (depth > peak) depth else peak }
+    }
+
+    /**
      * Creates a new event channel, replacing any existing one.
      * Critical for restart scenarios since closed channels cannot be reused.
      */
     fun createNewEventChannel() {
         eventChannel?.close() // Close existing channel if any
         eventChannel = Channel(capacity = context.config.maxBufferedEvents)
+        queueDepth.set(0)
+        queuePeak.set(0)
         context.logger.debug("Created new event channel with capacity ${context.config.maxBufferedEvents}")
     }
 
@@ -85,6 +115,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         }
 
                     if (event != null) {
+                        queueDepth.decrementAndGet()
                         withTimeout(context.config.eventProcessingTimeout) {
                             processChangeEventSafely(event)
 
@@ -137,86 +168,69 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     }
 
     /**
-     * Handles incoming change stream events and applies backpressure strategies.
-     * @param change The change stream document
-     * @return true if the event was handled successfully, false if it was lost
+     * Hands an event to the ordered buffer, waiting for room rather than jumping the queue.
+     *
+     * **A full buffer suspends the producer.** The alternative, applying the event immediately so as
+     * not to drop it, is what this used to do, and it applied that event ahead of everything still
+     * queued. The cache orders what it applies by the database's clock and treats commit order as a
+     * guarantee, so a single event delivered out of order can leave a document permanently wrong
+     * with no later event to repair it. **A dropped event is recoverable and an out-of-order event
+     * is not**, which is the trade the old fallback had backwards.
+     *
+     * Suspending here only stops this coroutine pulling from the change stream cursor. MongoDB is
+     * pull based and holds the position, so the stream resumes where it left off. A consumer slow
+     * enough to outlast the oplog produces a resume error, which is handled, logged and retried,
+     * rather than silent divergence.
+     *
+     * @return true if the event was buffered, false if the channel was gone or closed.
      */
     @OptIn(DelicateCoroutinesApi::class)
     suspend fun handleIncomingEvent(change: ChangeStreamDocument<D>): Boolean {
-        // Enhanced backpressure strategy with event loss prevention
         val channel = eventChannel
-        if (channel != null && !channel.isClosedForSend) {
-            val sendResult = channel.trySend(change)
-
-            when {
-                sendResult.isSuccess -> {
-                    // Event sent successfully
-                    return true
-                }
-
-                sendResult.isFailure -> {
-                    val exception = sendResult.exceptionOrNull()
-                    if (exception is ClosedSendChannelException) {
-                        context.logger.debug("Channel closed, stopping event processing")
-                        return false
-                    }
-
-                    // Channel is full - implement enhanced backpressure with fallback
-                    context.logger.warn(
-                        "Event channel full (${context.config.maxBufferedEvents} events), " +
-                            "implementing backpressure strategy",
-                    )
-
-                    // Try a few times with short delays, then implement fallback
-                    return handleBackpressure(change, channel)
-                }
-            }
-        } else {
-            context.logger.error(
-                "Event lost from invalid channel, operation: ${change.operationType}, attempting fallback",
+        if (channel == null || channel.isClosedForSend) {
+            // Only reachable while shutting down or before a channel exists. Dropping is correct:
+            // the resume token has not advanced past this event, so a restart redelivers it.
+            context.logger.warn(
+                "Change stream event arrived with no open buffer, operation: ${change.operationType}. " +
+                    "It will be redelivered when the stream restarts.",
             )
-            // Also handle this as a potential event loss scenario
-            handleEventLoss(change)
             return false
         }
-        return false
-    }
 
-    /**
-     * Handles backpressure when the event channel is full.
-     */
-    @OptIn(DelicateCoroutinesApi::class)
-    private suspend fun handleBackpressure(
-        change: ChangeStreamDocument<D>,
-        channel: Channel<ChangeStreamDocument<D>>,
-    ): Boolean {
-        var retryCount = 0
-        val maxRetries = 3
-
-        while (retryCount < maxRetries && !channel.isClosedForSend) {
-            delay(50) // Short delay to allow processing
-            val retryResult = channel.trySend(change)
-            if (retryResult.isSuccess) {
+        return try {
+            // Fast path first, purely so a full buffer can be reported before we wait on it.
+            if (channel.trySend(change).isSuccess) {
+                recordEnqueued()
                 return true
             }
-            retryCount++
-        }
 
-        // Implement fallback strategy
-        context.logger.error(
-            "Event lost due to backpressure, operation: ${change.operationType}, attempting fallback",
-        )
-        handleEventLoss(change)
-        return false
+            context.logger.warn(
+                "Change stream buffer full (${context.config.maxBufferedEvents} events), " +
+                    "pausing the stream until it drains",
+            )
+            DataKacheMetrics.getReceiversInternal().forEach {
+                it.onChangeStreamBackpressure(context.collection.namespace.collectionName)
+            }
+
+            channel.send(change)
+            recordEnqueued()
+            true
+        } catch (_: ClosedSendChannelException) {
+            context.logger.debug("Channel closed, stopping event processing")
+            false
+        }
     }
 
     /**
      * Core event processing logic shared between normal processing and event loss recovery.
      * @param change The change stream document to process
-     * @param isRecoveryMode Whether this is being called from event loss recovery
      * @return true if processing succeeded, false if it failed
      */
-    private suspend fun processEventCore(change: ChangeStreamDocument<D>, isRecoveryMode: Boolean = false): Boolean {
+    private suspend fun processEventCore(change: ChangeStreamDocument<D>): Boolean {
+        // Every event reaches the cache through the ordered buffer, so nothing is applied ahead of
+        // anything else. The handler still takes outOfBand, and it is still passed explicitly,
+        // because the cache's ordering rests on that promise: reintroducing a bypass has to be a
+        // visible change here rather than a silent one.
         val operationType =
             mapOperationType(
                 requireNotNull(change.operationType) {
@@ -233,21 +247,12 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         fullDoc,
                         changeType,
                         change.eventOperationTime(),
-                        outOfBand = isRecoveryMode,
+                        outOfBand = false,
                     )
-                    if (isRecoveryMode) {
-                        context.logger.warn("Recovered from lost $operationType event for document: ${fullDoc.key}")
-                    } else {
-                        context.logger.debug("Processed $operationType for document: ${fullDoc.key}")
-                    }
+                    context.logger.debug("Processed $operationType for document: ${fullDoc.key}")
                     return true
                 } else {
-                    val message =
-                        if (isRecoveryMode) {
-                            "Cannot recover from lost event - no fullDocument available"
-                        } else {
-                            "No fullDocument for $operationType operation"
-                        }
+                    val message = "No fullDocument for $operationType operation"
                     context.logger.error(message)
                     return false
                 }
@@ -261,21 +266,12 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
                         context.eventHandler.onDocumentDeleted(
                             keyString,
                             change.eventOperationTime(),
-                            outOfBand = isRecoveryMode,
+                            outOfBand = false,
                         )
-                        if (isRecoveryMode) {
-                            context.logger.warn("Recovered from lost DELETE event for document: $keyString")
-                        } else {
-                            context.logger.debug("Processed DELETE for document: $keyString")
-                        }
+                        context.logger.debug("Processed DELETE for document: $keyString")
                         return true
                     } else {
-                        val message =
-                            if (isRecoveryMode) {
-                                "Could not extract ID from delete operation during recovery"
-                            } else {
-                                "Could not extract ID from delete operation"
-                            }
+                        val message = "Could not extract ID from delete operation"
                         context.logger.warn(message)
                         return false
                     }
@@ -285,67 +281,33 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
 
             ChangeOperationType.DROP -> {
                 context.eventHandler.onCollectionDropped()
-                if (isRecoveryMode) {
-                    context.logger.warn("Recovered from lost DROP event")
-                } else {
-                    context.logger.debug("Processed DROP operation")
-                }
+                context.logger.debug("Processed DROP operation")
                 return true
             }
 
             ChangeOperationType.RENAME -> {
                 context.eventHandler.onCollectionRenamed()
-                if (isRecoveryMode) {
-                    context.logger.warn("Recovered from lost RENAME event")
-                } else {
-                    context.logger.debug("Processed RENAME operation")
-                }
+                context.logger.debug("Processed RENAME operation")
                 return true
             }
 
             ChangeOperationType.DROP_DATABASE -> {
                 context.eventHandler.onDatabaseDropped()
-                if (isRecoveryMode) {
-                    context.logger.warn("Recovered from lost DROP_DATABASE event")
-                } else {
-                    context.logger.debug("Processed DROP_DATABASE operation")
-                }
+                context.logger.debug("Processed DROP_DATABASE operation")
                 return true
             }
 
             ChangeOperationType.INVALIDATE -> {
                 context.eventHandler.onChangeStreamInvalidated()
-                if (isRecoveryMode) {
-                    context.logger.warn("Recovered from lost INVALIDATE event")
-                } else {
-                    context.logger.debug("Processed INVALIDATE operation")
-                }
+                context.logger.debug("Processed INVALIDATE operation")
                 return true
             }
 
             ChangeOperationType.UNKNOWN -> {
                 context.eventHandler.onUnknownOperation()
-                if (isRecoveryMode) {
-                    context.logger.warn("Recovered from lost UNKNOWN event")
-                } else {
-                    context.logger.debug("Processed UNKNOWN operation")
-                }
+                context.logger.debug("Processed UNKNOWN operation")
                 return true
             }
-        }
-    }
-
-    /**
-     * Handles event loss scenarios with fallback strategies.
-     */
-    private suspend fun handleEventLoss(change: ChangeStreamDocument<D>) {
-        try {
-            processEventCore(change, isRecoveryMode = true)
-        } catch (e: Exception) {
-            context.logger.error(
-                e,
-                "Failed to recover from lost event - cache consistency may be compromised",
-            )
         }
     }
 
@@ -367,7 +329,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
      */
     private suspend fun processChangeEventSafely(change: ChangeStreamDocument<D>) {
         try {
-            processEventCore(change, isRecoveryMode = false)
+            processEventCore(change)
         } catch (e: Exception) {
             context.logger.error(e, "Error processing change event")
             // Don't rethrow - we want to continue processing other events
