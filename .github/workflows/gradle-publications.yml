@@ -16,12 +16,24 @@ on:
       - 'LICENSE'
       - 'renovate.json'
   # Manual trigger, so a release can be cut without pushing, and so this can be exercised without
-  # waiting for a qualifying change.
+  # waiting for a qualifying change. The publish job refuses any ref but main, because a manual
+  # run can name one and would otherwise build an arbitrary ref with publishing credentials.
   workflow_dispatch:
+
+# One publication at a time. Two qualifying merges can both pass the already-published check
+# before either has uploaded anything, and the repository accepts redeploys, so they would race
+# to define one coordinate. Never cancelled: a half-finished publication is worse than a queued
+# one, since some modules would be uploaded and others not.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   setup:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # to read the originating pull request's labels
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
       is_valid: ${{ steps.validate_version.outputs.is_valid }}
@@ -31,7 +43,11 @@ jobs:
       already_published: ${{ steps.published_check.outputs.already }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Nothing here uses git after the checkout, and a persisted token is a credential
+          # sitting in the workspace for every later step to reach.
+          persist-credentials: false
 
       # Label escape hatch. This triggers on push, where there is no pull request context, so the
       # merge commit is mapped back to its pull request and that pull request's labels are read.
@@ -41,8 +57,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          labels=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
-                     --jq '.[].labels[].name' 2>/dev/null | tr '\n' ' ')
+          # Not piped into tr. A pipeline's exit status is the last command's, and tr succeeds on
+          # anything, so a failed lookup would have read as "no labels" and published a pull request
+          # that asked not to be. The call is made on its own line and its status is checked.
+          set -o pipefail
+          if ! labels=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+                          --jq '.[].labels[].name'); then
+            echo "::error::could not read the originating pull request's labels, refusing to guess"
+            exit 1
+          fi
+          labels=$(printf '%s' "$labels" | tr '\n' ' ')
           echo "labels on the originating pull request: ${labels:-none}"
           if printf '%s' "$labels" | grep -qw 'skip-publish'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -110,7 +134,14 @@ jobs:
             url="$BASE/$artifact/$VERSION/$artifact-$VERSION.jar"
             code=$(curl -s -o /dev/null -w '%{http_code}' -I --max-time 30 "$url" || echo "000")
             echo "HEAD $url -> $code"
-            [ "$code" = "200" ] && found=true
+            # Only 404 means absent. A timeout, a 401, a 5xx or a DNS failure means the guard could
+            # not answer, and treating "I do not know" as "not published" is how it would let a
+            # publish through to overwrite the release it was written to protect.
+            case "$code" in
+              200) found=true ;;
+              404) ;;
+              *) echo "::error::cannot determine whether $artifact $VERSION is published (HTTP $code)"; exit 1 ;;
+            esac
           done
 
           if [ "$found" = true ]; then
@@ -123,6 +154,7 @@ jobs:
   publish:
     needs: setup
     if: >-
+      github.ref == 'refs/heads/main' &&
       needs.setup.outputs.is_valid == 'true' &&
       needs.setup.outputs.skip_publish != 'true' &&
       needs.setup.outputs.already_published != 'true'
@@ -131,10 +163,14 @@ jobs:
       contents: write # to create the GitHub release
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Nothing here uses git after the checkout, and a persisted token is a credential
+          # sitting in the workspace for every later step to reach.
+          persist-credentials: false
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           java-version: '21'
           distribution: temurin
@@ -176,7 +212,7 @@ jobs:
       # library is the Maven repository, which resolves its dependencies too.
       - name: Create GitHub release
         if: needs.setup.outputs.is_snapshot != 'true'
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1
         with:
           tag: ${{ needs.setup.outputs.version }}
           name: ${{ needs.setup.outputs.version }}
