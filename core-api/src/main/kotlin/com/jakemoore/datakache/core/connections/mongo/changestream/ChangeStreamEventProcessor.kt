@@ -55,17 +55,26 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
 
     private val queuePeak = AtomicInteger(0)
 
+    /** Never reset, so a second poller cannot silently take the peak away from the first. */
+    private val queuePeakAllTime = AtomicInteger(0)
+
     /** Resets [peakSinceLastRead][ChangeStreamQueueStats.peakSinceLastRead] as it reads it. */
-    fun getQueueStats(): ChangeStreamQueueStats =
-        ChangeStreamQueueStats(
-        capacity = context.config.maxBufferedEvents,
-        depth = queueDepth.get(),
-        peakSinceLastRead = queuePeak.getAndSet(queueDepth.get()),
-    )
+    fun getQueueStats(): ChangeStreamQueueStats {
+        // One read of the depth, so the reported value and the peak's new baseline are the same
+        // instant. The three fields are still not one atomic snapshot, which a gauge does not need.
+        val depth = queueDepth.get()
+        return ChangeStreamQueueStats(
+            capacity = context.config.maxBufferedEvents,
+            depth = depth,
+            peakSinceLastRead = queuePeak.getAndSet(depth),
+            peakAllTime = queuePeakAllTime.get(),
+        )
+    }
 
     private fun recordEnqueued() {
         val depth = queueDepth.incrementAndGet()
         queuePeak.updateAndGet { peak -> if (depth > peak) depth else peak }
+        queuePeakAllTime.updateAndGet { peak -> if (depth > peak) depth else peak }
     }
 
     /**
@@ -77,6 +86,7 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
         eventChannel = Channel(capacity = context.config.maxBufferedEvents)
         queueDepth.set(0)
         queuePeak.set(0)
+        queuePeakAllTime.set(0)
         context.logger.debug("Created new event channel with capacity ${context.config.maxBufferedEvents}")
     }
 
@@ -197,12 +207,13 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             return false
         }
 
+        // Counted BEFORE the event can be seen by the consumer. Counting after the send lets the
+        // consumer dequeue and decrement first, which reads as a negative depth and hides the very
+        // burst the peak exists to record.
+        recordEnqueued()
         return try {
             // Fast path first, purely so a full buffer can be reported before we wait on it.
-            if (channel.trySend(change).isSuccess) {
-                recordEnqueued()
-                return true
-            }
+            if (channel.trySend(change).isSuccess) return true
 
             context.logger.warn(
                 "Change stream buffer full (${context.config.maxBufferedEvents} events), " +
@@ -213,9 +224,9 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             }
 
             channel.send(change)
-            recordEnqueued()
             true
         } catch (_: ClosedSendChannelException) {
+            queueDepth.decrementAndGet()
             context.logger.debug("Channel closed, stopping event processing")
             false
         }

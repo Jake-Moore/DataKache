@@ -21,6 +21,21 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     private var effectiveStartTime: BsonTimestamp? = null
 
     /**
+     * Whether the last configured stream resumed from a token, rather than from a time or from
+     * scratch.
+     *
+     * A token resumes immediately AFTER the last event drained, so nothing already applied is
+     * redelivered and nothing older than it can arrive. The other two positionings can both start
+     * before that point, which is what makes them able to deliver an event older than state the
+     * cache has already ordered against.
+     */
+    @Volatile
+    private var lastStartResumedFromToken: Boolean = false
+
+    /** See [lastStartResumedFromToken]. */
+    fun lastStartResumedFromToken(): Boolean = lastStartResumedFromToken
+
+    /**
      * Sets the effective start time for the change stream.
      */
     fun setEffectiveStartTime(startTime: BsonTimestamp?) {
@@ -137,6 +152,9 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
 
                 // Enhanced fallback chain for stream positioning
                 var configured = false
+                // Assume the worst until a token resume proves otherwise: see
+                // lastStartResumedFromToken.
+                lastStartResumedFromToken = false
 
                 // First try: Current resume token
                 val resumeToken = resumeToken
@@ -155,6 +173,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
                             resumeAfter(lastResumeToken)
                         }
                 }
+                lastStartResumedFromToken = configured
 
                 // Third try: Operation time fallback
                 val effectiveStartTime = effectiveStartTime

@@ -48,10 +48,15 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
                 }
 
                 // The read above reset it, so a quiet interval reports the buffer as it stands.
-                cache
-                    .getChangeStreamQueueStats()
-                    ?.peakSinceLastRead
-                    .shouldBe(0)
+                val quiet = cache.getChangeStreamQueueStats()
+                require(quiet != null)
+                quiet.peakSinceLastRead.shouldBe(0)
+
+                // The all-time peak is not reset by reading, which is what makes it safe for more
+                // than one poller, so it still remembers the burst the interval peak just gave up.
+                require(quiet.peakAllTime >= afterWrites.peakSinceLastRead) {
+                    "all-time peak ${quiet.peakAllTime} lost a burst of ${afterWrites.peakSinceLastRead}"
+                }
             }
 
             it("should advance the point the stream would resume from as it applies events") {

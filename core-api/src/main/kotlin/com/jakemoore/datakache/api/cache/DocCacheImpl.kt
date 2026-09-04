@@ -512,7 +512,11 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
      * Known, accepted limitation: this is not coordinated with an in-flight [applyIfNewer] call for
      * some other key. If that call's `compute` body runs to completion after all three clears here
      * have finished, its write lands in [cacheMap] and its own newly recorded position lands in
-     * [appliedAt] as if the clear had never happened. Narrower in practice for most callers:
+     * [appliedAt] as if the clear had never happened. **Worst for the drop and rename handlers**,
+     * which is the case this note used to skip: a real MongoDB drop emits no per-document events,
+     * so a write that lands after the clear leaves the cache holding a document that no longer
+     * exists anywhere, with nothing to correct it. The other callers recover, because the documents
+     * still exist and a later read or event orders against them. Narrower in practice there too:
      * [shutdown] waits for the change stream's in-flight event processing to finish first,
      * and [clearDocsFromDatabasePermanently] is gated behind
      * [DocCacheConfig.enableMassDestructiveOps], which its own KDoc already scopes to tests or
@@ -525,6 +529,9 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         cacheMap.clear()
         appliedAt.clear()
         synchronized(tombstoneLock) { tombstones.clear() }
+        // Re-armed, or a cache stopped and started again in one process would never report a
+        // degraded record after the first time it happened.
+        tombstoneCeilingReported.set(false)
     }
 
     /**
@@ -942,11 +949,13 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
             )
         }
 
-        override suspend fun onConnected(reconnected: Boolean) {
-            // A RE-connection may be reading from an earlier point than the last one reached, so
-            // what the last one applied says nothing about what is still to come. The first
-            // connection begins where start() asked it to, which is what the seed below records.
-            if (reconnected) invalidateStreamPositionInternal()
+        override suspend fun onConnected(mayHaveRepositioned: Boolean) {
+            // Only when this connection could be reading from an earlier point than the stream had
+            // already reached. A resume token starts immediately after the last event applied, so
+            // an ordinary reconnection keeps its progress; discarding it on every reconnection
+            // would be safe and would also mean the boundary is almost never usable, leaving the
+            // ceiling as the normal way entries leave the record.
+            if (mayHaveRepositioned) invalidateStreamPositionInternal()
             getLoggerInternal().debug("Change stream connected for cache: $cacheName")
         }
 

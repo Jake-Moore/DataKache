@@ -19,4 +19,15 @@ internal class ConnectionSequence {
      * @return False for the first one, true for every later one.
      */
     fun observeConnection(): Boolean = !connected.compareAndSet(false, true)
+
+    /**
+     * Forgets that this stream has connected, for a manager being started again in place.
+     *
+     * The state machine permits that, and without this the restarted stream's first connection
+     * would be reported as a later one. Harmless in direction, since over-reporting only costs
+     * conservatism, but it is the kind of untrue answer that is worth not giving.
+     */
+    fun reset() {
+        connected.set(false)
+    }
 }

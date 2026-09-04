@@ -84,6 +84,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 errorHandler.resetFailures()
 
                 // Recreate the event channel since closed channels cannot be reused
+                connectionSequence.reset()
                 eventProcessor.createNewEventChannel()
 
                 // Reset counters and state for restart
@@ -269,7 +270,14 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
                 // Asked of the sequence rather than of the state machine, which cannot answer it:
                 // startChangeStreamWithRetry forces CONNECTING at the top of every attempt, so a
                 // retried connection no longer looks like one by the time it succeeds.
-                onSuccessfulConnection(reconnected = connectionSequence.observeConnection())
+                //
+                // A reconnection alone is not enough to have gone backwards. Resuming from a token
+                // starts immediately after the last event applied, so only a reconnection that fell
+                // back to a time, or to nothing, can deliver something older.
+                val reconnected = connectionSequence.observeConnection()
+                onSuccessfulConnection(
+                    mayHaveRepositioned = reconnected && !resumeTokenManager.lastStartResumedFromToken(),
+                )
             }
 
             // Handle the event through the event processor (tokens updated after processing)
@@ -280,7 +288,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     /**
      * Handles successful connection to the change stream.
      */
-    private suspend fun onSuccessfulConnection(reconnected: Boolean) {
+    private suspend fun onSuccessfulConnection(mayHaveRepositioned: Boolean) {
         if (errorHandler.getConsecutiveFailures() > 0) {
             context.logger.debug(
                 "Change stream reconnected after ${errorHandler.getConsecutiveFailures()} failures",
@@ -288,7 +296,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
         }
 
         errorHandler.resetFailures()
-        context.eventHandler.onConnected(reconnected)
+        context.eventHandler.onConnected(mayHaveRepositioned)
         context.logger.debug("Change stream connected")
     }
 

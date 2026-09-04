@@ -483,7 +483,7 @@ class TestCacheOrdering : AbstractDataKacheTest() {
 
                 // A boundary that would permit forgetting it, and then a reconnection.
                 cache.advanceStreamPositionInternal(laterThanAnyWrite(5500L))
-                cache.changeEventHandlerInternal().onConnected(reconnected = true)
+                cache.changeEventHandlerInternal().onConnected(mayHaveRepositioned = true)
 
                 val other =
                     cache
@@ -494,6 +494,36 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 cache.cacheInternal(held, laterThanAnyWrite(4999L))
 
                 cache.read(held.key).isEmpty().shouldBe(true)
+            }
+
+            it("should keep the ordering boundary across a reconnection that did not reposition") {
+                // The counterpart, and the reason the boundary is usable at all. A reconnection that
+                // resumed from a resume token starts immediately after the last event applied, so
+                // nothing older arrives and the boundary still holds. Discarding it on every
+                // reconnection would be safe and would also make it worthless: reconnections are
+                // ordinary, and entries would then only ever leave the record by the ceiling, which
+                // is the unsafe path that exists as a last resort.
+                cache.tombstoneLimit = 1
+
+                val evictable =
+                    cache
+                        .create("keptBoundaryKey") { it.copy(name = "keptBoundary", balance = 795.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(evictable.key, laterThanAnyWrite(8000L))
+
+                cache.advanceStreamPositionInternal(laterThanAnyWrite(8500L))
+                cache.changeEventHandlerInternal().onConnected(mayHaveRepositioned = false)
+
+                val other =
+                    cache
+                        .create("keptBoundaryOtherKey") { it.copy(name = "keptBoundaryOther", balance = 796.0) }
+                        .getOrThrow()
+                cache.uncacheInternal(other.key, laterThanAnyWrite(8600L))
+
+                // Forgotten, because the boundary survived a reconnection that could not go back.
+                cache.cacheInternal(evictable, laterThanAnyWrite(7999L))
+
+                cache.read(evictable.key).isEmpty().shouldBe(false)
             }
 
             it("should not evict an entry from before a reconnection against a boundary from after it") {
@@ -512,7 +542,7 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                         .getOrThrow()
                 cache.uncacheInternal(held.key, laterThanAnyWrite(7000L))
 
-                cache.changeEventHandlerInternal().onConnected(reconnected = true)
+                cache.changeEventHandlerInternal().onConnected(mayHaveRepositioned = true)
 
                 // The new connection establishes a boundary well past the old entry's position.
                 // Comparing positions alone would forget it; comparing connections does not.
