@@ -1,0 +1,187 @@
+name: Gradle Publish
+
+on:
+  push:
+    branches: [ "main" ]
+    # A merge publishes immediately. A change that cannot affect the artifact must not trigger one.
+    #
+    # Blacklist, not whitelist: a path forgotten here causes an unnecessary publish attempt, which
+    # is visible and harmless. A path forgotten in a whitelist means a real release silently never
+    # happens.
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '.idea/**'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'renovate.json'
+  # Manual trigger, so a release can be cut without pushing, and so this can be exercised without
+  # waiting for a qualifying change.
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+      is_valid: ${{ steps.validate_version.outputs.is_valid }}
+      is_snapshot: ${{ steps.validate_version.outputs.is_snapshot }}
+      is_prerelease: ${{ steps.validate_version.outputs.is_prerelease }}
+      skip_publish: ${{ steps.skip_check.outputs.skip }}
+      already_published: ${{ steps.published_check.outputs.already }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # Label escape hatch. This triggers on push, where there is no pull request context, so the
+      # merge commit is mapped back to its pull request and that pull request's labels are read.
+      # Put `skip-publish` on a pull request to merge it without publishing.
+      - name: Check for skip-publish label
+        id: skip_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          labels=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+                     --jq '.[].labels[].name' 2>/dev/null | tr '\n' ' ')
+          echo "labels on the originating pull request: ${labels:-none}"
+          if printf '%s' "$labels" | grep -qw 'skip-publish'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::skip-publish label present, nothing will be published"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract version
+        id: extract_version
+        run: |
+          VERSION=$(sed -n 's/^val VERSION = "\(.*\)"$/\1/p' build.gradle.kts)
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not read VERSION from build.gradle.kts. Has the declaration moved?"
+            exit 1
+          fi
+          echo "version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # This repository has no strict release discipline yet, so all three shapes are publishable.
+      # Anything that matches none of them is refused rather than guessed at.
+      - name: Validate version
+        id: validate_version
+        run: |
+          VERSION='${{ steps.extract_version.outputs.version }}'
+          RELEASE='^[0-9]+\.[0-9]+\.[0-9]+$'
+          PRERELEASE='^[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$'
+          SNAPSHOT='^.+-SNAPSHOT$'
+
+          echo "is_valid=false" >> "$GITHUB_OUTPUT"
+          echo "is_snapshot=false" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" =~ $SNAPSHOT ]]; then
+            echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            echo "is_snapshot=true" >> "$GITHUB_OUTPUT"
+            echo "$VERSION is a SNAPSHOT"
+          elif [[ "$VERSION" =~ $RELEASE ]]; then
+            echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            echo "$VERSION is a RELEASE"
+          elif [[ "$VERSION" =~ $PRERELEASE ]]; then
+            echo "is_valid=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "$VERSION is a PRE-RELEASE"
+          else
+            echo "::error::'$VERSION' matches no supported version shape, nothing will be published"
+          fi
+
+      # The Maven repository accepts redeploys, so nothing but this stops a merge without a version
+      # bump replacing an artifact consumers have already resolved. Skipped for snapshots, where
+      # redeploying is the entire point.
+      - name: Check whether this version is already published
+        id: published_check
+        run: |
+          VERSION='${{ steps.extract_version.outputs.version }}'
+          if [ '${{ steps.validate_version.outputs.is_snapshot }}' = 'true' ]; then
+            echo "already=false" >> "$GITHUB_OUTPUT"
+            echo "snapshot, redeploy is expected"
+            exit 0
+          fi
+
+          BASE="https://repo.luxiouslabs.net/repository/maven-releases/com/jakemoore/datakache"
+          found=false
+          for artifact in core-api plugin-api; do
+            url="$BASE/$artifact/$VERSION/$artifact-$VERSION.jar"
+            code=$(curl -s -o /dev/null -w '%{http_code}' -I --max-time 30 "$url" || echo "000")
+            echo "HEAD $url -> $code"
+            [ "$code" = "200" ] && found=true
+          done
+
+          if [ "$found" = true ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::$VERSION is already published. Skipping so the existing artifacts are not replaced. Bump VERSION in build.gradle.kts to release these changes."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: setup
+    if: >-
+      needs.setup.outputs.is_valid == 'true' &&
+      needs.setup.outputs.skip_publish != 'true' &&
+      needs.setup.outputs.already_published != 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to create the GitHub release
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          # Follow the wrapper rather than a floating version, so CI and a local build run the same
+          # Gradle and a wrapper bump actually reaches CI.
+          gradle-version: wrapper
+
+      # Fail here rather than at the publish step, where a missing credential surfaces as an
+      # authentication error against the repository and reads like an outage.
+      #
+      # Length only. A test that prints the value on either branch is how credentials leak.
+      - name: Check publishing credentials are present
+        env:
+          MAVEN_NAME: ${{ secrets.MAVEN_NAME }}
+          MAVEN_SECRET: ${{ secrets.MAVEN_SECRET }}
+        run: |
+          missing=false
+          [ -n "${MAVEN_NAME:-}" ] && echo "MAVEN_NAME: set (${#MAVEN_NAME} chars)" || { echo "MAVEN_NAME: unset"; missing=true; }
+          [ -n "${MAVEN_SECRET:-}" ] && echo "MAVEN_SECRET: set (${#MAVEN_SECRET} chars)" || { echo "MAVEN_SECRET: unset"; missing=true; }
+          if [ "$missing" = true ]; then
+            echo "::error::Publishing credentials are not configured on this repository."
+            exit 1
+          fi
+
+      # publish depends on the test tasks of both modules, configured in build.gradle.kts, so this
+      # cannot publish an artifact whose tests did not run.
+      - name: Publish with Gradle
+        run: gradle publish
+        env:
+          LUXIOUS_NEXUS_USER: ${{ secrets.MAVEN_NAME }}
+          LUXIOUS_NEXUS_PASS: ${{ secrets.MAVEN_SECRET }}
+
+      # Snapshots are republished continuously and would rewrite the same release entry every time,
+      # so they get none. The jars are attached for convenience; the supported way to consume this
+      # library is the Maven repository, which resolves its dependencies too.
+      - name: Create GitHub release
+        if: needs.setup.outputs.is_snapshot != 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ needs.setup.outputs.version }}
+          name: ${{ needs.setup.outputs.version }}
+          artifacts: "*/build/libs/*.jar"
+          prerelease: ${{ needs.setup.outputs.is_prerelease == 'true' }}
+          allowUpdates: true
+          removeArtifacts: true
+          generateReleaseNotes: true
