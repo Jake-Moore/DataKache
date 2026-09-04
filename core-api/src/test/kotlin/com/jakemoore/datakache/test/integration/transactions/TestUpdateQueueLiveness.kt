@@ -291,11 +291,11 @@ class TestUpdateQueueLiveness : AbstractDataKacheTest() {
             }
 
             it("should hold no queues and refuse new updates once the manager is shut down") {
-                // A queue created after shutdown has taken its snapshot appears in no snapshot, is
-                // never shut down, and leaves a processing coroutine running an executor against a
-                // service that has stopped. Admission is decided under the lock the snapshot is
-                // taken with, which is the ordering this pins. Uses its own manager, since shutting
-                // down the shared one would take every later test with it.
+                // Pins the steady state, not the race: after shutdown, no queue is retained and
+                // every admission is refused. The create-versus-snapshot ordering that guarantees
+                // it has no test, because reaching that window means cancelling a coroutine between
+                // two adjacent statements. Uses its own manager, since shutting down the shared one
+                // would take every later test with it.
                 val manager = UpdateQueueManager(cache.getLoggerInternal())
                 val doc = cache.create("managerShutdownKey") { it.copy(name = "managerShutdown") }.getOrThrow()
                 val immediate: Executor = { _, d, f, _ -> f(d) }

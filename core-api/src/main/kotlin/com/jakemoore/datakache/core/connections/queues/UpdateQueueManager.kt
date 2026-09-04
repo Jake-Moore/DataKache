@@ -32,6 +32,18 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
     // Using Any as key type since different caches can have different key types
     private val queues = ConcurrentHashMap<QueueKey, UpdateQueue<*, *>>()
 
+    /**
+     * Queues the idle sweep has taken out of [queues] but has not finished shutting down.
+     *
+     * A queue is only reachable through [queues], so one removed from it is invisible to
+     * [shutdown]'s snapshot and depends entirely on the sweep to stop it. The sweep does that in a
+     * coroutine on [job], and a coroutine cancelled before its body starts never runs the body, so
+     * a shutdown landing in that window would leave the queue running with nothing left holding a
+     * reference to it. Membership here is added before removal from [queues] so a queue is always
+     * in one of the two.
+     */
+    private val retiringQueues = ConcurrentHashMap.newKeySet<UpdateQueue<*, *>>()
+
     // Cleanup configuration
     private val idleTimeoutMs: Long = 30_000 // 30 seconds
     private val cleanupIntervalMs: Long = 60_000 // 1 minute
@@ -201,8 +213,12 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
                 if (queuesToRemove.isNotEmpty()) {
                     queueMutex.withLock {
                         queuesToRemove.forEach { queueKey ->
-                            val queue = queues.remove(queueKey)
+                            val queue = queues[queueKey]
                             if (queue != null) {
+                                // Claimed before it is unreachable, never after. See retiringQueues.
+                                retiringQueues.add(queue)
+                                queues.remove(queueKey)
+
                                 // Only launch shutdown coroutine if we're still active
                                 if (isActive) {
                                     launch {
@@ -211,6 +227,8 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
                                         } catch (e: Exception) {
                                             // Log but don't fail the cleanup process
                                             loggerService.error(e, "Error shutting down queue $queueKey")
+                                        } finally {
+                                            retiringQueues.remove(queue)
                                         }
                                     }
                                 } else {
@@ -222,6 +240,8 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
                                             e,
                                             "Error shutting down queue $queueKey during manager shutdown",
                                         )
+                                    } finally {
+                                        retiringQueues.remove(queue)
                                     }
                                 }
                             }
@@ -263,9 +283,13 @@ internal class UpdateQueueManager(private val loggerService: LoggerService) : Co
         // same lock.
         val activeQueues =
             queueMutex.withLock {
-                val snapshot = queues.values.toList()
+                // Both, because the sweep moves a queue from one to the other under this lock, and
+                // a queue it retired but never managed to stop is only reachable through the
+                // second. Shutting a queue down twice is a no-op.
+                val snapshot = queues.values + retiringQueues
                 queues.clear()
-                snapshot
+                retiringQueues.clear()
+                snapshot.toList()
             }
 
         activeQueues.forEach { queue ->
