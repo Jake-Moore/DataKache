@@ -43,8 +43,8 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     private var lastTokenCleanupTime = TimeSource.Monotonic.markNow()
 
     /**
-     * How many events are waiting in the buffer, and the deepest it has been since the last
-     * snapshot was taken.
+     * How many items are waiting in the buffer, and the deepest it has been since the last snapshot
+     * was taken. Almost all are events; a reposition marker is at most one per reconnect.
      *
      * Tracked rather than read from the channel, which exposes no size. Two atomics per event is a
      * price worth paying to make buffer pressure observable: a full buffer pauses the stream, so
@@ -232,15 +232,26 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
     /**
      * Announces a reposition through the buffer, so it lands between the events it separates.
      *
-     * Sent rather than offered, like an event: dropping it would leave the cache believing the new
-     * connection's progress continues the old one's, which is the state it exists to prevent.
+     * **Never dropped, unlike an event.** A dropped event is redelivered, because the resume token
+     * has not advanced past it. A reposition is synthetic, carries no token, and nothing regenerates
+     * it: losing one leaves the cache believing the new connection continues the old one's progress,
+     * for the life of the process, which makes the connection check vacuous.
+     *
+     * So with no buffer to put it in, it goes straight to the handler. That gives up the ordering
+     * this exists for, but only in the direction that costs nothing: taking effect too early leaves
+     * entries from before it forgettable only by the ceiling, which is conservative, while not
+     * taking effect at all lets a replayed event apply over a forgotten position.
      */
     @OptIn(DelicateCoroutinesApi::class)
     suspend fun handleReposition(): Boolean {
         val channel = eventChannel
         if (channel == null || channel.isClosedForSend) {
-            context.logger.warn("Stream repositioned with no open buffer; it will be reported on restart.")
-            return false
+            context.logger.warn(
+                "Stream repositioned with no open buffer, applying it directly. Ordering against " +
+                    "any events still in flight is given up, in the conservative direction.",
+            )
+            context.eventHandler.onStreamRepositioned()
+            return true
         }
         return enqueue(channel, StreamItem.Reposition(), describe = "reposition")
     }
@@ -255,8 +266,12 @@ internal class ChangeStreamEventProcessor<K : Any, D : Doc<K, D>>(
             // Fast path first, purely so a full buffer can be reported before we wait on it.
             if (channel.trySend(item).isSuccess) return true
 
+            // trySend also fails on a closed channel, where "full" would be a lie and the send below
+            // throws immediately.
+            if (channel.isClosedForSend) throw ClosedSendChannelException("channel closed")
+
             context.logger.warn(
-                "Change stream buffer full (${context.config.maxBufferedEvents} events) while " +
+                "Change stream buffer full (${context.config.maxBufferedEvents} items) while " +
                     "queueing $describe, pausing the stream until it drains",
             )
             DataKacheMetrics.getReceiversInternal().forEach {
