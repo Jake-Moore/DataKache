@@ -502,6 +502,9 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
         if (log && applied) {
             getLoggerInternal().debug("Cached document: ${doc.key}")
         } else if (!applied) {
+            // Deliberately not gated on [log]. The change stream handlers pass log = false so they
+            // can name the event type themselves, and a refusal is the one outcome none of them can
+            // report, since this method tells its callers nothing.
             getLoggerInternal().debug("Refused stale state for ${doc.key} at $at")
         }
     }
@@ -639,7 +642,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                     // reuses the same starting version, which is precisely the REPLACE race above,
                     // just gated behind an already-rare fallback. Costs nothing to close it too.
                     cacheInternal(doc, at, log = false)
-                    getLoggerInternal().debug("Cached Document From INSERT: ${doc.key}")
+                    getLoggerInternal().debug("Handled INSERT for ${doc.key}")
                 }
 
                 ChangeDocumentType.REPLACE -> {
@@ -668,7 +671,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                     // winning the race writes the SAME, correct content, so which one wins does not
                     // matter.
                     cacheInternal(doc, at, log = false)
-                    getLoggerInternal().debug("Cached Document From REPLACE: ${doc.key}")
+                    getLoggerInternal().debug("Handled REPLACE for ${doc.key}")
                 }
 
                 ChangeDocumentType.UPDATE -> {
@@ -678,7 +681,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
                     }
 
                     cacheInternal(doc, at, log = false, isReplayedEvent = true)
-                    getLoggerInternal().debug("Cached Document From UPDATE: ${doc.key}")
+                    getLoggerInternal().debug("Handled UPDATE for ${doc.key}")
                 }
             }
         }
@@ -694,7 +697,7 @@ abstract class DocCacheImpl<K : Any, D : Doc<K, D>>(
 
             val removed = uncacheInternal(key, at)
             if (removed) {
-                getLoggerInternal().debug("Uncached Document From DELETE: $key")
+                getLoggerInternal().debug("Handled DELETE for $key")
             }
         }
 

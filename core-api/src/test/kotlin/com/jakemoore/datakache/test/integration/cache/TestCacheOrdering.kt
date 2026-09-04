@@ -253,6 +253,34 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                     .shouldBe(2.0)
             }
 
+            it("should not let the public readFromDatabase refresh a key that already has a position") {
+                // The same guard as the two cacheContentOnlyInternal cases below, exercised through
+                // the public method whose KDoc makes the promise, because the behaviour a consumer
+                // sees is the one worth pinning. A read carries no position of its own, so it must
+                // defer to a key that has one, and it still hands the caller what it read.
+                val doc =
+                    cache
+                        .create("readFromDbGuardKey") { it.copy(name = "readFromDbGuard", balance = 10.0) }
+                        .getOrThrow()
+
+                // Move the cache ahead of the database without touching the database.
+                cache.cacheInternal(doc.copy(balance = 42.0), laterThanAnyWrite(2000L))
+
+                // The caller receives what the database holds.
+                cache
+                    .readFromDatabase(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(10.0)
+
+                // The cache keeps the newer state the read had no position to outrank.
+                cache
+                    .read(doc.key)
+                    .getOrThrow()
+                    .balance
+                    .shouldBe(42.0)
+            }
+
             it("should uncache a key the database reports it did not delete, while the cache holds it") {
                 // A read populates a key with no position, so a key can be cached having never gone
                 // through the ordered write path. If it is then deleted remotely, or was never in
@@ -275,7 +303,7 @@ class TestCacheOrdering : AbstractDataKacheTest() {
                 cache.read(stray.key).isEmpty().shouldBe(true)
             }
 
-            it("should stop refusing stale events once a key's tombstone has been evicted") {
+            it("should stop refusing stale events once a tombstone is evicted, the documented bound") {
                 // Pins the documented bound rather than asserting it away. The tombstone record is
                 // finite, and a key evicted from it has no position left, so the next event for it
                 // is applied unconditionally however old it is. Ordinary delivery is in commit
