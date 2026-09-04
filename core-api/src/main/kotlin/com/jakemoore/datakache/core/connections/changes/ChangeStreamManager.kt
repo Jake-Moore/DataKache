@@ -1,11 +1,15 @@
 package com.jakemoore.datakache.core.connections.changes
 
 import com.jakemoore.datakache.api.doc.Doc
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
+import com.jakemoore.datakache.api.ordering.OperationTime
+import org.jetbrains.annotations.ApiStatus
 
 /**
  * Manages change stream connections for database collections.
  * This interface abstracts the change stream functionality to allow for different implementations.
  */
+@ApiStatus.Internal
 interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
     /**
      * Starts the change stream listener synchronously.
@@ -13,7 +17,7 @@ interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
      * @param startAtOperationTime Optional timestamp to start the stream from a specific point in time.
      * @throws Exception if startup fails
      */
-    suspend fun start(startAtOperationTime: Any?)
+    suspend fun start(startAtOperationTime: OperationTime?)
 
     /**
      * Stops the change stream listener synchronously.
@@ -41,4 +45,18 @@ interface ChangeStreamManager<K : Any, D : Doc<K, D>> {
      * Checks if the change stream job, and the event processor job are both active.
      */
     fun areJobsActive(): Boolean
+
+    /**
+     * The position this stream would restart from if it lost its resume tokens, or null if it has
+     * none.
+     *
+     * Tracks what the stream has applied in order, so a token loss resumes near where it was rather
+     * than replaying from wherever it first started.
+     */
+    fun getResumePosition(): OperationTime?
+
+    /**
+     * A snapshot of this stream's event buffer. Reading it resets the recorded peak.
+     */
+    fun getQueueStats(): ChangeStreamQueueStats
 }

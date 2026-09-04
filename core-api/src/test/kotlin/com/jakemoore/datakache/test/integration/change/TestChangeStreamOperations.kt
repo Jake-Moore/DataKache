@@ -17,6 +17,90 @@ class TestChangeStreamOperations : AbstractDataKacheTest() {
     init {
         describe("Change Stream Operations") {
 
+            it("should expose change stream buffer depth, and reset the peak when read") {
+                // The buffer is what makes a slow consumer visible instead of silent. A full one
+                // pauses the stream rather than dropping or reordering anything, so depth
+                // approaching capacity is the cache falling behind, and it is worth a gauge.
+                eventually(5.seconds) {
+                    delay(100)
+                    require(cache.areChangeStreamJobsRunning())
+                }
+
+                val initial = cache.getChangeStreamQueueStats()
+                require(initial != null) { "expected buffer stats while the stream is running" }
+                require(initial.capacity > 0) { "expected a bounded buffer, got ${initial.capacity}" }
+
+                val atStart = cache.streamResumePositionInternal()
+                require(atStart != null) { "expected a resume position while the stream is running" }
+
+                repeat(5) { i ->
+                    cache
+                        .create("queueStatsKey$i") { it.copy(name = "queueStats$i", balance = 860.0 + i) }
+                        .getOrThrow()
+                }
+
+                // Waiting on a condition rather than on a fixed duration, because a second is a
+                // guess about a container under load. The resume position only advances on the
+                // ordered path, so it advancing past where it began means these writes' events have
+                // been applied and the buffer has drained. Polling THAT rather than the buffer
+                // stats matters: every stats read resets the peak, so polling the stats would
+                // destroy the evidence this asserts on.
+                eventually(10.seconds) {
+                    delay(100)
+                    val now = cache.streamResumePositionInternal()
+                    require(now != null && now > atStart) { "events not applied yet (at $now)" }
+                }
+
+                val afterWrites = cache.getChangeStreamQueueStats()
+                require(afterWrites != null)
+                afterWrites.depth.shouldBe(0)
+                require(afterWrites.peakSinceLastRead >= 1) {
+                    "expected the buffer to have held at least one event, got ${afterWrites.peakSinceLastRead}"
+                }
+
+                // The read above reset it, so a quiet interval reports the buffer as it stands.
+                val quiet = cache.getChangeStreamQueueStats()
+                require(quiet != null)
+                quiet.peakSinceLastRead.shouldBe(0)
+
+                // The all-time peak is not reset by reading, which is what makes it safe for more
+                // than one poller, so it still remembers the burst the interval peak just gave up.
+                require(quiet.peakAllTime >= afterWrites.peakSinceLastRead) {
+                    "all-time peak ${quiet.peakAllTime} lost a burst of ${afterWrites.peakSinceLastRead}"
+                }
+            }
+
+            it("should advance the point the stream would resume from as it applies events") {
+                // The regression this exists for. The operation-time fallback was set once, at
+                // cache start, and never moved. Losing both resume tokens therefore replayed every
+                // change since the process booted: an enormous replay on a long-lived cache, or,
+                // once the oplog no longer reaches back that far, a resume that fails and silently
+                // restarts from the current time with everything in between missed.
+                eventually(5.seconds) {
+                    delay(100)
+                    require(cache.areChangeStreamJobsRunning())
+                }
+
+                val atStart = cache.streamResumePositionInternal()
+                require(atStart != null) { "expected a resume position captured at cache start" }
+
+                repeat(3) { i ->
+                    cache
+                        .create("resumeAdvanceKey$i") {
+                            it.copy(name = "resumeAdvance$i", balance = 850.0 + i)
+                        }.getOrThrow()
+                }
+
+                // Only the ordered path moves it, so this also waits for those events to be applied.
+                eventually(5.seconds) {
+                    delay(100)
+                    val now = cache.streamResumePositionInternal()
+                    require(now != null && now > atStart) {
+                        "resume position did not advance past $atStart (still $now)"
+                    }
+                }
+            }
+
             it("should replicate external INSERT to local cache") {
                 // Ensure that the change streams are running before we proceed
                 eventually(5.seconds) {

@@ -21,6 +21,21 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     private var effectiveStartTime: BsonTimestamp? = null
 
     /**
+     * Whether the last configured stream resumed from a token, rather than from a time or from
+     * scratch.
+     *
+     * A token resumes immediately AFTER the last event drained, so nothing already applied is
+     * redelivered and nothing older than it can arrive. The other two positionings can both start
+     * before that point, which is what makes them able to deliver an event older than state the
+     * cache has already ordered against.
+     */
+    @Volatile
+    private var lastStartResumedFromToken: Boolean = false
+
+    /** See [lastStartResumedFromToken]. */
+    fun lastStartResumedFromToken(): Boolean = lastStartResumedFromToken
+
+    /**
      * Sets the effective start time for the change stream.
      */
     fun setEffectiveStartTime(startTime: BsonTimestamp?) {
@@ -36,6 +51,29 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
     fun updateTokens(newResumeToken: BsonDocument?) {
         lastResumeToken = resumeToken
         resumeToken = newResumeToken
+    }
+
+    /**
+     * Moves the operation-time fallback forward to [appliedAt], the position of an event that has
+     * been applied in order.
+     *
+     * Without this the fallback stays at the time captured when the cache started, for the life of
+     * the process, and losing both resume tokens replays every change since then. On a cache that
+     * has been up for any length of time that is either an enormous replay or, once the oplog no
+     * longer reaches back that far, a resume that fails and silently restarts from the current time
+     * with everything in between missed.
+     *
+     * **Advanced only from the ordered path**, so it never runs ahead of what has actually been
+     * applied. Resuming slightly earlier than necessary is harmless, because a redelivered event is
+     * refused by the cache's own ordering; resuming later than what has been applied would lose
+     * events outright.
+     */
+    fun advanceEffectiveStartTime(appliedAt: BsonTimestamp?) {
+        if (appliedAt == null) return
+        val current = effectiveStartTime
+        if (current == null || appliedAt > current) {
+            effectiveStartTime = appliedAt
+        }
     }
 
     /**
@@ -114,6 +152,9 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
 
                 // Enhanced fallback chain for stream positioning
                 var configured = false
+                // Assume the worst until a token resume proves otherwise: see
+                // lastStartResumedFromToken.
+                lastStartResumedFromToken = false
 
                 // First try: Current resume token
                 val resumeToken = resumeToken
@@ -132,6 +173,7 @@ internal class ResumeTokenManager<K : Any, D : Doc<K, D>>(
                             resumeAfter(lastResumeToken)
                         }
                 }
+                lastStartResumedFromToken = configured
 
                 // Third try: Operation time fallback
                 val effectiveStartTime = effectiveStartTime

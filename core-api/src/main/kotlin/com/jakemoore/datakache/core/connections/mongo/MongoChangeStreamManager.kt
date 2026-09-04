@@ -2,6 +2,8 @@ package com.jakemoore.datakache.core.connections.mongo
 
 import com.jakemoore.datakache.api.doc.Doc
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.metrics.ChangeStreamQueueStats
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.core.connections.DatabaseScope
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamConfig
@@ -11,6 +13,7 @@ import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamC
 import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamErrorHandler
 import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamEventProcessor
 import com.jakemoore.datakache.core.connections.mongo.changestream.ChangeStreamStateManager
+import com.jakemoore.datakache.core.connections.mongo.changestream.ConnectionSequence
 import com.jakemoore.datakache.core.connections.mongo.changestream.ResumeTokenManager
 import com.jakemoore.datakache.core.connections.mongo.changestream.RetryDecision
 import com.mongodb.client.model.changestream.ChangeStreamDocument
@@ -40,6 +43,8 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
     // Specialized components
     private val stateManager = ChangeStreamStateManager(context)
     private val errorHandler = ChangeStreamErrorHandler(context)
+    private val connectionSequence = ConnectionSequence()
+
     private val resumeTokenManager = ResumeTokenManager(context, errorHandler)
     private val eventProcessor = ChangeStreamEventProcessor(context, stateManager, errorHandler, resumeTokenManager)
 
@@ -48,7 +53,7 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * the stream will start from that point to avoid missing changes.
      * This method is thread-safe and completes all setup before returning.
      */
-    override suspend fun start(startAtOperationTime: Any?) {
+    override suspend fun start(startAtOperationTime: OperationTime?) {
         stateManager.withStateLock {
             if (stateManager.isActive()) {
                 context.logger.warn(
@@ -73,12 +78,13 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
 
             try {
                 // Set the effective start time from the provided parameter (critical timing gap fix)
-                resumeTokenManager.setEffectiveStartTime(startAtOperationTime as? BsonTimestamp)
+                resumeTokenManager.setEffectiveStartTime(startAtOperationTime?.let { BsonTimestamp(it.raw) })
 
                 // Reset error tracking for restart
                 errorHandler.resetFailures()
 
                 // Recreate the event channel since closed channels cannot be reused
+                connectionSequence.reset()
                 eventProcessor.createNewEventChannel()
 
                 // Reset counters and state for restart
@@ -261,7 +267,22 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
             if (stateManager.transitionTo(ChangeStreamState.CONNECTING, ChangeStreamState.CONNECTED) ||
                 stateManager.transitionTo(ChangeStreamState.RECONNECTING, ChangeStreamState.CONNECTED)
             ) {
+                // Asked of the sequence rather than of the state machine, which cannot answer it:
+                // startChangeStreamWithRetry forces CONNECTING at the top of every attempt, so a
+                // retried connection no longer looks like one by the time it succeeds.
+                //
+                // A reconnection alone is not enough to have gone backwards. Resuming from a token
+                // starts immediately after the last event applied, so only a reconnection that fell
+                // back to a time, or to nothing, can deliver something older.
+                val reconnected = connectionSequence.observeConnection()
+                val repositioned = reconnected && !resumeTokenManager.lastStartResumedFromToken()
                 onSuccessfulConnection()
+                if (repositioned) {
+                    // Through the buffer, not straight to the handler. The consumer may still be
+                    // draining events from the previous connection, and a reposition that reached
+                    // the cache ahead of them would be applied to them as well.
+                    eventProcessor.handleReposition()
+                }
             }
 
             // Handle the event through the event processor (tokens updated after processing)
@@ -295,6 +316,11 @@ class MongoChangeStreamManager<K : Any, D : Doc<K, D>>(
      * Gets the last error that occurred, if any.
      */
     override fun getLastError(): Throwable? = errorHandler.getLastError()
+
+    override fun getQueueStats(): ChangeStreamQueueStats = eventProcessor.getQueueStats()
+
+    override fun getResumePosition(): OperationTime? =
+        resumeTokenManager.getEffectiveStartTime()?.let { OperationTime(it.value) }
 
     /**
      * Gets the number of consecutive failures.

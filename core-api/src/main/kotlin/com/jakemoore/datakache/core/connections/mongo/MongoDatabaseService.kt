@@ -18,6 +18,7 @@ import com.jakemoore.datakache.api.exception.update.TransactionRetriesExceededEx
 import com.jakemoore.datakache.api.exception.update.UpdateFunctionReturnedSameInstanceException
 import com.jakemoore.datakache.api.index.DocUniqueIndex
 import com.jakemoore.datakache.api.logging.LoggerService
+import com.jakemoore.datakache.api.ordering.OperationTime
 import com.jakemoore.datakache.core.connections.DatabaseService
 import com.jakemoore.datakache.core.connections.changes.ChangeEventHandler
 import com.jakemoore.datakache.core.connections.changes.ChangeStreamManager
@@ -287,7 +288,21 @@ internal class MongoDatabaseService : DatabaseService() {
                     session.commitTransaction()
                     sessionClosed = true
 
-                    docCache.cacheInternal(doc)
+                    // The session reports the cluster time of the write it just committed, which
+                    // is the same clock the change stream quotes, so the two can be ordered. If it
+                    // reports none, the change stream's own event for this insert still applies the
+                    // cache update once it arrives; see the KDoc on operationTimeOrNull.
+                    val insertedAt = session.operationTimeOrNull()
+                    if (insertedAt != null) {
+                        docCache.cacheInternal(doc, insertedAt)
+                    } else {
+                        docCache.getLoggerInternal().warn(
+                            "MongoDB session reported no operation time for an insert " +
+                                "(${docCache.keyToString(doc.key)}); relying on the change stream " +
+                                "to cache it. This is expected only on a deployment that does not " +
+                                "support change streams.",
+                        )
+                    }
                 } catch (e: MongoWriteException) {
                     if (!sessionClosed && session.hasActiveTransaction()) {
                         session.abortTransaction()
@@ -372,8 +387,38 @@ internal class MongoDatabaseService : DatabaseService() {
                 val keyFieldName = SerializationUtil.getSerialNameForKey(docCache)
                 val filter = Filters.eq(keyFieldName, docCache.keyToString(key))
 
-                // Succeeds if mongo reports at least 1 document deleted
-                return@withContext getMongoCollection(docCache).deleteMany(filter).deletedCount > 0
+                val client =
+                    requireNotNull(mongoClient) {
+                        "MongoClient is not initialized! Could not delete Doc from MongoDB!"
+                    }
+
+                // A session rather than a transaction: a single delete needs no atomicity, but the
+                // session reports the cluster time of the delete, which is what lets a change event
+                // for this key that predates it be refused instead of resurrecting the document.
+                return@withContext client.startSession().use { session ->
+                    val deleted =
+                        getMongoCollection(docCache).deleteMany(session, filter).deletedCount > 0
+                    // Uncache when MongoDB removed something, and also when it did not but the
+                    // key is cached anyway, which means the cache has diverged and this delete is
+                    // the moment to converge it. Skipping the second case would leave a document
+                    // readable from the cache after a delete reported success in removing it from
+                    // the caller's point of view. A delete that matched nothing and was not cached
+                    // is left alone, so a miss does not spend a slot in the bounded tombstone
+                    // record and shorten the window that record protects.
+                    if (deleted || docCache.isCached(key)) {
+                        val deletedAt = session.operationTimeOrNull()
+                        if (deletedAt != null) {
+                            docCache.uncacheInternal(key, deletedAt)
+                        } else {
+                            docCache.getLoggerInternal().warn(
+                                "MongoDB session reported no operation time for a delete " +
+                                    "(${docCache.keyToString(key)}); relying on the change " +
+                                    "stream to remove it from the cache.",
+                            )
+                        }
+                    }
+                    deleted
+                }
             } catch (me: MongoException) {
                 docCache.getLoggerInternal().severe(
                     me,
@@ -395,7 +440,7 @@ internal class MongoDatabaseService : DatabaseService() {
                 // Ensure doc is initialized with its backing cache
                 doc.initializeInternal(docCache)
                 // We read the document again, might as well cache it for consistency
-                docCache.cacheInternal(doc, log = false)
+                docCache.cacheContentOnlyInternal(doc, log = false)
                 doc
             }
         }
@@ -494,18 +539,37 @@ internal class MongoDatabaseService : DatabaseService() {
 
                 // upsert=false means it will not insert a new document if the key does not exist
                 val options = ReplaceOptions().upsert(false)
-                val result =
-                    getMongoCollection(docCache)
-                        .replaceOne(filter, update, options)
+                val client =
+                    requireNotNull(mongoClient) {
+                        "MongoClient is not initialized! Could not replace Doc in MongoDB!"
+                    }
 
-                // Fail State - No Document Replaced
-                if (result.matchedCount == 0L) {
-                    val keyString = docCache.keyToString(key)
-                    throw DocumentNotFoundException(
-                        keyString = keyString,
-                        docCache = docCache,
-                        operation = Operation.REPLACE,
-                    )
+                // The session is what supplies the operation time the cache is updated with.
+                client.startSession().use { session ->
+                    val result =
+                        getMongoCollection(docCache)
+                            .replaceOne(session, filter, update, options)
+
+                    // Fail State - No Document Replaced
+                    if (result.matchedCount == 0L) {
+                        val keyString = docCache.keyToString(key)
+                        throw DocumentNotFoundException(
+                            keyString = keyString,
+                            docCache = docCache,
+                            operation = Operation.REPLACE,
+                        )
+                    }
+
+                    val replacedAt = session.operationTimeOrNull()
+                    if (replacedAt != null) {
+                        docCache.cacheInternal(update, replacedAt)
+                    } else {
+                        docCache.getLoggerInternal().warn(
+                            "MongoDB session reported no operation time for a replace " +
+                                "(${docCache.keyToString(key)}); relying on the change stream " +
+                                "to cache it.",
+                        )
+                    }
                 }
             } catch (e: DocumentNotFoundException) {
                 // don't log, this is fine, promote to caller
@@ -648,7 +712,7 @@ internal class MongoDatabaseService : DatabaseService() {
     }
 
     @Suppress("CanConvertToMultiDollarString")
-    override suspend fun getCurrentOperationTime(): Any? =
+    override suspend fun getCurrentOperationTime(): OperationTime? =
         try {
         val client =
             requireNotNull(this.mongoClient) {
@@ -661,7 +725,7 @@ internal class MongoDatabaseService : DatabaseService() {
 
         // Extract cluster time from the result
         val clusterTimeDoc = result["\$clusterTime"] as? Document
-        clusterTimeDoc?.get("clusterTime") as? BsonTimestamp
+        (clusterTimeDoc?.get("clusterTime") as? BsonTimestamp)?.let { OperationTime(it.value) }
     } catch (e: Exception) {
         this.warn("Failed to get current operation time: ${e.message}")
         null

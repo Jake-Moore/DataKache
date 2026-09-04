@@ -118,6 +118,8 @@ open class MetricsReceiverPartial : MetricsReceiver {
 
     override fun onChangeStreamUnknown(cacheName: String) {}
 
+    override fun onChangeStreamBackpressure(cacheName: String) {}
+
     override fun onDatabaseReadDocByUniqueIndex() {}
 
     override fun onCacheReadDocByUniqueIndex() {}

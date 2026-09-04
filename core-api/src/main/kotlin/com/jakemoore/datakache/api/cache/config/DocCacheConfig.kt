@@ -4,10 +4,16 @@ import com.jakemoore.datakache.api.doc.Doc
 
 data class DocCacheConfig<K : Any, D : Doc<K, D>>(
     /**
-     * If true, documents that are internally being added to the cache will follow optimistic versioning rules.
+     * If true, a replayed change stream update whose version already matches the cached document is
+     * not written into the cache again, on the assumption that an equal version means equal data.
      *
-     * This means that if the document in cache shares the same version,
-     * the new document will not be inserted in its place. (i.e. we assume that an equal version means equal data)
+     * **Narrower than it sounds, and deliberately so.** It applies to replayed UPDATE events only.
+     * Local writes never take the shortcut, because they are authoritative on their own content
+     * whether or not the version moved, and REPLACE and INSERT do not either, because neither
+     * guarantees the version differs when the content does. Reads ignore it entirely. See
+     * [com.jakemoore.datakache.api.cache.DocCache.cacheInternal] for why each of those holds.
+     *
+     * Turning it off costs a map write per replayed update and changes no observable behaviour.
      */
     val optimisticCaching: Boolean,
     /**
