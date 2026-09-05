@@ -6,7 +6,7 @@
   ],
   "packageRules": [
     {
-      "description": "Auto-merge GitHub Actions updates.",
+      "description": "Auto-merge GitHub Actions updates. They take the repository's seven-day minimumReleaseAge like everything else, and the exemption that used to sit here was backwards. An action runs arbitrary code inside the workflow with access to its secrets, so it is the highest-risk manager in this file rather than the most trivial, and tj-actions/changed-files in March 2025 is what that looks like in practice: existing tags were moved to a malicious commit that printed runner secrets into the logs, and the window between publication and discovery was hours. Auto-merge with zero age meant a moved tag could land here unattended inside that window. Seven days does not make a compromise impossible, it makes it likely that somebody else finds it first.",
       "matchManagers": [
         "github-actions"
       ],
@@ -14,8 +14,7 @@
       "groupSlug": "github-actions",
       "automerge": true,
       "automergeType": "pr",
-      "automergeStrategy": "squash",
-      "minimumReleaseAge": "0 days"
+      "automergeStrategy": "squash"
     },
     {
       "description": "Group all non-major updates together and auto-merge. The version bump that stops a release landing on top of the previous artifact is configured at the top level of this file rather than here.",
