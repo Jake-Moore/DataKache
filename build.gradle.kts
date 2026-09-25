@@ -17,8 +17,12 @@ plugins {
     kotlin("plugin.serialization")
 }
 
+// Consumers commonly receive Kotlin and kotlinx at runtime from this library, so moving them moves
+// the version by the risk it carries downstream. A Kotlin bug-fix (2.x.yz) or tooling (2.x.20)
+// release is a patch; a Kotlin language release (2.x.0) is a minor while below 1.0. kotlinx
+// libraries follow their own semver: their minor is a minor here, their patch a patch.
 @Suppress("PropertyName")
-val VERSION = "0.4.6"
+val VERSION = "0.4.7"
 
 allprojects {
     group = "com.jakemoore"
