@@ -22,7 +22,7 @@ plugins {
 // release is a patch; a Kotlin language release (2.x.0) is a minor while below 1.0. kotlinx
 // libraries follow their own semver: their minor is a minor here, their patch a patch.
 @Suppress("PropertyName")
-val VERSION = "0.4.7"
+val VERSION = "0.4.8"
 
 allprojects {
     group = "com.jakemoore"
