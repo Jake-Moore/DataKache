@@ -78,6 +78,13 @@
         "gradle/actions"
       ],
       "allowedVersions": "<6.0.0"
+    },
+    {
+      "description": "The JDK that actions/setup-java installs is not a dependency to track. It is the JDK the build's toolchain expects, and moving it is a deliberate change made together with the toolchain, never an automated one.",
+      "matchDepNames": [
+        "java-jdk"
+      ],
+      "enabled": false
     }
   ],
   "ignoreUnstable": true,
